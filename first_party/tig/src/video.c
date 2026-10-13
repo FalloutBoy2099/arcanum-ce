@@ -1297,7 +1297,7 @@ bool tig_video_window_create(TigInitInfo* init_info)
         return false;
     }
 
-    SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
+    SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_LINEAR);
 
     SDL_PropertiesID texture_props = SDL_GetTextureProperties(texture);
     SDL_PixelFormat format = (SDL_PixelFormat)SDL_GetNumberProperty(texture_props, SDL_PROP_TEXTURE_FORMAT_NUMBER, 0);
