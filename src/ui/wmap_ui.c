@@ -284,6 +284,8 @@ static void sub_565F00(TigVideoBuffer* video_buffer, TigRect* rect);
 static void wmap_town_refresh_rect(TigRect* rect);
 static void sub_566A80(WmapInfo* a1, TigRect* a2, TigRect* a3);
 static void sub_566D10(int type, WmapCoords* coords, TigRect* a3, TigRect* a4, WmapInfo* wmap_info);
+static void wmap_ui_scroll_by(int dx, int dy);
+static void wmap_ui_scroll_from_mouse_wheel(int dx, int dy);
 
 // 0x5C9220
 static int wmap_ui_spell = -1;
@@ -1313,7 +1315,7 @@ bool wmap_load_worldmap_info(void)
             }
         }
 
-        tig_str_parse_str_value(&str, wmap_ui_mode_info[WMAP_UI_MODE_WORLD].field_68);
+        tig_str_parse_str_value(&str, wmap_ui_mode_info[WMAP_UI_MODE_WORLD].field_68, sizeof(wmap_ui_mode_info[WMAP_UI_MODE_WORLD].field_68));
 
         if (!wmTileArtLock(0)) {
             tig_debug_printf("wmap_load_worldmap_info: ERROR: wmTileArtLockMode failed!\n");
@@ -1327,7 +1329,7 @@ bool wmap_load_worldmap_info(void)
         wmTileArtUnlock(0);
         wmTileArtUnload(0);
 
-        tig_str_parse_named_str_value(&str, "ZoomedName:", wmap_ui_mode_info[WMAP_UI_MODE_WORLD].str);
+        tig_str_parse_named_str_value(&str, "ZoomedName:", wmap_ui_mode_info[WMAP_UI_MODE_WORLD].str, sizeof(wmap_ui_mode_info[WMAP_UI_MODE_WORLD].str));
 
         dword_66D87C = 0;
         if (tig_str_parse_named_value(&str, "MapKeyedTo:", &map_keyed_to)) {
@@ -1974,6 +1976,19 @@ bool wmap_ui_message_filter(TigMessage* msg)
                 return true;
             }
 
+            // Click outside the world map window and outside both HUD strips
+            // dismisses the overlay (hi-res convenience).
+            if (wmap_ui_window != TIG_WINDOW_HANDLE_INVALID) {
+                TigWindowData menu_wd;
+                int screen_x = msg->data.mouse.x + (hrp_iso_window_width_get() - 800) / 2;
+                int screen_y = msg->data.mouse.y + (hrp_iso_window_height_get() - 600) / 2;
+                if (tig_window_data(wmap_ui_window, &menu_wd) == TIG_OK
+                    && intgame_should_dismiss_overlay_click(screen_x, screen_y, &menu_wd.rect)) {
+                    wmap_ui_close();
+                    return true;
+                }
+            }
+
             return false;
         case TIG_MESSAGE_MOUSE_RIGHT_BUTTON_UP: {
             if (wmap_ui_state == WMAP_UI_STATE_EDITING) {
@@ -2117,6 +2132,9 @@ bool wmap_ui_message_filter(TigMessage* msg)
             default:
                 return true;
             }
+        case TIG_MESSAGE_MOUSE_WHEEL:
+            wmap_ui_scroll_from_mouse_wheel(msg->data.mouse.dx, msg->data.mouse.dy);
+            break;
         default:
             break;
         }
@@ -3038,19 +3056,13 @@ void wmap_ui_scroll(int direction)
 // 0x563790
 void wmap_ui_scroll_internal(int direction, int scale)
 {
-    WmapInfo* wmap_info;
     int sx;
     int sy;
     int dx;
     int dy;
-    int offset_x;
-    int offset_y;
-    TigRect rect;
 
     sx = scale * wmap_ui_scroll_speed_x;
     sy = scale * wmap_ui_scroll_speed_y;
-
-    wmap_info = &(wmap_ui_mode_info[wmap_ui_mode]);
 
     dx = 0;
     dy = 0;
@@ -3086,102 +3098,7 @@ void wmap_ui_scroll_internal(int direction, int scale)
         break;
     }
 
-    offset_x = wmap_info->field_34;
-    offset_y = wmap_info->field_38;
-
-    wmap_info->field_34 += dx;
-    wmap_info->field_38 += dy;
-
-    if (wmap_info->field_34 < 0) {
-        wmap_info->field_34 = 0;
-    } else if (wmap_info->field_34 > wmap_info->field_60) {
-        wmap_info->field_34 = wmap_info->field_60;
-    }
-
-    if (wmap_info->field_38 < 0) {
-        wmap_info->field_38 = 0;
-    } else if (wmap_info->field_38 > wmap_info->field_64) {
-        wmap_info->field_38 = wmap_info->field_64;
-    }
-
-    dx = wmap_info->field_34 - offset_x;
-    dy = wmap_info->field_38 - offset_y;
-    if (dx == 0 && dy == 0) {
-        return;
-    }
-
-    if (wmap_info->refresh_rect == NULL) {
-        return;
-    }
-
-    if (wmap_ui_mode != WMAP_UI_MODE_TOWN) {
-        wmap_info->refresh_rect(&(wmap_info->rect));
-        return;
-    }
-
-    tig_window_scroll_rect(wmap_ui_window,
-        &(wmap_info->rect),
-        -dx,
-        -dy);
-
-    if (dx > 0) {
-        rect.x = wmap_ui_nav_cvr_frame.x - dx;
-        rect.y = wmap_ui_nav_cvr_frame.y;
-        rect.width = wmap_ui_nav_cvr_frame.width + dx;
-        rect.height = wmap_ui_nav_cvr_frame.height;
-        if (dy > 0) {
-            rect.y -= dy;
-            rect.height += dy;
-        }
-        wmap_info->refresh_rect(&rect);
-
-        rect = wmap_info->rect;
-        rect.x += rect.width - dx;
-        rect.width = dx;
-        if (dy > 0) {
-            rect.y -= dy;
-            rect.height += dy;
-        }
-        wmap_info->refresh_rect(&rect);
-    } else if (dx < 0) {
-        rect.x = wmap_ui_nav_cvr_frame.x;
-        rect.y = wmap_ui_nav_cvr_frame.y;
-        rect.height = wmap_ui_nav_cvr_frame.height;
-        rect.width = wmap_ui_nav_cvr_frame.width - dx;
-        if (dy > 0) {
-            rect.y -= dy;
-            rect.height += dy;
-        }
-        wmap_info->refresh_rect(&rect);
-
-        rect = wmap_info->rect;
-        rect.width = -dx;
-        if (dy > 0) {
-            rect.y -= dy;
-            rect.height += dy;
-        }
-        wmap_info->refresh_rect(&rect);
-    }
-
-    if (dy > 0) {
-        rect.x = wmap_ui_nav_cvr_frame.x;
-        rect.y = wmap_ui_nav_cvr_frame.y - dy;
-        rect.width = wmap_ui_nav_cvr_frame.width;
-        rect.height = wmap_ui_nav_cvr_frame.height + dy;
-        wmap_info->refresh_rect(&rect);
-
-        rect = wmap_info->rect;
-        rect.y += rect.height - dy;
-        rect.height = dy;
-        wmap_info->refresh_rect(&rect);
-    } else if (dy < 0) {
-        rect = wmap_ui_nav_cvr_frame;
-        wmap_info->refresh_rect(&rect);
-
-        rect = wmap_info->rect;
-        rect.height = -dy;
-        wmap_info->refresh_rect(&rect);
-    }
+    wmap_ui_scroll_by(dx, dy);
 }
 
 // 0x563AC0
@@ -4983,4 +4900,116 @@ void sub_566D10(int type, WmapCoords* coords, TigRect* a3, TigRect* a4, WmapInfo
         art_blit_info.dst_rect = &dst_rect;
         tig_window_blit_art(wmap_ui_window, &art_blit_info);
     }
+}
+
+void wmap_ui_scroll_by(int dx, int dy)
+{
+    WmapInfo* wmap_info;
+    int offset_x;
+    int offset_y;
+    TigRect rect;
+
+    wmap_info = &(wmap_ui_mode_info[wmap_ui_mode]);
+
+    offset_x = wmap_info->field_34;
+    offset_y = wmap_info->field_38;
+
+    wmap_info->field_34 += dx;
+    wmap_info->field_38 += dy;
+
+    if (wmap_info->field_34 < 0) {
+        wmap_info->field_34 = 0;
+    } else if (wmap_info->field_34 > wmap_info->field_60) {
+        wmap_info->field_34 = wmap_info->field_60;
+    }
+
+    if (wmap_info->field_38 < 0) {
+        wmap_info->field_38 = 0;
+    } else if (wmap_info->field_38 > wmap_info->field_64) {
+        wmap_info->field_38 = wmap_info->field_64;
+    }
+
+    dx = wmap_info->field_34 - offset_x;
+    dy = wmap_info->field_38 - offset_y;
+    if (dx == 0 && dy == 0) {
+        return;
+    }
+
+    if (wmap_info->refresh_rect == NULL) {
+        return;
+    }
+
+    if (wmap_ui_mode != WMAP_UI_MODE_TOWN) {
+        wmap_info->refresh_rect(&(wmap_info->rect));
+        return;
+    }
+
+    tig_window_scroll_rect(wmap_ui_window,
+        &(wmap_info->rect),
+        -dx,
+        -dy);
+
+    if (dx > 0) {
+        rect.x = wmap_ui_nav_cvr_frame.x - dx;
+        rect.y = wmap_ui_nav_cvr_frame.y;
+        rect.width = wmap_ui_nav_cvr_frame.width + dx;
+        rect.height = wmap_ui_nav_cvr_frame.height;
+        if (dy > 0) {
+            rect.y -= dy;
+            rect.height += dy;
+        }
+        wmap_info->refresh_rect(&rect);
+
+        rect = wmap_info->rect;
+        rect.x += rect.width - dx;
+        rect.width = dx;
+        if (dy > 0) {
+            rect.y -= dy;
+            rect.height += dy;
+        }
+        wmap_info->refresh_rect(&rect);
+    } else if (dx < 0) {
+        rect.x = wmap_ui_nav_cvr_frame.x;
+        rect.y = wmap_ui_nav_cvr_frame.y;
+        rect.height = wmap_ui_nav_cvr_frame.height;
+        rect.width = wmap_ui_nav_cvr_frame.width - dx;
+        if (dy > 0) {
+            rect.y -= dy;
+            rect.height += dy;
+        }
+        wmap_info->refresh_rect(&rect);
+
+        rect = wmap_info->rect;
+        rect.width = -dx;
+        if (dy > 0) {
+            rect.y -= dy;
+            rect.height += dy;
+        }
+        wmap_info->refresh_rect(&rect);
+    }
+
+    if (dy > 0) {
+        rect.x = wmap_ui_nav_cvr_frame.x;
+        rect.y = wmap_ui_nav_cvr_frame.y - dy;
+        rect.width = wmap_ui_nav_cvr_frame.width;
+        rect.height = wmap_ui_nav_cvr_frame.height + dy;
+        wmap_info->refresh_rect(&rect);
+
+        rect = wmap_info->rect;
+        rect.y += rect.height - dy;
+        rect.height = dy;
+        wmap_info->refresh_rect(&rect);
+    } else if (dy < 0) {
+        rect = wmap_ui_nav_cvr_frame;
+        wmap_info->refresh_rect(&rect);
+
+        rect = wmap_info->rect;
+        rect.height = -dy;
+        wmap_info->refresh_rect(&rect);
+    }
+}
+
+void wmap_ui_scroll_from_mouse_wheel(int dx, int dy)
+{
+    wmap_ui_scroll_by(dx * wmap_ui_scroll_speed_x, -dy * wmap_ui_scroll_speed_y);
 }

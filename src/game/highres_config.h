@@ -15,6 +15,7 @@ typedef struct HighResConfig {
     int broadcast_limit;
     bool logos;
     bool intro;
+    float dialog_scale;
 } HighResConfig;
 
 void highres_config_load(void);
