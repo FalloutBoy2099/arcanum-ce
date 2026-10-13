@@ -77,5 +77,6 @@ int stat_level_min(int64_t obj, int stat);
 int stat_level_max(int64_t obj, int stat);
 bool stat_level_set(int64_t obj, int stat, int value);
 bool stat_poison_timeevent_process(TimeEvent* timeevent);
+void stat_poison_turn_based_process(int64_t obj);
 
 #endif /* ARCANUM_GAME_STAT_H_ */

@@ -2079,6 +2079,10 @@ int script_execute_action(ScriptAction* action, int line, ScriptState* state)
         MagicTechInvocation mt_invocation;
         magictech_invocation_init(&mt_invocation, OBJ_HANDLE_NULL, spell);
         sub_4440E0(target_obj, &(mt_invocation.target_obj));
+        if (state->invocation->attachment_point == SAP_HIT
+            || state->invocation->attachment_point == SAP_CRITICAL_HIT) {
+            sub_4440E0(state->invocation->triggerer_obj, &(mt_invocation.attacker_obj));
+        }
         magictech_invocation_run(&mt_invocation);
 
         return NEXT;

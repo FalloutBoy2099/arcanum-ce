@@ -4892,9 +4892,16 @@ void sub_455C30(MagicTechInvocation* mt_invocation)
         timeevent.type = TIMEEVENT_TYPE_MAGICTECH;
         timeevent.params[0].integer_value = run_info->id;
         timeevent.params[2].integer_value = 3;
-        sub_45A950(&datetime, 2);
-        if (timeevent_add_delay(&timeevent, &datetime)) {
-            return;
+        if (combat_turn_based_is_active()) {
+            datetime = sub_45A7C0();
+            if (timeevent_add_base(&timeevent, &datetime)) {
+                return;
+            }
+        } else {
+            sub_45A950(&datetime, 2);
+            if (timeevent_add_delay(&timeevent, &datetime)) {
+                return;
+            }
         }
     }
 

@@ -37,7 +37,7 @@ void tech_ui_inc_degree(int64_t obj, int tech)
             stat_base_set(obj, STAT_UNSPENT_POINTS, points - cost);
 
             // Update UI.
-            if (is_pc) {
+            if (charedit_is_created()) {
                 charedit_refresh();
                 intgame_message_window_clear();
             }
@@ -63,14 +63,12 @@ void tech_ui_dec_degree(int64_t obj, int tech)
     int degree;
     int cost;
     int points;
-    bool is_pc;
 
     // Retrieve current degree, cost of the current degree, and available
     // points.
     degree = tech_degree_get(obj, tech);
     cost = tech_degree_cost_get(degree);
     points = stat_level_get(obj, STAT_UNSPENT_POINTS);
-    is_pc = player_is_local_pc_obj(obj);
 
     // Attempt to decrease the technology degree.
     if (tech_degree_dec(obj, tech) < degree) {
@@ -78,7 +76,7 @@ void tech_ui_dec_degree(int64_t obj, int tech)
         stat_base_set(obj, STAT_UNSPENT_POINTS, points + cost);
 
         // Update UI.
-        if (is_pc) {
+        if (charedit_is_created()) {
             charedit_refresh();
             intgame_message_window_clear();
         }

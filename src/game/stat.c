@@ -13,6 +13,7 @@
 #include "game/magictech.h"
 #include "game/mes.h"
 #include "game/obj.h"
+#include "game/obj_pool.h"
 #include "game/object.h"
 #include "game/player.h"
 #include "game/sector.h"
@@ -26,6 +27,7 @@
 #define STAT_IS_VALID(stat) ((stat) >= 0 && (stat) < STAT_COUNT)
 #define STAT_IS_PRIMARY(stat) ((stat) >= 0 && (stat) <= STAT_CHARISMA)
 #define STAT_IS_DERIVED(stat) ((stat) >= STAT_CARRY_WEIGHT && (stat) <= STAT_MAGICK_TECH_APTITUDE)
+#define POISON_RECOVERY_TURNS 8
 
 typedef enum PoisonEventType {
     POISON_EVENT_DAMAGE,
@@ -33,6 +35,8 @@ typedef enum PoisonEventType {
 } PoisonEventType;
 
 static bool poison_timeevent_check(TimeEvent* timeevent);
+static bool poison_timeevent_take_check(TimeEvent* timeevent);
+static bool poison_timeevent_take(int64_t obj, int event, TimeEvent* timeevent);
 static bool poison_timeevent_schedule(int64_t obj, int poison, bool recovery);
 
 /**
@@ -255,6 +259,10 @@ static char* stat_short_names[STAT_COUNT];
 
 // 0x5F8728
 static int64_t poison_test_obj;
+
+static bool poison_test_found;
+
+static TimeEvent poison_test_timeevent;
 
 /**
  * Called when the game is initialized.
@@ -1081,11 +1089,104 @@ bool stat_poison_timeevent_process(TimeEvent* timeevent)
     return true;
 }
 
+void stat_poison_turn_based_process(int64_t obj)
+{
+    TimeEvent timeevent = { 0 };
+    int poison;
+    int rounds;
+
+    if (obj == OBJ_HANDLE_NULL
+        || !obj_handle_is_valid(obj)
+        || critter_is_dead(obj)
+        || (obj_field_int32_get(obj, OBJ_F_FLAGS) & (OF_DESTROYED | OF_OFF)) != 0) {
+        return;
+    }
+
+    poison = stat_base_get(obj, STAT_POISON_LEVEL);
+    if (poison <= 0) {
+        return;
+    }
+
+    poison_timeevent_take(obj, POISON_EVENT_DAMAGE, &timeevent);
+
+    timeevent.type = TIMEEVENT_TYPE_POISON;
+    timeevent.params[0].integer_value = POISON_EVENT_DAMAGE;
+    timeevent.params[1].object_value = obj;
+    timeevent.params[2].integer_value = sub_45A7F0();
+    stat_poison_timeevent_process(&timeevent);
+
+    poison = stat_base_get(obj, STAT_POISON_LEVEL);
+    if (poison <= 0) {
+        return;
+    }
+
+    if (!poison_timeevent_take(obj, POISON_EVENT_RECOVERY, &timeevent)) {
+        poison_timeevent_schedule(obj, poison, true);
+        if (!poison_timeevent_take(obj, POISON_EVENT_RECOVERY, &timeevent)) {
+            return;
+        }
+    }
+
+    rounds = timeevent.params[2].integer_value < 0
+        ? -timeevent.params[2].integer_value
+        : POISON_RECOVERY_TURNS;
+    rounds--;
+
+    if (rounds > 0) {
+        timeevent.params[2].integer_value = -rounds;
+        if (!timeevent_add_base(&timeevent, &timeevent.datetime)) {
+            poison_timeevent_schedule(obj, poison, true);
+        }
+    } else {
+        poison -= stat_level_get(obj, STAT_POISON_RECOVERY);
+        if (poison < 0) {
+            poison = 0;
+        }
+        stat_base_set(obj, STAT_POISON_LEVEL, poison);
+        if (poison == 0) {
+            poison_timeevent_take(obj, POISON_EVENT_DAMAGE, &timeevent);
+        }
+    }
+}
+
 // 0x4B1310
 bool poison_timeevent_check(TimeEvent* timeevent)
 {
-    return timeevent->params[1].object_value == poison_test_obj
-        && timeevent->params[0].integer_value == poison_test_event;
+    if (timeevent->params[1].object_value != poison_test_obj
+        || timeevent->params[0].integer_value != poison_test_event) {
+        return false;
+    }
+
+    return true;
+}
+
+bool poison_timeevent_take_check(TimeEvent* timeevent)
+{
+    if (!poison_timeevent_check(timeevent)) {
+        return false;
+    }
+
+    if (!poison_test_found
+        || datetime_compare(&timeevent->datetime, &poison_test_timeevent.datetime) < 0) {
+        poison_test_timeevent = *timeevent;
+        poison_test_found = true;
+    }
+
+    return true;
+}
+
+bool poison_timeevent_take(int64_t obj, int event, TimeEvent* timeevent)
+{
+    poison_test_obj = obj;
+    poison_test_event = event;
+    poison_test_found = false;
+    timeevent_clear_all_ex(TIMEEVENT_TYPE_POISON, poison_timeevent_take_check);
+    if (!poison_test_found) {
+        return false;
+    }
+
+    *timeevent = poison_test_timeevent;
+    return true;
 }
 
 // 0x4B1350

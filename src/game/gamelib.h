@@ -13,6 +13,7 @@
 #define AUTO_SWITCH_WEAPON_KEY "auto switch"
 #define ALWAYS_RUN_KEY "always run"
 #define FOLLOWER_SKILLS_KEY "follower skills"
+#define FOLLOWERS_MANUALLY_LEVEL_UP_KEY "followers manually level up"
 
 #define BRIGHTNESS_KEY "brightness"
 #define TEXT_DURATION_KEY "text duration"

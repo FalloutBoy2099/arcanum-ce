@@ -328,6 +328,8 @@ bool gamelib_init(GameInitInfo* init_info)
     settings_register(&settings, DIFFICULTY_KEY, "1", difficulty_changed);
     difficulty_changed();
 
+    settings_register(&settings, FOLLOWERS_MANUALLY_LEVEL_UP_KEY, "0", NULL);
+
     gamelib_mod_loaded = false;
     gamelib_load_data();
 
