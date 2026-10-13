@@ -5,6 +5,8 @@
 #include "game/obj.h"
 #include "game/object.h"
 
+#define DIALOG_MAX_OPTIONS 10
+
 typedef struct DialogState {
     /* 0000 */ int dlg;
     /* 0008 */ int64_t pc_obj;
@@ -16,13 +18,13 @@ typedef struct DialogState {
     /* 0070 */ char reply[1000];
     /* 0458 */ int speech_id;
     /* 045C */ int num_options;
-    /* 0460 */ char options[5][1000];
+    /* 0460 */ char options[DIALOG_MAX_OPTIONS][1000];
     /* 17E8 */ int field_17E8;
     /* 17EC */ int field_17EC;
-    /* 17F0 */ int field_17F0[5];
-    /* 1804 */ int field_1804[5];
-    /* 1818 */ int field_1818[5];
-    /* 182C */ char* actions[5];
+    /* 17F0 */ int field_17F0[DIALOG_MAX_OPTIONS];
+    /* 1804 */ int field_1804[DIALOG_MAX_OPTIONS];
+    /* 1818 */ int field_1818[DIALOG_MAX_OPTIONS];
+    /* 182C */ char* actions[DIALOG_MAX_OPTIONS];
     /* 1840 */ int field_1840;
     /* 1844 */ unsigned int seed;
 } DialogState;

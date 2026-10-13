@@ -141,6 +141,12 @@ TigDatabase* tig_database_open(const char* path)
     }
 
     offset = (int)size - entry_table_size - entry_table_offset;
+    if (offset < 0 || offset > size) {
+        // Some module PATCH archives created by community tools do not store
+        // the optional tree-position marker before the entry table. Their
+        // entry offsets are already absolute, matching DAT2.1 extractor docs.
+        offset = 0;
+    }
 
     database = (TigDatabase*)MALLOC(sizeof(TigDatabase));
 

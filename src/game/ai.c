@@ -6,6 +6,7 @@
 #include "game/critter.h"
 #include "game/descriptions.h"
 #include "game/dialog.h"
+#include "game/highres_config.h"
 #include "game/item.h"
 #include "game/magictech.h"
 #include "game/map.h"
@@ -2947,7 +2948,7 @@ bool sub_4AD420(int64_t obj)
         return false;
     }
 
-    if (object_dist(player_get_local_pc_obj(), obj) <= 30) {
+    if (object_dist(player_get_local_pc_obj(), obj) <= highres_config_get()->preload_limit) {
         return true;
     }
 
@@ -2972,7 +2973,7 @@ bool sub_4AD4D0(int64_t obj)
         return false;
     }
 
-    if (object_dist(pc_leader_obj, obj) <= 30) {
+    if (object_dist(pc_leader_obj, obj) <= highres_config_get()->preload_limit) {
         return false;
     }
 
@@ -2997,7 +2998,7 @@ bool sub_4AD4D0(int64_t obj)
 // 0x4AD5D0
 int ai_timeevent_delay(int64_t obj)
 {
-    return 4750 * ai_distance_to_nearest_player(obj) / 30 + 250;
+    return 4750 * ai_distance_to_nearest_player(obj) / highres_config_get()->preload_limit + 250;
 }
 
 // 0x4AD610
@@ -3007,7 +3008,9 @@ int ai_distance_to_nearest_player(int64_t obj)
 
     nearest_dist = object_dist(player_get_local_pc_obj(), obj);
 
-    return nearest_dist >= 0 && nearest_dist <= 30 ? (int)nearest_dist : 30;
+    return nearest_dist >= 0 && nearest_dist <= highres_config_get()->preload_limit
+        ? (int)nearest_dist
+        : highres_config_get()->preload_limit;
 }
 
 // 0x4AD6B0

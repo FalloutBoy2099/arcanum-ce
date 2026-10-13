@@ -4,6 +4,7 @@
 #include "game/anim.h"
 #include "game/critter.h"
 #include "game/dialog.h"
+#include "game/highres_config.h"
 #include "game/mes.h"
 #include "game/party.h"
 #include "game/player.h"
@@ -232,7 +233,7 @@ void broadcast_msg_client(int64_t pc_obj, Broadcast* bcast)
                 candidate_obj = followers[idx];
                 if (candidate_obj != OBJ_HANDLE_NULL) {
                     int64_t candidate_loc = obj_field_int64_get(candidate_obj, OBJ_F_LOCATION);
-                    if (location_dist(loc, candidate_loc) <= 10) {
+                    if (location_dist(loc, candidate_loc) <= highres_config_get()->broadcast_limit) {
                         char candidate_follower_name[MAX_STRING];
 
                         object_examine(candidate_obj, pc_obj, candidate_follower_name);

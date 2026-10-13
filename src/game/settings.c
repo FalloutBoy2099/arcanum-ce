@@ -7,7 +7,44 @@
 #include "game/obj_private.h"
 
 static SettingsEntry* settings_find(Settings* settings, const char* key);
+static bool settings_key_in_save_order(const char* key, const char* const* save_order);
+static void settings_save_ordered(FILE* stream, Settings* settings, const char* const* save_order);
 static void settings_trim(char* str);
+
+static const char* const arcanum_cfg_save_order[] = {
+    "difficulty",
+    "violence filter",
+    "turn-based",
+    "fast turn-based",
+    "auto attack",
+    "auto switch",
+    "always run",
+    "follower skills",
+    "",
+    "brightness",
+    "text duration",
+    "text floaters",
+    "float speed",
+    "combat taunts",
+    "object lighting",
+    "",
+    "effects volume",
+    "interface volume",
+    "walking_volume",
+    "object_volume",
+    "spell_volume",
+    "critter_volume",
+    "voice volume",
+    "music volume",
+    "",
+    "selected_char_id",
+    "",
+    "splash",
+    "shadows",
+    "",
+    "show version",
+    NULL,
+};
 
 /**
  * Initializes a settings structure with a file path.
@@ -119,10 +156,14 @@ void settings_save(Settings* settings)
         return;
     }
 
-    curr = settings->entries;
-    while (curr != NULL) {
-        fprintf(stream, "%s=%s\n", curr->key, curr->value);
-        curr = curr->next;
+    if (SDL_strcasecmp(settings->path, "arcanum.cfg") == 0) {
+        settings_save_ordered(stream, settings, arcanum_cfg_save_order);
+    } else {
+        curr = settings->entries;
+        while (curr != NULL) {
+            fprintf(stream, "%s=%s\n", curr->key, curr->value);
+            curr = curr->next;
+        }
     }
 
     fclose(stream);
@@ -301,6 +342,66 @@ SettingsEntry* settings_find(Settings* settings, const char* key)
     return NULL;
 }
 
+bool settings_key_in_save_order(const char* key, const char* const* save_order)
+{
+    int index;
+
+    for (index = 0; save_order[index] != NULL; index++) {
+        if (save_order[index][0] != '\0'
+            && SDL_strcasecmp(key, save_order[index]) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void settings_save_ordered(FILE* stream, Settings* settings, const char* const* save_order)
+{
+    SettingsEntry* entry;
+    SettingsEntry* curr;
+    bool wrote;
+    bool pending_blank;
+    int index;
+
+    wrote = false;
+    pending_blank = false;
+
+    for (index = 0; save_order[index] != NULL; index++) {
+        if (save_order[index][0] == '\0') {
+            if (wrote) {
+                pending_blank = true;
+            }
+            continue;
+        }
+
+        entry = settings_find(settings, save_order[index]);
+        if (entry == NULL) {
+            continue;
+        }
+
+        if (pending_blank) {
+            fprintf(stream, "\n");
+            pending_blank = false;
+        }
+
+        fprintf(stream, "%s=%s\n", entry->key, entry->value);
+        wrote = true;
+    }
+
+    curr = settings->entries;
+    while (curr != NULL) {
+        if (!settings_key_in_save_order(curr->key, save_order)) {
+            if (wrote) {
+                fprintf(stream, "\n");
+                wrote = false;
+            }
+            fprintf(stream, "%s=%s\n", curr->key, curr->value);
+        }
+        curr = curr->next;
+    }
+}
+
 /**
  * Internal helper function to trim leading and trailing whitespace from a
  * string (in place).
@@ -323,10 +424,7 @@ void settings_trim(char* str)
     memmove(str, curr, len + 1); // FIX: Instead of `memcpy`.
 
     // Remove trailing whitespace.
-    if (len > 0) {
-        curr = str + len;
-        while (SDL_isspace(*curr)) {
-            *curr-- = '\0';
-        }
+    while (len > 0 && SDL_isspace(str[len - 1])) {
+        str[--len] = '\0';
     }
 }

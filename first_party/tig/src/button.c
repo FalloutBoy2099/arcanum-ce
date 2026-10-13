@@ -521,7 +521,9 @@ bool tig_button_process_mouse_msg(TigMouseMessageData* mouse)
                 msg.data.button.state = new_state;
                 tig_message_enqueue(&msg);
 
-                tig_button_play_sound(button_handle, new_state);
+                if (!mouse->repeat) {
+                    tig_button_play_sound(button_handle, new_state);
+                }
 
                 return true;
             }
@@ -533,7 +535,9 @@ bool tig_button_process_mouse_msg(TigMouseMessageData* mouse)
             msg.data.button.state = new_state;
             tig_message_enqueue(&msg);
 
-            tig_button_play_sound(button_handle, new_state);
+            if (!mouse->repeat) {
+                tig_button_play_sound(button_handle, new_state);
+            }
 
             return true;
         }

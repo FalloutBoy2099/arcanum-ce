@@ -145,6 +145,9 @@ void tig_sound_set_extra_volume(tig_sound_handle_t sound_handle, int extra_volum
 // Checks if a sound effect with a given ID is currently playing.
 bool tig_sound_is_playing_id(int id);
 
+// Returns the ID associated with a sound handle.
+int tig_sound_get_id(tig_sound_handle_t sound_handle);
+
 // Checks if a sound is currently playing.
 bool tig_sound_is_playing(tig_sound_handle_t sound_handle);
 

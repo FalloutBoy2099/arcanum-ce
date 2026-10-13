@@ -742,6 +742,15 @@ bool tig_sound_is_playing_id(int id)
     return false;
 }
 
+int tig_sound_get_id(tig_sound_handle_t sound_handle)
+{
+    if (!sound_handle_is_valid(sound_handle)) {
+        return 0;
+    }
+
+    return tig_sounds[sound_handle].id;
+}
+
 // 0x533A20
 bool tig_sound_is_playing(tig_sound_handle_t sound_handle)
 {

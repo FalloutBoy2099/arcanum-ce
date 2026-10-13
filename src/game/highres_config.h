@@ -11,6 +11,8 @@ typedef struct HighResConfig {
     bool show_fps;
     int scroll_fps;
     int scroll_dist;
+    int preload_limit;
+    int broadcast_limit;
     bool logos;
     bool intro;
 } HighResConfig;

@@ -9,6 +9,7 @@
 #include "game/mes.h"
 #include "game/player.h"
 #include "game/random.h"
+#include "game/snd.h"
 #include "game/timeevent.h"
 
 /**
@@ -52,6 +53,17 @@
  * Number of combat tension music files available.
  */
 #define GSOUND_COMBAT_MUSIC_TRACKS 6
+
+#define GSOUND_CRITTER_SFX_MIN 10
+#define GSOUND_CRITTER_SFX_MAX 2899
+#define GSOUND_WALKING_SFX_MIN 2900
+#define GSOUND_WALKING_SFX_MAX 2939
+#define GSOUND_ITEM_SFX_MIN 4000
+#define GSOUND_ITEM_SFX_MAX 5968
+#define GSOUND_MELEE_SFX_MIN 7000
+#define GSOUND_MISC_SFX_MAX 8829
+#define GSOUND_SPELL_SFX_MIN 9000
+#define GSOUND_SPELL_SFX_MAX 24069
 
 /**
  * Y-axis scale factor applied when computing the isometric distance between
@@ -122,8 +134,24 @@ static void gsound_normalize_path(char* str);
 static void gsound_scheme_parse_param(const char* str, const char* key, int* value1, int* value2);
 static void set_listener_xy(int64_t x, int64_t y);
 static void gsound_set_defaults(int min_radius, int max_radius, int min_pan_distance, int max_pan_distance);
+static bool gsound_is_interface_sfx(int id);
+static bool gsound_is_walking_sfx(int id);
+static bool gsound_is_object_sfx(int id);
+static bool gsound_is_spell_sfx(int id);
+static bool gsound_is_critter_sfx(int id);
+static int gsound_sfx_volume_get(int id);
 static int gsound_effects_volume_get(void);
 static void gsound_effects_volume_changed(void);
+static int gsound_interface_volume_get(void);
+static void gsound_interface_volume_changed(void);
+static int gsound_walking_volume_get(void);
+static void gsound_walking_volume_changed(void);
+static int gsound_object_volume_get(void);
+static void gsound_object_volume_changed(void);
+static int gsound_spell_volume_get(void);
+static void gsound_spell_volume_changed(void);
+static int gsound_critter_volume_get(void);
+static void gsound_critter_volume_changed(void);
 static int gsound_voice_volume_get(void);
 static void gsound_voice_volume_changed(void);
 static int gsound_music_volume_get(void);
@@ -304,6 +332,19 @@ static mes_file_handle_t gsound_snd_user_mes_file;
  * 0x5D559C
  */
 static int gsound_effects_volume;
+
+/**
+ * Raw interface sound effects volume.
+ */
+static int gsound_interface_volume;
+
+static int gsound_walking_volume;
+
+static int gsound_object_volume;
+
+static int gsound_spell_volume;
+
+static int gsound_critter_volume;
 
 /**
  * Maps sound size class to maximum volume.
@@ -562,9 +603,19 @@ bool gsound_init(GameInitInfo* init_info)
 
     // Register sound-type volume settings and initialize them.
     settings_register(&settings, EFFECTS_VOLUME_KEY, "5", gsound_effects_volume_changed);
+    settings_register(&settings, INTERFACE_VOLUME_KEY, "5", gsound_interface_volume_changed);
+    settings_register(&settings, WALKING_VOLUME_KEY, "5", gsound_walking_volume_changed);
+    settings_register(&settings, OBJECT_VOLUME_KEY, "5", gsound_object_volume_changed);
+    settings_register(&settings, SPELL_VOLUME_KEY, "5", gsound_spell_volume_changed);
+    settings_register(&settings, CRITTER_VOLUME_KEY, "5", gsound_critter_volume_changed);
     settings_register(&settings, VOICE_VOLUME_KEY, "5", gsound_voice_volume_changed);
     settings_register(&settings, MUSIC_VOLUME_KEY, "5", gsound_music_volume_changed);
     gsound_effects_volume_changed();
+    gsound_interface_volume_changed();
+    gsound_walking_volume_changed();
+    gsound_object_volume_changed();
+    gsound_spell_volume_changed();
+    gsound_critter_volume_changed();
     gsound_voice_volume_changed();
     gsound_music_volume_changed();
     gsound_combat_music_active = false;
@@ -789,6 +840,7 @@ void gsound_flush(void)
 tig_sound_handle_t gsound_play_sfx_func(const char* path, int loops, int volume, int extra_volume, int id)
 {
     tig_sound_handle_t sound_handle;
+    int channel_volume;
 
     if (!gsound_initialized) {
         return TIG_SOUND_HANDLE_INVALID;
@@ -800,7 +852,8 @@ tig_sound_handle_t gsound_play_sfx_func(const char* path, int loops, int volume,
 
     tig_sound_create(&sound_handle, TIG_SOUND_TYPE_EFFECT);
     tig_sound_set_loops(sound_handle, loops);
-    tig_sound_set_volume(sound_handle, volume * gsound_effects_volume / 100);
+    channel_volume = gsound_sfx_volume_get(id);
+    tig_sound_set_volume(sound_handle, volume * channel_volume / 100);
     tig_sound_set_extra_volume(sound_handle, extra_volume);
     tig_sound_play(sound_handle, path, id);
     if (!tig_sound_is_active(sound_handle)) {
@@ -1925,6 +1978,53 @@ void gsound_set_defaults(int min_radius, int max_radius, int min_pan_distance, i
     recalc_positional_sounds_volume();
 }
 
+bool gsound_is_interface_sfx(int id)
+{
+    return id >= SND_INTERFACE_BUTTON_MEDIUM
+        && id <= SND_INTERFACE_QUESTCOMPLETE;
+}
+
+bool gsound_is_walking_sfx(int id)
+{
+    return id >= GSOUND_WALKING_SFX_MIN
+        && id <= GSOUND_WALKING_SFX_MAX;
+}
+
+bool gsound_is_object_sfx(int id)
+{
+    return (id >= GSOUND_ITEM_SFX_MIN && id <= GSOUND_ITEM_SFX_MAX)
+        || (id >= GSOUND_MELEE_SFX_MIN && id <= GSOUND_MISC_SFX_MAX);
+}
+
+bool gsound_is_spell_sfx(int id)
+{
+    return id >= GSOUND_SPELL_SFX_MIN
+        && id <= GSOUND_SPELL_SFX_MAX;
+}
+
+bool gsound_is_critter_sfx(int id)
+{
+    return id >= GSOUND_CRITTER_SFX_MIN
+        && id <= GSOUND_CRITTER_SFX_MAX;
+}
+
+int gsound_sfx_volume_get(int id)
+{
+    if (gsound_is_interface_sfx(id)) {
+        return gsound_interface_volume_get();
+    } else if (gsound_is_walking_sfx(id)) {
+        return gsound_walking_volume_get();
+    } else if (gsound_is_object_sfx(id)) {
+        return gsound_object_volume_get();
+    } else if (gsound_is_spell_sfx(id)) {
+        return gsound_spell_volume_get();
+    } else if (gsound_is_critter_sfx(id)) {
+        return gsound_critter_volume_get();
+    } else {
+        return gsound_effects_volume_get();
+    }
+}
+
 /**
  * Returns the current raw effects volume level.
  *
@@ -1954,7 +2054,7 @@ void gsound_effects_volume_changed(void)
 
     // Convert 0–10 setting to raw TIG level, scaled to 80% of maximum.
     gsound_effects_volume = 80 * (GSOUND_VOLUME_MAX * settings_get_value(&settings, EFFECTS_VOLUME_KEY) / 10) / 100;
-    tig_sound_set_volume_by_type(TIG_SOUND_TYPE_EFFECT, gsound_effects_volume);
+    tig_sound_quick_play_set_volume(gsound_interface_volume);
 
     // Refresh positional sound volumes by re-setting the listener position.
     obj = player_get_local_pc_obj();
@@ -1962,6 +2062,67 @@ void gsound_effects_volume_changed(void)
         location = obj_field_int64_get(obj, OBJ_F_LOCATION);
         gsound_listener_set(location);
     }
+}
+
+/**
+ * Returns the current raw interface effects volume level.
+ */
+int gsound_interface_volume_get(void)
+{
+    return gsound_interface_volume;
+}
+
+/**
+ * Called when `interface volume` setting is changed.
+ */
+void gsound_interface_volume_changed(void)
+{
+    gsound_interface_volume = 80 * (GSOUND_VOLUME_MAX * settings_get_value(&settings, INTERFACE_VOLUME_KEY) / 10) / 100;
+    tig_sound_quick_play_set_volume(gsound_interface_volume);
+}
+
+int gsound_walking_volume_get(void)
+{
+    return gsound_walking_volume;
+}
+
+void gsound_walking_volume_changed(void)
+{
+    gsound_walking_volume = 80 * (GSOUND_VOLUME_MAX * settings_get_value(&settings, WALKING_VOLUME_KEY) / 10) / 100;
+    recalc_positional_sounds_volume();
+}
+
+int gsound_object_volume_get(void)
+{
+    return gsound_object_volume;
+}
+
+void gsound_object_volume_changed(void)
+{
+    gsound_object_volume = 80 * (GSOUND_VOLUME_MAX * settings_get_value(&settings, OBJECT_VOLUME_KEY) / 10) / 100;
+    recalc_positional_sounds_volume();
+}
+
+int gsound_spell_volume_get(void)
+{
+    return gsound_spell_volume;
+}
+
+void gsound_spell_volume_changed(void)
+{
+    gsound_spell_volume = 80 * (GSOUND_VOLUME_MAX * settings_get_value(&settings, SPELL_VOLUME_KEY) / 10) / 100;
+    recalc_positional_sounds_volume();
+}
+
+int gsound_critter_volume_get(void)
+{
+    return gsound_critter_volume;
+}
+
+void gsound_critter_volume_changed(void)
+{
+    gsound_critter_volume = 80 * (GSOUND_VOLUME_MAX * settings_get_value(&settings, CRITTER_VOLUME_KEY) / 10) / 100;
+    recalc_positional_sounds_volume();
 }
 
 /**
@@ -2024,7 +2185,7 @@ int adjust_volume(tig_sound_handle_t sound_handle, int volume)
 {
     switch (tig_sound_get_type(sound_handle)) {
     case TIG_SOUND_TYPE_EFFECT:
-        return volume * gsound_effects_volume_get() / GSOUND_VOLUME_MAX;
+        return volume * gsound_sfx_volume_get(tig_sound_get_id(sound_handle)) / GSOUND_VOLUME_MAX;
     case TIG_SOUND_TYPE_MUSIC:
         return volume * gsound_music_volume_get() / GSOUND_VOLUME_MAX;
     case TIG_SOUND_TYPE_VOICE:

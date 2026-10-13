@@ -116,12 +116,14 @@ typedef struct GameSaveEntry {
 
 static int game_save_entry_compare_by_date(const void* va, const void* vb);
 static int game_save_entry_compare_by_name(const void* va, const void* vb);
+static int gamelib_file_info_compare_by_path(const void* va, const void* vb);
 static void difficulty_changed(void);
 static void gamelib_draw_game(GameDrawInfo* draw_info);
 static void gamelib_draw_editor(GameDrawInfo* draw_info);
 static void gamelib_logo(void);
 static void gamelib_splash(tig_window_handle_t window_handle);
 static void gamelib_load_data(void);
+static void gamelib_load_highres_data(void);
 static bool gamelib_load_module_data(const char* module_name);
 static void gamelib_unload_module_data(void);
 
@@ -571,7 +573,7 @@ void gamelib_modlist_create(GameModuleList* module_list, int type)
     TigFileList file_list;
     unsigned int file_index;
     char* dot;
-    bool is_file;
+    bool is_dat_repository;
     bool cont;
     bool found;
     unsigned int module_index;
@@ -588,16 +590,16 @@ void gamelib_modlist_create(GameModuleList* module_list, int type)
     }
 
     tig_file_list_create(&file_list, "Modules\\*.*");
+    qsort(file_list.entries, file_list.count, sizeof(*file_list.entries), gamelib_file_info_compare_by_path);
 
     for (file_index = 0; file_index < file_list.count; file_index++) {
         cont = false;
-        is_file = false;
+        is_dat_repository = false;
         dot = strrchr(file_list.entries[file_index].path, '.');
         if (dot != NULL) {
-            if (SDL_strcasecmp(dot, ".dat") == 0
-                && (file_list.entries[file_index].attributes & TIG_FILE_ATTRIBUTE_SUBDIR) == 0) {
+            if (SDL_strcasecmp(dot, ".dat") == 0) {
                 *dot = '\0';
-                is_file = true;
+                is_dat_repository = true;
                 cont = true;
             }
         } else if ((file_list.entries[file_index].attributes & TIG_FILE_ATTRIBUTE_SUBDIR) != 0) {
@@ -618,7 +620,7 @@ void gamelib_modlist_create(GameModuleList* module_list, int type)
             if (!found) {
                 strcpy(path, "Modules\\");
                 strcat(path, file_list.entries[file_index].path);
-                if (is_file) {
+                if (is_dat_repository) {
                     strcat(path, ".dat");
                 }
 
@@ -1823,6 +1825,7 @@ void gamelib_load_data(void)
     unsigned int index;
 
     tig_file_list_create(&file_list, "arcanum*.dat");
+    qsort(file_list.entries, file_list.count, sizeof(*file_list.entries), gamelib_file_info_compare_by_path);
 
     for (index = 0; index < file_list.count; index++) {
         tig_file_repository_add(file_list.entries[index].path);
@@ -1832,6 +1835,30 @@ void gamelib_load_data(void)
 
     tig_file_mkdir("data");
     tig_file_repository_add("data");
+
+    gamelib_load_highres_data();
+}
+
+void gamelib_load_highres_data(void)
+{
+    TigFileList file_list;
+    unsigned int index;
+
+    tig_file_list_create(&file_list, "HighRes\\Files\\arcanum*.dat");
+    qsort(file_list.entries, file_list.count, sizeof(*file_list.entries), gamelib_file_info_compare_by_path);
+
+    for (index = 0; index < file_list.count; index++) {
+        char path[TIG_MAX_PATH];
+
+        snprintf(path, sizeof(path), "HighRes\\Files\\%s", file_list.entries[index].path);
+        tig_file_repository_add(path);
+    }
+
+    tig_file_list_destroy(&file_list);
+
+    if (tig_file_is_directory("HighRes\\Files")) {
+        tig_file_repository_add("HighRes\\Files");
+    }
 }
 
 // 0x404C10
@@ -1852,7 +1879,7 @@ bool gamelib_load_module_data(const char* module_name)
     end = strlen(path1);
 
     strcat(path1, ".dat");
-    if (tig_file_exists(path1, NULL)) {
+    if (tig_file_exists(path1, NULL) || tig_file_is_directory(path1)) {
         if (!tig_file_repository_add(path1)) {
             return false;
         }
@@ -1863,7 +1890,7 @@ bool gamelib_load_module_data(const char* module_name)
 
         for (index = 0; index < GAMELIB_MAX_PATCH_COUNT; index++) {
             snprintf(path2, TIG_MAX_PATH, "%s.patch%d", path1, index);
-            if (tig_file_exists(path2, NULL)) {
+            if (tig_file_exists(path2, NULL) || tig_file_is_directory(path2)) {
                 if (!tig_file_repository_add(path2)) {
                     return false;
                 }
@@ -1900,6 +1927,14 @@ bool gamelib_load_module_data(const char* module_name)
     }
 
     return false;
+}
+
+int gamelib_file_info_compare_by_path(const void* va, const void* vb)
+{
+    const TigFileInfo* a = (const TigFileInfo*)va;
+    const TigFileInfo* b = (const TigFileInfo*)vb;
+
+    return SDL_strcasecmp(a->path, b->path);
 }
 
 // 0x405070

@@ -59,6 +59,16 @@ static void options_ui_combat_taunts_get(int* value_ptr, bool* enabled_ptr);
 static void options_ui_combat_taunts_set(int value);
 static void options_ui_effects_volume_get(int* value_ptr, bool* enabled_ptr);
 static void options_ui_effects_volume_set(int value);
+static void options_ui_interface_volume_get(int* value_ptr, bool* enabled_ptr);
+static void options_ui_interface_volume_set(int value);
+static void options_ui_walking_volume_get(int* value_ptr, bool* enabled_ptr);
+static void options_ui_walking_volume_set(int value);
+static void options_ui_object_volume_get(int* value_ptr, bool* enabled_ptr);
+static void options_ui_object_volume_set(int value);
+static void options_ui_spell_volume_get(int* value_ptr, bool* enabled_ptr);
+static void options_ui_spell_volume_set(int value);
+static void options_ui_critter_volume_get(int* value_ptr, bool* enabled_ptr);
+static void options_ui_critter_volume_set(int value);
 static void options_ui_voice_volume_get(int* value_ptr, bool* enabled_ptr);
 static void options_ui_voice_volume_set(int value);
 static void options_ui_music_volume_get(int* value_ptr, bool* enabled_ptr);
@@ -119,14 +129,14 @@ static OptionsUiControlInfo options_ui_tab_controls_meta[OPTIONS_UI_TAB_COUNT][M
         { false, 0, 0, "", "", NULL, NULL },
     },
     {
-        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Effects", "", options_ui_effects_volume_get, options_ui_effects_volume_set },
-        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Voice", "", options_ui_voice_volume_get, options_ui_voice_volume_set },
-        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Music", "", options_ui_music_volume_get, options_ui_music_volume_set },
-        { false, 0, 0, "", "", NULL, NULL },
-        { false, 0, 0, "", "", NULL, NULL },
-        { false, 0, 0, "", "", NULL, NULL },
-        { false, 0, 0, "", "", NULL, NULL },
-        { false, 0, 0, "", "", NULL, NULL },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Effets", "", options_ui_effects_volume_get, options_ui_effects_volume_set },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Interface", "", options_ui_interface_volume_get, options_ui_interface_volume_set },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Pas", "", options_ui_walking_volume_get, options_ui_walking_volume_set },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Objets", "", options_ui_object_volume_get, options_ui_object_volume_set },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Sorts", "", options_ui_spell_volume_get, options_ui_spell_volume_set },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Creatures", "", options_ui_critter_volume_get, options_ui_critter_volume_set },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Voix", "", options_ui_voice_volume_get, options_ui_voice_volume_set },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Musique", "", options_ui_music_volume_get, options_ui_music_volume_set },
     },
 };
 
@@ -235,9 +245,9 @@ void options_ui_start(OptionsUiTab tab, tig_window_handle_t window_handle, bool 
 
         // Load control title from the message file.
         mes_file_entry.num = index + 100 * (tab + 1);
-        control_info.title = mes_search(options_ui_mes_file, &mes_file_entry)
+        control_info.title = tab != OPTIONS_UI_TAB_AUDIO && mes_search(options_ui_mes_file, &mes_file_entry)
             ? mes_file_entry.str
-            : NULL;
+            : meta->debug_name;
 
         // Finish control set up.
         control_info.mes_file_path = meta->mes;
@@ -648,6 +658,67 @@ void options_ui_effects_volume_get(int* value_ptr, bool* enabled_ptr)
 void options_ui_effects_volume_set(int value)
 {
     settings_set_value(&settings, EFFECTS_VOLUME_KEY, value);
+}
+
+/**
+ * Called to retrieve the initial value and state of "Interface".
+ */
+void options_ui_interface_volume_get(int* value_ptr, bool* enabled_ptr)
+{
+    *value_ptr = settings_get_value(&settings, INTERFACE_VOLUME_KEY);
+    *enabled_ptr = true;
+}
+
+/**
+ * Called when the value of "Interface" is changed.
+ */
+void options_ui_interface_volume_set(int value)
+{
+    settings_set_value(&settings, INTERFACE_VOLUME_KEY, value);
+}
+
+void options_ui_walking_volume_get(int* value_ptr, bool* enabled_ptr)
+{
+    *value_ptr = settings_get_value(&settings, WALKING_VOLUME_KEY);
+    *enabled_ptr = true;
+}
+
+void options_ui_walking_volume_set(int value)
+{
+    settings_set_value(&settings, WALKING_VOLUME_KEY, value);
+}
+
+void options_ui_object_volume_get(int* value_ptr, bool* enabled_ptr)
+{
+    *value_ptr = settings_get_value(&settings, OBJECT_VOLUME_KEY);
+    *enabled_ptr = true;
+}
+
+void options_ui_object_volume_set(int value)
+{
+    settings_set_value(&settings, OBJECT_VOLUME_KEY, value);
+}
+
+void options_ui_spell_volume_get(int* value_ptr, bool* enabled_ptr)
+{
+    *value_ptr = settings_get_value(&settings, SPELL_VOLUME_KEY);
+    *enabled_ptr = true;
+}
+
+void options_ui_spell_volume_set(int value)
+{
+    settings_set_value(&settings, SPELL_VOLUME_KEY, value);
+}
+
+void options_ui_critter_volume_get(int* value_ptr, bool* enabled_ptr)
+{
+    *value_ptr = settings_get_value(&settings, CRITTER_VOLUME_KEY);
+    *enabled_ptr = true;
+}
+
+void options_ui_critter_volume_set(int value)
+{
+    settings_set_value(&settings, CRITTER_VOLUME_KEY, value);
 }
 
 /**

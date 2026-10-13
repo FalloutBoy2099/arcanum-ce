@@ -1,9 +1,16 @@
 #include "game/tc.h"
 
+#include "game/dialog.h"
+
 /**
  * The number of lines in the text conversation.
  */
-#define TEXT_CONVERSATION_LINES 5
+#define TEXT_CONVERSATION_LINES DIALOG_MAX_OPTIONS
+
+/**
+ * The height of the text conversation area.
+ */
+#define TEXT_CONVERSATION_HEIGHT 200
 
 /**
  * Horizontal space before and after the option text (in pixels).
@@ -16,6 +23,9 @@
 #define TEXT_CONVERSATION_VERT_SPACING 3
 
 static void tc_render_internal(TigRectListNode* node);
+static int tc_content_height_for_lines(int lines);
+static void tc_update_content_rect_height(void);
+static int tc_option_index_from_y(int y);
 
 /**
  * Used to track index of the currently highlighted option.
@@ -130,6 +140,12 @@ static tig_window_handle_t tc_iso_window_handle;
 static const char* tc_options[TEXT_CONVERSATION_LINES];
 
 /**
+ * Flag indicating whether the text conversation uses compact interface
+ * positioning.
+ */
+static bool tc_compact;
+
+/**
  * Flag indicating whether the text conversation is currently active and
  * visible.
  *
@@ -170,7 +186,7 @@ bool tc_init(GameInitInfo* init_info)
     tc_intermediate_video_buffer_rect.x = 0;
     tc_intermediate_video_buffer_rect.y = 0;
     tc_intermediate_video_buffer_rect.width = window_data.rect.width;
-    tc_intermediate_video_buffer_rect.height = 100;
+    tc_intermediate_video_buffer_rect.height = TEXT_CONVERSATION_HEIGHT;
 
     // Create the scratch video buffer for rendering text (color keyed for
     // transparency).
@@ -408,18 +424,12 @@ void tc_clear(bool compact)
     // Reset highlight state and some internal flag (which is unused).
     tc_highlighted_idx = -1;
     dword_5FF544 = false;
+    tc_compact = compact;
 
     // Set default content size and center it horizontally.
     tc_content_rect.width = 400;
-    tc_content_rect.height = 100;
     tc_content_rect.x = (tc_iso_window_rect.width - tc_content_rect.width) / 2;
-
-    // Adjust vertical position depending on normal vs. compact mode.
-    if (compact) {
-        tc_content_rect.y = tc_iso_window_rect.height - tc_content_rect.height - 37;
-    } else {
-        tc_content_rect.y = tc_iso_window_rect.height - tc_content_rect.height - 159;
-    }
+    tc_update_content_rect_height();
 }
 
 /**
@@ -441,6 +451,7 @@ void tc_set_option(int index, const char* str)
 
     // Store the option string. Note that we don't create a copy here.
     tc_options[index] = str;
+    tc_update_content_rect_height();
 
     rect.x = TEXT_CONVERSATION_HOR_PADDING;
     rect.y = index * (tc_line_height + TEXT_CONVERSATION_VERT_SPACING) + TEXT_CONVERSATION_VERT_SPACING;
@@ -552,14 +563,14 @@ int tc_handle_message(TigMessage* msg)
         }
 
         // Calculate the option index based on the mouse's vertical position.
-        index = (msg->data.mouse.y - (tc_iso_window_rect.y + tc_content_rect.y)) / (tc_intermediate_video_buffer_rect.height / TEXT_CONVERSATION_LINES);
-        if (tc_options[index] != NULL) {
+        index = tc_option_index_from_y(msg->data.mouse.y - (tc_iso_window_rect.y + tc_content_rect.y));
+        if (index != -1 && tc_options[index] != NULL) {
             return index;
         }
         return -1;
     case TIG_MESSAGE_MOUSE_MOVE:
         // Calculate the option index based on the mouse's vertical position.
-        index = (msg->data.mouse.y - (tc_iso_window_rect.y + tc_content_rect.y)) / (tc_intermediate_video_buffer_rect.height / TEXT_CONVERSATION_LINES);
+        index = tc_option_index_from_y(msg->data.mouse.y - (tc_iso_window_rect.y + tc_content_rect.y));
 
         // Clear the previous highlight if mouse moved to a different option.
         if (tc_highlighted_idx != index && tc_highlighted_idx != -1) {
@@ -577,6 +588,62 @@ int tc_handle_message(TigMessage* msg)
     default:
         return -1;
     }
+}
+
+int tc_content_height_for_lines(int lines)
+{
+    if (lines < 1) {
+        lines = 1;
+    } else if (lines > TEXT_CONVERSATION_LINES) {
+        lines = TEXT_CONVERSATION_LINES;
+    }
+
+    return lines * tc_line_height + (lines + 1) * TEXT_CONVERSATION_VERT_SPACING;
+}
+
+void tc_update_content_rect_height(void)
+{
+    TigRect old_rect;
+    int lines;
+    int idx;
+    int bottom_offset;
+
+    old_rect = tc_content_rect;
+
+    lines = 0;
+    for (idx = 0; idx < TEXT_CONVERSATION_LINES; idx++) {
+        if (tc_options[idx] != NULL) {
+            lines = idx + 1;
+        }
+    }
+
+    tc_content_rect.height = tc_content_height_for_lines(lines);
+
+    // Adjust vertical position depending on normal vs. compact mode while
+    // keeping the bottom edge anchored where vanilla placed the dialogue area.
+    bottom_offset = tc_compact ? 37 : 159;
+    tc_content_rect.y = tc_iso_window_rect.height - tc_content_rect.height - bottom_offset;
+
+    if (tc_active) {
+        tc_iso_window_invalidate_rect(&old_rect);
+        tc_iso_window_invalidate_rect(&tc_content_rect);
+    }
+}
+
+int tc_option_index_from_y(int y)
+{
+    int index;
+
+    if (y < 0 || y >= tc_content_rect.height) {
+        return -1;
+    }
+
+    index = y / (tc_line_height + TEXT_CONVERSATION_VERT_SPACING);
+    if (index < 0 || index >= TEXT_CONVERSATION_LINES) {
+        return -1;
+    }
+
+    return index;
 }
 
 /**

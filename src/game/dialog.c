@@ -1274,10 +1274,10 @@ void sub_414810(int a1, int a2, int a3, int a4, DialogState* a5)
 void sub_414E60(DialogState* a1, bool randomize)
 {
     int index;
-    int v1[5];
+    int v1[DIALOG_MAX_OPTIONS];
     int v2;
 
-    for (index = 0; index < 5; index++) {
+    for (index = 0; index < DIALOG_MAX_OPTIONS; index++) {
         a1->actions[index] = NULL;
         a1->options[index][0] = '\0';
     }
@@ -1338,7 +1338,7 @@ int sub_414F50(DialogState* a1, int* a2)
 
     cnt = 0;
 
-    for (idx = (int)(entry - dialog->entries) + 1; idx < dialog->entries_length && cnt < 5; idx++) {
+    for (idx = (int)(entry - dialog->entries) + 1; idx < dialog->entries_length && cnt < DIALOG_MAX_OPTIONS; idx++) {
         entry = &(dialog->entries[idx]);
         if (entry->iq == 0) {
             return cnt;

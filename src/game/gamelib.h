@@ -21,6 +21,11 @@
 #define COMBAT_TAUNTS_KEY "combat taunts"
 
 #define EFFECTS_VOLUME_KEY "effects volume"
+#define INTERFACE_VOLUME_KEY "interface volume"
+#define WALKING_VOLUME_KEY "walking_volume"
+#define OBJECT_VOLUME_KEY "object_volume"
+#define SPELL_VOLUME_KEY "spell_volume"
+#define CRITTER_VOLUME_KEY "critter_volume"
 #define VOICE_VOLUME_KEY "voice volume"
 #define MUSIC_VOLUME_KEY "music volume"
 
