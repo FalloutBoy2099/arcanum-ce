@@ -16,9 +16,11 @@ typedef uint32_t TigFontFlags;
 #define TIG_FONT_SHADOW 0x0008u
 #define TIG_FONT_CENTERED 0x0010u
 #define TIG_FONT_STRIKE_THROUGH 0x0020u
+#define TIG_FONT_RIGHT 0x0040u
 #define TIG_FONT_NO_ALPHA_BLEND 0x0080u
 #define TIG_FONT_BLEND_ADD 0x0100u
 #define TIG_FONT_MODERN 0x0200u
+#define TIG_FONT_DIM_BRACKETS 0x0400u
 
 typedef struct TigFont {
     /* 0000 */ TigFontFlags flags;
@@ -37,6 +39,7 @@ typedef struct TigFont {
     void* modern_font;
     tig_color_t modern_shadow_color;
     int modern_shadow_opacity;
+    int bracket_dim_percent;
     int modern_shadow_distance;
 } TigFont;
 

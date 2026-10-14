@@ -1,5 +1,7 @@
 #include "game/tc.h"
 
+#include <stdio.h>
+
 #include "game/dialog.h"
 #include "game/gamelib.h"
 #include "game/highres_config.h"
@@ -176,6 +178,13 @@ static bool tc_compact;
  * 0x5FF568
  */
 static bool tc_active;
+// CE: vertical offset (design-coord pixels) applied to the dialog
+// options backdrop so it sits lower when the HUD bar is cropped.
+// Driven by intgame via tc_set_bottom_gap_offset().
+static int tc_bottom_gap_offset = 0;
+// Remember the last compact value seen by tc_clear so we can re-lay
+// out at any time (e.g. on a gap-offset change) without needing the
+// caller to re-pass it.
 
 /**
  * Called when the game is initialized.
@@ -274,10 +283,16 @@ bool tc_init(GameInitInfo* init_info)
     }
 
     // Create white font for normal text.
+    if (settings_get_value(&settings, DIALOGUE_EMOTE_DIM_KEY) != 0
+        && settings_get_value(&settings, DIALOGUE_EMOTE_DIM_CHOICES_KEY) != 0) {
+        font.flags |= TIG_FONT_DIM_BRACKETS;
+    }
+    font.bracket_dim_percent = modern_font_int_for(DIALOGUE_EMOTE_DIM_PERCENT_KEY, 60, 0, 100);
     font.color = tig_color_make(255, 255, 255);
     tig_font_create(&font, &tc_white_font);
 
     // Create yellow font for highlighted text.
+    font.flags &= ~TIG_FONT_DIM_BRACKETS;
     font.color = tig_color_make(255, 255, 0);
     tig_font_create(&font, &tc_yellow_font);
 
@@ -347,6 +362,31 @@ void tc_resize(GameResizeInfo* resize_info)
  *
  * 0x4C95F0
  */
+void tc_set_bottom_gap_offset(int offset)
+{
+    if (tc_editor || offset == tc_bottom_gap_offset) {
+        return;
+    }
+    if (tc_active) {
+        tc_iso_window_invalidate_rect(&tc_content_rect);
+    }
+    tc_bottom_gap_offset = offset;
+    tc_update_content_rect_height();
+    if (tc_active) {
+        tc_iso_window_invalidate_rect(&tc_content_rect);
+    }
+}
+
+bool tc_is_active(void)
+{
+    return tc_active;
+}
+
+TigRect tc_get_content_rect(void)
+{
+    return tc_content_rect;
+}
+
 void tc_draw(GameDrawInfo* draw_info)
 {
     // Make sure we're not in the editor.
@@ -529,6 +569,15 @@ int tc_handle_message(TigMessage* msg)
         return -1;
     }
 
+    if (msg->type == TIG_MESSAGE_KEYBOARD
+        && !msg->data.keyboard.pressed
+        && settings_get_value(&settings, DIALOGUE_OPTION_NUMBERS_KEY) != 0) {
+        index = msg->data.keyboard.scancode >= SDL_SCANCODE_1 && msg->data.keyboard.scancode <= SDL_SCANCODE_9
+            ? msg->data.keyboard.scancode - SDL_SCANCODE_1
+            : msg->data.keyboard.scancode == SDL_SCANCODE_0 ? 9 : -1;
+        return index >= 0 && index < TEXT_CONVERSATION_LINES && tc_options[index] != NULL ? index : -1;
+    }
+
     // Only process mouse messages.
     if (msg->type != TIG_MESSAGE_MOUSE) {
         return -1;
@@ -697,6 +746,10 @@ void tc_update_content_rect_height(void)
     // Adjust vertical position depending on normal vs. compact mode while
     // keeping the bottom edge anchored where vanilla placed the dialogue area.
     bottom_offset = tc_compact ? 37 : 159;
+    bottom_offset -= tc_bottom_gap_offset;
+    if (bottom_offset < 0) {
+        bottom_offset = 0;
+    }
     tc_content_rect.y = tc_iso_window_rect.height - tc_content_rect.height - bottom_offset;
 
     if (tc_active) {
@@ -709,6 +762,9 @@ void tc_render_option(int index, bool highlighted)
 {
     TigRect rect;
     TigRect dirty_rect;
+    char prefix[16];
+    TigFont prefix_font = { 0 };
+    int prefix_width = 0;
 
     if (index < 0 || index >= TEXT_CONVERSATION_LINES || tc_options[index] == NULL) {
         return;
@@ -736,11 +792,22 @@ void tc_render_option(int index, bool highlighted)
         tig_font_push(tc_white_font);
     }
 
+    if (settings_get_value(&settings, DIALOGUE_OPTION_NUMBERS_KEY) != 0) {
+        prefix_font.str = "99. ";
+        tig_font_measure(&prefix_font);
+        prefix_width = prefix_font.width;
+        snprintf(prefix, sizeof(prefix), "%d. ", index + 1);
+        TigRect prefix_rect = rect;
+        prefix_rect.width = prefix_width;
+        tig_font_write(tc_scratch_video_buffer, prefix, &prefix_rect, &dirty_rect);
+        rect.x += prefix_width;
+        rect.width -= prefix_width;
+    }
     tig_font_write(tc_scratch_video_buffer, tc_options[index], &rect, &dirty_rect);
     tig_font_pop();
 
-    if (tc_content_rect.width < dirty_rect.width + tc_dialog_margin_horizontal() * 2) {
-        tc_content_rect.width = dirty_rect.width + tc_dialog_margin_horizontal() * 2;
+    if (tc_content_rect.width < dirty_rect.width + prefix_width + tc_dialog_margin_horizontal() * 2) {
+        tc_content_rect.width = dirty_rect.width + prefix_width + tc_dialog_margin_horizontal() * 2;
         tc_content_rect.x = (tc_iso_window_rect.width - tc_content_rect.width) / 2;
     }
 
@@ -791,6 +858,14 @@ int tc_check_size(const char* str)
     tig_font_pop();
 
     width = font.width - tc_intermediate_video_buffer_rect.width + TEXT_CONVERSATION_HOR_PADDING * 2;
+    if (settings_get_value(&settings, DIALOGUE_OPTION_NUMBERS_KEY) != 0) {
+        font.str = "99. ";
+        font.width = 0;
+        tig_font_push(tc_white_font);
+        tig_font_measure(&font);
+        tig_font_pop();
+        width += font.width;
+    }
     if (width < 0) {
         width = 0;
     }

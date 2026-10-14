@@ -30,10 +30,20 @@ static const char* const arcanum_ini_game_save_order[] = {
     "always_run",
     "follower_skills",
     "followers_manually_level_up",
+    "autosave_travel",
+    "autosave_sleep",
     NULL,
 };
 
 static const char* const arcanum_ini_video_save_order[] = {
+    "resolution",
+    "camera_follows_player",
+    "scroll_using_borders",
+    "vsync_mode",
+    "zoom_enabled",
+    "zoom_min",
+    "zoom_max",
+    "zoom_filter",
     "brightness",
     "text_duration",
     "text_floaters",
@@ -62,6 +72,15 @@ static const char* const arcanum_ini_audio_save_order[] = {
 };
 
 static const char* const arcanum_ini_ui_save_order[] = {
+    "dialogue_camera_mode",
+    "dialogue_camera_zoom_to_fit",
+    "dialogue_camera_tween_back",
+    "hud_stage",
+    "translucent_black_ui",
+    "dialogue_option_numbers",
+    "dialogue_emote_dim",
+    "dialogue_emote_dim_choices",
+    "dialogue_emote_dim_percent",
     "dialog_options_min",
     "dialog_options_max",
     "modern_fonts",
@@ -90,6 +109,10 @@ static const char* const arcanum_ini_ui_save_order[] = {
 };
 
 static const char* const arcanum_ini_bindings_save_order[] = {
+    "zoom_in",
+    "zoom_out",
+    "zoom_reset",
+    "cycle_hud",
     "main_menu",
     "options",
     "quick_save",
@@ -187,6 +210,17 @@ static const SettingsKeyAlias settings_key_aliases[] = {
     { "voice volume", "voice_volume" },
     { "music volume", "music_volume" },
     { "show version", "show_version" },
+    { "vsync mode", "vsync_mode" },
+    { "min zoom", "zoom_min" },
+    { "max zoom", "zoom_max" },
+    { "zoom enabled", "zoom_enabled" },
+    { "zoom filter", "zoom_filter" },
+    { "camera follows player", "camera_follows_player" },
+    { "dialogue camera mode", "dialogue_camera_mode" },
+    { "dialogue camera zoom to fit", "dialogue_camera_zoom_to_fit" },
+    { "dialogue camera tween back", "dialogue_camera_tween_back" },
+    { "translucent black ui", "translucent_black_ui" },
+    { "dialogue option numbers", "dialogue_option_numbers" },
     { NULL, NULL },
 };
 

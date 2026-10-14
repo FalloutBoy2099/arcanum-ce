@@ -14,6 +14,9 @@ void tc_clear(bool compact);
 void tc_set_option(int index, const char* str);
 int tc_handle_message(TigMessage* msg);
 int tc_check_size(const char* str);
+bool tc_is_active(void);
+void tc_set_bottom_gap_offset(int offset);
+TigRect tc_get_content_rect(void);
 
 /**
  * Returns the height (in pixels) reserved at the bottom of the iso view by the

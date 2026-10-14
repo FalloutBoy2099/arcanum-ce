@@ -24,16 +24,44 @@ void highres_config_load(void)
     highres_config_reset();
 
     stream = fopen("HighRes/config.ini", "rt");
+    if (stream != NULL) {
+        highres_config.loaded = true;
+        while (fgets(line, sizeof(line), stream) != NULL) {
+            highres_config_parse_line(line);
+        }
+        fclose(stream);
+    }
+
+    // The options menu stores its startup resolution in arcanum.ini.
+    stream = fopen("arcanum.ini", "rt");
     if (stream == NULL) {
         return;
     }
-
-    highres_config.loaded = true;
-
+    bool video_section = false;
     while (fgets(line, sizeof(line), stream) != NULL) {
-        highres_config_parse_line(line);
+        char* start = line;
+        char* end = line + strlen(line);
+        highres_config_trim(&start, &end);
+        *end = '\0';
+        if (*start == '[') {
+            video_section = SDL_strcasecmp(start, "[video]") == 0;
+        } else if (video_section) {
+            char* separator = strchr(start, '=');
+            if (separator == NULL) continue;
+            char* key_end = separator;
+            highres_config_trim(&start, &key_end);
+            *key_end = '\0';
+            if (SDL_strcasecmp(start, "resolution") == 0) {
+                int width, height;
+                char trailing;
+                if (sscanf(separator + 1, " %dx%d %c", &width, &height, &trailing) == 2
+                    && width >= 800 && width <= 8192 && height >= 600 && height <= 8192) {
+                    highres_config.width = width;
+                    highres_config.height = height;
+                }
+            }
+        }
     }
-
     fclose(stream);
 }
 

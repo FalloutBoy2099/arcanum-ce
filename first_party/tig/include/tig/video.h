@@ -111,8 +111,12 @@ int tig_video_init(TigInitInfo* init_info);
 void tig_video_exit(void);
 int tig_video_window_get(SDL_Window** window_ptr);
 int tig_video_renderer_get(SDL_Renderer** renderer_ptr);
+int tig_video_set_vsync_mode(int mode);
 void tig_video_display_fps(void);
 int tig_video_blit(TigVideoBuffer* src_video_buffer, TigRect* src_rect, TigRect* dst_rect);
+int tig_video_blit_near_black_alpha(TigVideoBuffer* src_video_buffer,
+    TigRect* src_rect, TigRect* dst_rect, TigVideoBuffer* underlay_video_buffer,
+    int underlay_offset_x, int underlay_offset_y, uint8_t threshold, uint8_t opacity);
 int tig_video_fill(const TigRect* rect, tig_color_t color);
 int tig_video_flip(void);
 int tig_video_screenshot_set_settings(TigVideoScreenshotSettings* settings);

@@ -3,6 +3,12 @@
 #include "game/anim.h"
 #include "game/combat.h"
 #include "game/gamelib.h"
+#include "game/camera_follow.h"
+#include "game/dialog_camera.h"
+#include "game/highres_config.h"
+#include "game/hrp.h"
+#include "game/iso_zoom.h"
+#include "ui/intgame.h"
 #include "game/location.h"
 #include "game/mes.h"
 #include "game/obj.h"
@@ -63,10 +69,6 @@ static void options_ui_float_speed_get(int* value_ptr, bool* enabled_ptr);
 static void options_ui_float_speed_set(int value);
 static void options_ui_combat_taunts_get(int* value_ptr, bool* enabled_ptr);
 static void options_ui_combat_taunts_set(int value);
-static void options_ui_dialog_font_get(int* value_ptr, bool* enabled_ptr);
-static void options_ui_dialog_font_set(int value);
-static void options_ui_logbook_font_get(int* value_ptr, bool* enabled_ptr);
-static void options_ui_logbook_font_set(int value);
 static void options_ui_main_menu_art_get(int* value_ptr, bool* enabled_ptr);
 static void options_ui_main_menu_art_set(int value);
 static void options_ui_effects_volume_get(int* value_ptr, bool* enabled_ptr);
@@ -118,22 +120,113 @@ static int options_ui_controls_y[MAX_CONTROLS] = {
     347,
 };
 
-static const char* const options_ui_dialog_font_values[] = {
-    "16",
-    "14",
-    "12",
+static const char* const options_ui_main_menu_art_values[] = { "Noir", "Fondu au noir", "Bois" };
+static const char* const options_ui_language_values[] = { "English" };
+static const char* const options_ui_hud_values[] = { "Complet", "Moyen", "Mini", "Masqu\351" };
+static const char* const options_ui_camera_values[] = { "Minimal", "Dialogue", "PNJ", "Joueur" };
+static const char* const options_ui_filter_values[] = { "Pixels nets", "Lisse" };
+static const char* options_ui_resolution_values[] = {
+    "800x600", "1024x768", "1280x720", "1280x800", "1280x960",
+    "1366x768", "1600x900", "1920x1080", "2560x1440", "3840x2160", NULL,
 };
+static char options_ui_custom_resolution[32];
 
-static const char* const options_ui_logbook_font_values[] = {
-    "14",
-    "12",
-};
+#define BOOLEAN_OPTION(name, key, invert) \
+    static void name##_get(int* value, bool* enabled) { \
+        *value = (settings_get_value(&settings, key) != 0) ^ (invert); *enabled = true; \
+    } \
+    static void name##_set(int value) { settings_set_value(&settings, key, (value != 0) ^ (invert)); }
 
-static const char* const options_ui_main_menu_art_values[] = {
-    "Noir",
-    "Fondu au noir",
-    "Bois",
-};
+BOOLEAN_OPTION(options_ui_autosave_travel, AUTOSAVE_TRAVEL_KEY, 0)
+BOOLEAN_OPTION(options_ui_autosave_sleep, AUTOSAVE_SLEEP_KEY, 0)
+BOOLEAN_OPTION(options_ui_combat_music, NO_COMBAT_MUSIC_KEY, 1)
+BOOLEAN_OPTION(options_ui_vsync, VSYNC_MODE_KEY, 0)
+BOOLEAN_OPTION(options_ui_borders, SCROLL_USING_BORDERS_KEY, 0)
+BOOLEAN_OPTION(options_ui_follow, CAMERA_FOLLOWS_PLAYER_KEY, 0)
+BOOLEAN_OPTION(options_ui_zoom, ISO_ZOOM_ENABLED_KEY, 0)
+BOOLEAN_OPTION(options_ui_modern_fonts, MODERN_FONTS_KEY, 0)
+BOOLEAN_OPTION(options_ui_numbers, DIALOGUE_OPTION_NUMBERS_KEY, 0)
+BOOLEAN_OPTION(options_ui_dialogue_zoom, DIALOGUE_CAMERA_ZOOM_TO_FIT_KEY, 0)
+
+static void options_ui_language_get(int* value, bool* enabled)
+{
+    *value = 0;
+    *enabled = false;
+}
+
+static void options_ui_hud_get(int* value, bool* enabled)
+{
+    *value = SDL_clamp(settings_get_value(&settings, HUD_STAGE_KEY), 0, 3);
+    *enabled = true;
+}
+
+static void options_ui_hud_set(int value)
+{
+    settings_set_value(&settings, HUD_STAGE_KEY, value);
+}
+
+static void options_ui_camera_get(int* value, bool* enabled)
+{
+    *value = SDL_clamp(settings_get_value(&settings, DIALOGUE_CAMERA_MODE_KEY), 0, 3);
+    *enabled = true;
+}
+
+static void options_ui_camera_set(int value)
+{
+    settings_set_value(&settings, DIALOGUE_CAMERA_MODE_KEY, value);
+}
+
+static void options_ui_translucent_get(int* value, bool* enabled)
+{
+    *value = settings_get_value(&settings, TRANSLUCENT_BLACK_UI_KEY) != 0;
+    *enabled = true;
+}
+
+static void options_ui_translucent_set(int value)
+{
+    settings_set_value(&settings, TRANSLUCENT_BLACK_UI_KEY, value != 0);
+    tig_window_modal_translucent_black_set(value != 0, 8, 128);
+}
+
+static void options_ui_filter_get(int* value, bool* enabled)
+{
+    const char* filter = settings_get_str_value(&settings, ZOOM_FILTER_KEY);
+    *value = filter == NULL || SDL_strcasecmp(filter, "nearest") != 0;
+    *enabled = true;
+}
+
+static void options_ui_filter_set(int value)
+{
+    settings_set_str_value(&settings, ZOOM_FILTER_KEY, value ? "linear" : "nearest");
+    gamelib_invalidate_rect(NULL);
+}
+
+static void options_ui_resolution_get(int* value, bool* enabled)
+{
+    const char* saved = settings_get_str_value(&settings, "resolution");
+    *value = 0;
+    *enabled = true;
+    if (saved == NULL || saved[0] == '\0') {
+        SDL_snprintf(options_ui_custom_resolution, sizeof(options_ui_custom_resolution),
+            "%dx%d", hrp_iso_window_width_get(), hrp_iso_window_height_get());
+        saved = options_ui_custom_resolution;
+    }
+    for (int i = 0; i < SDL_arraysize(options_ui_resolution_values); i++) {
+        if (options_ui_resolution_values[i] != NULL && SDL_strcmp(saved, options_ui_resolution_values[i]) == 0) {
+            *value = i;
+            return;
+        }
+    }
+    *value = SDL_arraysize(options_ui_resolution_values) - 1;
+}
+
+static void options_ui_resolution_set(int value)
+{
+    if (value >= 0 && value < SDL_arraysize(options_ui_resolution_values)
+        && options_ui_resolution_values[value] != NULL) {
+        settings_set_str_value(&settings, "resolution", options_ui_resolution_values[value]);
+    }
+}
 
 /**
  * Defines controls metadata.
@@ -142,35 +235,52 @@ static const char* const options_ui_main_menu_art_values[] = {
  */
 static OptionsUiControlInfo options_ui_tab_controls_meta[OPTIONS_UI_TAB_COUNT][MAX_TAB_CONTROLS] = {
     {
-        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Module", "", options_ui_module_get, NULL },
-        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Difficulty", "mes\\OptionsDifficulty.mes", options_ui_difficulty_get, options_ui_difficutly_set },
-        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Violence Filter", "mes\\OptionsOffOn.mes", options_ui_violence_filter_get, options_ui_violence_filter_set },
-        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Default Combat Mode", "mes\\OptionsCombatMode.mes", options_ui_combat_mode_get, options_ui_combat_mode_set },
-        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Auto Attack", "mes\\OptionsOffOn.mes", options_ui_auto_attack_get, options_ui_auto_attack_set },
-        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Auto Switch Weapons", "mes\\OptionsOffOn.mes", options_ui_auto_switch_weapons_get, options_ui_auto_switch_weapons_set },
-        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Always Run", "mes\\OptionsOffOn.mes", options_ui_awlays_run_get, options_ui_always_run_set },
-        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Follower Skills", "mes\\OptionsOffOn.mes", options_ui_follower_skills_get, options_ui_follower_skills_set },
+        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Module", "", options_ui_module_get, NULL, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Langue", "", options_ui_language_get, NULL, options_ui_language_values, SDL_arraysize(options_ui_language_values), true, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Difficult\351", "mes\\OptionsDifficulty.mes", options_ui_difficulty_get, options_ui_difficutly_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Filtre anti-violence", "mes\\OptionsOffOn.mes", options_ui_violence_filter_get, options_ui_violence_filter_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Mode de combat par d\351faut", "mes\\OptionsCombatMode.mes", options_ui_combat_mode_get, options_ui_combat_mode_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Attaque automatique", "mes\\OptionsOffOn.mes", options_ui_auto_attack_get, options_ui_auto_attack_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "R\351armement automatique", "mes\\OptionsOffOn.mes", options_ui_auto_switch_weapons_get, options_ui_auto_switch_weapons_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Courir constamment", "mes\\OptionsOffOn.mes", options_ui_awlays_run_get, options_ui_always_run_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Comp\351tence des compagnons", "mes\\OptionsOffOn.mes", options_ui_follower_skills_get, options_ui_follower_skills_set, NULL, 0, true, 1 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Sauvegarde apr\350s voyage", "mes\\OptionsOffOn.mes", options_ui_autosave_travel_get, options_ui_autosave_travel_set, NULL, 0, true, 1 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Sauvegarde apr\350s sommeil", "mes\\OptionsOffOn.mes", options_ui_autosave_sleep_get, options_ui_autosave_sleep_set, NULL, 0, true, 1 },
     },
     {
-        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 9, "Brightness", "", options_ui_brightness_get, options_ui_brightness_set },
-        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Text Duration", "", options_ui_text_duration_get, options_ui_text_duration_set },
-        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Floats", "mes\\OptionsFloats.mes", options_ui_floats_get, options_ui_floats_set },
-        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Float Speed", "", options_ui_float_speed_get, options_ui_float_speed_set },
-        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Combat Taunts", "mes\\OptionsOffOn.mes", options_ui_combat_taunts_get, options_ui_combat_taunts_set },
-        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Police dialogue", "", options_ui_dialog_font_get, options_ui_dialog_font_set, options_ui_dialog_font_values, SDL_arraysize(options_ui_dialog_font_values), true, 1 },
-        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Police journal", "", options_ui_logbook_font_get, options_ui_logbook_font_set, options_ui_logbook_font_values, SDL_arraysize(options_ui_logbook_font_values), true, 1 },
-        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Fond menu", "", options_ui_main_menu_art_get, options_ui_main_menu_art_set, options_ui_main_menu_art_values, SDL_arraysize(options_ui_main_menu_art_values), true },
+        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "R\351solution", "", options_ui_resolution_get, options_ui_resolution_set, options_ui_resolution_values, SDL_arraysize(options_ui_resolution_values), true, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Synchronisation verticale", "mes\\OptionsOffOn.mes", options_ui_vsync_get, options_ui_vsync_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 9, "Luminosit\351", "", options_ui_brightness_get, options_ui_brightness_set, NULL, 0, true, 0 },
+        { 0 }, // Intentionally empty fourth slot.
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Dur\351e d'affichage du texte", "", options_ui_text_duration_get, options_ui_text_duration_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Messages flottants", "mes\\OptionsFloats.mes", options_ui_floats_get, options_ui_floats_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Vitesse des messages", "", options_ui_float_speed_get, options_ui_float_speed_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Commentaires", "mes\\OptionsOffOn.mes", options_ui_combat_taunts_get, options_ui_combat_taunts_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "D\351filement bordures", "mes\\OptionsOffOn.mes", options_ui_borders_get, options_ui_borders_set, NULL, 0, true, 1 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Cam\351ra suit le joueur", "mes\\OptionsOffOn.mes", options_ui_follow_get, options_ui_follow_set, NULL, 0, true, 1 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Utilisation du zoom", "mes\\OptionsOffOn.mes", options_ui_zoom_get, options_ui_zoom_set, NULL, 0, true, 1 },
+        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Filtre du zoom", "", options_ui_filter_get, options_ui_filter_set, options_ui_filter_values, SDL_arraysize(options_ui_filter_values), true, 1 },
     },
     {
-        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Effets", "", options_ui_effects_volume_get, options_ui_effects_volume_set },
-        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Interface", "", options_ui_interface_volume_get, options_ui_interface_volume_set },
-        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Pas", "", options_ui_walking_volume_get, options_ui_walking_volume_set },
-        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Objets", "", options_ui_object_volume_get, options_ui_object_volume_set },
-        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Sorts", "", options_ui_spell_volume_get, options_ui_spell_volume_set },
-        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Creatures", "", options_ui_critter_volume_get, options_ui_critter_volume_set },
-        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Voix", "", options_ui_voice_volume_get, options_ui_voice_volume_set },
-        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Musique", "", options_ui_music_volume_get, options_ui_music_volume_set },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Effets", "", options_ui_effects_volume_get, options_ui_effects_volume_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Interface", "", options_ui_interface_volume_get, options_ui_interface_volume_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Pas", "", options_ui_walking_volume_get, options_ui_walking_volume_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Objets", "", options_ui_object_volume_get, options_ui_object_volume_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Sorts", "", options_ui_spell_volume_get, options_ui_spell_volume_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Cr\351atures", "", options_ui_critter_volume_get, options_ui_critter_volume_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Voix", "", options_ui_voice_volume_get, options_ui_voice_volume_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Musique", "", options_ui_music_volume_get, options_ui_music_volume_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Musique des combats", "mes\\OptionsOffOn.mes", options_ui_combat_music_get, options_ui_combat_music_set, NULL, 0, true, 1 },
     },
+    {
+        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Fond menu", "", options_ui_main_menu_art_get, options_ui_main_menu_art_set, options_ui_main_menu_art_values, SDL_arraysize(options_ui_main_menu_art_values), true, 0 },
+        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Type d'interface", "", options_ui_hud_get, options_ui_hud_set, options_ui_hud_values, SDL_arraysize(options_ui_hud_values), true, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Transparence fen\352tre", "mes\\OptionsOffOn.mes", options_ui_translucent_get, options_ui_translucent_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Police moderne", "mes\\OptionsOffOn.mes", options_ui_modern_fonts_get, options_ui_modern_fonts_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Num\351roter les dialogues", "mes\\OptionsOffOn.mes", options_ui_numbers_get, options_ui_numbers_set, NULL, 0, true, 0 },
+        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Param\351trage cam\351ra", "", options_ui_camera_get, options_ui_camera_set, options_ui_camera_values, SDL_arraysize(options_ui_camera_values), true, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Cam\351ra zoom progressif", "mes\\OptionsOffOn.mes", options_ui_dialogue_zoom_get, options_ui_dialogue_zoom_set, NULL, 0, true, 0 },
+    }
 };
 
 /**
@@ -249,6 +359,15 @@ void options_ui_start(OptionsUiTab tab, tig_window_handle_t window_handle, bool 
         options_ui_close();
     }
 
+    const char* saved_resolution = settings_get_str_value(&settings, "resolution");
+    if (saved_resolution != NULL && saved_resolution[0] != '\0') {
+        SDL_strlcpy(options_ui_custom_resolution, saved_resolution, sizeof(options_ui_custom_resolution));
+    } else {
+        SDL_snprintf(options_ui_custom_resolution, sizeof(options_ui_custom_resolution),
+            "%dx%d", hrp_iso_window_width_get(), hrp_iso_window_height_get());
+    }
+    options_ui_resolution_values[SDL_arraysize(options_ui_resolution_values) - 1] = options_ui_custom_resolution;
+
     options_ui_in_play = in_play;
     options_ui_tab = tab;
     options_ui_window = window_handle;
@@ -307,11 +426,13 @@ static void options_ui_create_page(void)
     MesFileEntry mes_file_entry;
     int value;
 
-    for (index = 0; index < MAX_TAB_CONTROLS && slot < MAX_CONTROLS; index++) {
+    for (index = 0; index < MAX_TAB_CONTROLS; index++) {
         meta = &(options_ui_tab_controls_meta[options_ui_tab][index]);
         if (!meta->active || meta->page != options_ui_page) {
             continue;
         }
+
+        slot = index % MAX_CONTROLS;
 
         // Initialize cyclic UI control.
         cyclic_ui_control_init(&control_info);
@@ -320,7 +441,6 @@ static void options_ui_create_page(void)
         // are opened in the middle of the game.
         if (options_ui_tab == OPTIONS_UI_TAB_GAME && index == 0) {
             if (options_ui_in_play) {
-                slot++;
                 continue;
             }
 
@@ -332,6 +452,14 @@ static void options_ui_create_page(void)
         if (meta->type == CYCLIC_UI_CONTROL_TEXT_ARRAY && meta->text_array != NULL) {
             control_info.text_array = meta->text_array;
             control_info.text_array_size = meta->text_array_size;
+            if (meta->text_array == options_ui_resolution_values) {
+                for (int i = 0; i < meta->text_array_size - 1; i++) {
+                    if (SDL_strcmp(options_ui_custom_resolution, options_ui_resolution_values[i]) == 0) {
+                        control_info.text_array_size--;
+                        break;
+                    }
+                }
+            }
         }
 
         // Set up control.
@@ -366,7 +494,6 @@ static void options_ui_create_page(void)
         } else {
             options_ui_controls[slot].initialized = false;
         }
-        slot++;
     }
     options_ui_draw_page_heading();
 }
@@ -790,42 +917,6 @@ void options_ui_combat_taunts_get(int* value_ptr, bool* enabled_ptr)
 void options_ui_combat_taunts_set(int value)
 {
     settings_set_value(&settings, COMBAT_TAUNTS_KEY, value);
-}
-
-void options_ui_dialog_font_get(int* value_ptr, bool* enabled_ptr)
-{
-    int value;
-
-    value = settings_get_value(&settings, DIALOG_FONT_KEY);
-    if (value < 0) {
-        value = 0;
-    } else if (value > 2) {
-        value = 2;
-    }
-
-    *value_ptr = 2 - value;
-    *enabled_ptr = true;
-}
-
-void options_ui_dialog_font_set(int value)
-{
-    if (value < 0) {
-        value = 0;
-    } else if (value > 2) {
-        value = 2;
-    }
-    settings_set_value(&settings, DIALOG_FONT_KEY, 2 - value);
-}
-
-void options_ui_logbook_font_get(int* value_ptr, bool* enabled_ptr)
-{
-    *value_ptr = settings_get_value(&settings, LOGBOOK_FONT_KEY) ? 0 : 1;
-    *enabled_ptr = true;
-}
-
-void options_ui_logbook_font_set(int value)
-{
-    settings_set_value(&settings, LOGBOOK_FONT_KEY, value ? 0 : 1);
 }
 
 void options_ui_main_menu_art_get(int* value_ptr, bool* enabled_ptr)

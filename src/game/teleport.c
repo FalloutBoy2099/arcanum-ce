@@ -98,7 +98,7 @@ void teleport_ping(tig_timestamp_t timestamp)
 
     if (teleport_pending) {
         teleport_processing = true;
-        teleport_process(&current_teleport_data);
+        bool moved = teleport_process(&current_teleport_data);
         teleport_processing = false;
 
         teleport_pending = false;
@@ -106,6 +106,13 @@ void teleport_ping(tig_timestamp_t timestamp)
         if ((current_teleport_data.flags & TELEPORT_IS_LOCAL_PC) != 0
             && (current_teleport_data.flags & TELEPORT_RENDER_LOCK) != 0) {
             gamelib_renderlock_release();
+        }
+        if (moved && player_is_local_pc_obj(current_teleport_data.obj)
+            && settings_get_value(&settings, AUTOSAVE_TRAVEL_KEY) != 0
+            && !gamelib_in_save()) {
+            if (!gamelib_save("slotAUTO", "Autosave - Travel")) {
+                tig_debug_printf("Travel autosave failed.\n");
+            }
         }
     }
 }

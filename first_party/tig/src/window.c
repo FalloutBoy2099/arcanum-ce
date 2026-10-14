@@ -61,6 +61,27 @@ typedef struct TigWindow {
     /* 0038 */ int num_buttons;
     /* 003C */ tig_button_handle_t buttons[TIG_WINDOW_BUTTON_MAX];
     /* 035C */ TigWindowMessageFilterFunc message_filter;
+    // CE: optional screen-coords composite clip. When has_clip,
+    // the compositor uses (frame ∩ clip_rect) to decide what to
+    // paint; otherwise frame alone defines visibility.
+    bool has_clip;
+    TigRect clip_rect;
+    // CE: optional per-pixel see-through for "near-black" pixels in
+    // this window's VB. When enabled, the compositor blends each
+    // near-black source pixel with the destination at the configured
+    // opacity (255 = fully opaque, 0 = fully transparent) instead of
+    // copying. "Near-black" = max(R,G,B) <= near_black_threshold per
+    // channel — so 010008 / 000808 / 000000 all qualify at the default
+    // threshold without snagging dark chrome detail.
+    bool near_black_alpha_enabled;
+    uint8_t near_black_threshold;
+    uint8_t near_black_opacity;
+    // CE: underlay window whose VB pixels supply the "destination" half
+    // of the near-black blend. Bypasses the top-down compositor's stale-
+    // dst problem (the world hasn't drawn to screen yet when the bar
+    // composites). Typically the iso window. Falls back to reading
+    // from the screen surface if invalid.
+    tig_window_handle_t near_black_underlay;
 } TigWindow;
 
 static int tig_window_free_index(void);
@@ -77,6 +98,15 @@ static void tig_window_modal_dialog_exit(void);
 
 // 0x5BED98
 static tig_window_handle_t tig_window_modal_dialog_window_handle = TIG_WINDOW_HANDLE_INVALID;
+
+// CE: opt-in for per-pixel see-through alpha on modal dialogs. When
+// enabled, tig_window_modal_dialog auto-wires the modal window to
+// blend its near-black pixels with whatever non-modal window sits
+// directly beneath it in the stack (typically the iso world window
+// in-game, or the main menu when in menus). Configured by gamelib.
+static bool tig_window_modal_translucent_enabled = false;
+static uint8_t tig_window_modal_translucent_threshold = 16;
+static uint8_t tig_window_modal_translucent_opacity = 128;
 
 // 0x5BEDA0
 static TigRect tig_window_modal_dialog_bounds = { 0, 0, MODAL_DIALOG_WIDTH, MODAL_DIALOG_HEIGHT };
@@ -110,6 +140,8 @@ static int tig_window_num_windows;
 
 // 0x60F12C
 static TigRectListNode* tig_window_dirty_rects;
+
+static bool tig_window_invalidate_suppressed;
 
 // 0x60F130
 static tig_font_handle_t tig_window_modal_dialog_font;
@@ -194,6 +226,11 @@ int tig_window_create(TigWindowData* window_data, tig_window_handle_t* window_ha
     win->background_color = window_data->background_color;
     win->color_key = window_data->color_key;
     win->num_buttons = 0;
+    win->has_clip = false;
+    win->near_black_alpha_enabled = false;
+    win->near_black_threshold = 0;
+    win->near_black_opacity = 255;
+    win->near_black_underlay = TIG_WINDOW_HANDLE_INVALID;
 
     vb_create_info.flags = 0;
 
@@ -466,8 +503,25 @@ void sub_51D050(TigRect* src_rect, TigVideoBuffer* dst_video_buffer, int dx, int
             TigRectListNode* curr = head;
             TigRectListNode* prev = NULL;
 
+            // CE: clip-rect support. Use frame ∩ clip_rect as the
+            // effective visible region when a clip is set. VB-source
+            // math below still uses win->frame as the anchor, so
+            // VB pixels stay at their natural positions — we just
+            // composite a sub-band of them.
+            TigRect effective_frame = win->frame;
+            bool clip_removes_window = false;
+            if (win->has_clip) {
+                if (tig_rect_intersection(&(win->frame), &(win->clip_rect), &effective_frame) != TIG_OK) {
+                    clip_removes_window = true;
+                }
+            }
+            if (clip_removes_window) {
+                top_window_index--;
+                continue;
+            }
+
             while (curr != NULL) {
-                rc = tig_rect_intersection(&(curr->rect), &(win->frame), &dirty_rect);
+                rc = tig_rect_intersection(&(curr->rect), &effective_frame, &dirty_rect);
                 if (rc == TIG_OK) {
                     // TODO: Not sure how to represent it one to one.
                     bool cont;
@@ -519,11 +573,47 @@ void sub_51D050(TigRect* src_rect, TigVideoBuffer* dst_video_buffer, int dx, int
                             vb_blit_info.dst_video_buffer = dst_video_buffer;
                             vb_blit_info.dst_rect = &blt_dst_rect;
                             tig_video_buffer_blit(&vb_blit_info);
+                        } else if (win->near_black_alpha_enabled) {
+                            // CE: see-through near-black blit path. Used
+                            // by HUD bars that opt in to letting the world
+                            // show through their black panel regions.
+                            // Sample the underlay VB directly so the blend
+                            // gets fresh world pixels instead of stale
+                            // screen pixels under the bar.
+                            TigVideoBuffer* under_vb = NULL;
+                            int under_off_x = 0;
+                            int under_off_y = 0;
+                            if (win->near_black_underlay != TIG_WINDOW_HANDLE_INVALID) {
+                                int uidx = tig_window_handle_to_index(win->near_black_underlay);
+                                if (uidx >= 0 && uidx < TIG_WINDOW_MAX) {
+                                    TigWindow* uw = &(windows[uidx]);
+                                    under_vb = uw->video_buffer;
+                                    // Screen (sx,sy) maps to underlay VB
+                                    // (sx - uw->frame.x, sy - uw->frame.y).
+                                    under_off_x = -uw->frame.x;
+                                    under_off_y = -uw->frame.y;
+                                }
+                            }
+                            tig_video_blit_near_black_alpha(src_video_buffer,
+                                &blt_src_rect,
+                                &blt_dst_rect,
+                                under_vb,
+                                under_off_x,
+                                under_off_y,
+                                win->near_black_threshold,
+                                win->near_black_opacity);
                         } else {
                             tig_video_blit(src_video_buffer, &blt_src_rect, &blt_dst_rect);
                         }
 
-                        num_clips = tig_rect_clip(&(curr->rect), &(win->frame), clips);
+                        // CE: clip against the EFFECTIVE frame (frame ∩ clip_rect)
+                        // so the un-clipped portions of the dirty rect remain in
+                        // the list and propagate down the stack to the window
+                        // beneath. Using win->frame here would mark all of the
+                        // bar's frame as "covered" even though the clip exposes
+                        // most of it — leaving stale pixels (smearing) in the
+                        // uncovered area.
+                        num_clips = tig_rect_clip(&(curr->rect), &effective_frame, clips);
                         for (index = 0; index < num_clips; index++) {
                             node = tig_rect_node_create();
                             if (node == NULL) {
@@ -582,6 +672,27 @@ void sub_51D050(TigRect* src_rect, TigVideoBuffer* dst_video_buffer, int dx, int
             vb_blit_info.src_rect = &blt_src_rect;
             vb_blit_info.dst_rect = &blt_dst_rect;
             tig_video_buffer_blit(&vb_blit_info);
+        } else if (wins[v38]->near_black_alpha_enabled) {
+            TigVideoBuffer* under_vb2 = NULL;
+            int under_off_x2 = 0;
+            int under_off_y2 = 0;
+            if (wins[v38]->near_black_underlay != TIG_WINDOW_HANDLE_INVALID) {
+                int uidx = tig_window_handle_to_index(wins[v38]->near_black_underlay);
+                if (uidx >= 0 && uidx < TIG_WINDOW_MAX) {
+                    TigWindow* uw = &(windows[uidx]);
+                    under_vb2 = uw->video_buffer;
+                    under_off_x2 = -uw->frame.x;
+                    under_off_y2 = -uw->frame.y;
+                }
+            }
+            tig_video_blit_near_black_alpha(wins[v38]->video_buffer,
+                &blt_src_rect,
+                &blt_dst_rect,
+                under_vb2,
+                under_off_x2,
+                under_off_y2,
+                wins[v38]->near_black_threshold,
+                wins[v38]->near_black_opacity);
         } else {
             tig_video_blit(wins[v38]->video_buffer, &blt_src_rect, &blt_dst_rect);
         }
@@ -1237,6 +1348,10 @@ void tig_window_invalidate_rect(TigRect* rect)
         return;
     }
 
+    if (tig_window_invalidate_suppressed) {
+        return;
+    }
+
     if (rect != NULL) {
         dirty_rect = *rect;
         if (tig_rect_intersection(&dirty_rect, &tig_window_screen_rect, &dirty_rect) != TIG_OK) {
@@ -1352,6 +1467,23 @@ int tig_window_get_at_position(int x, int y, tig_window_handle_t* window_handle_
             && y >= win->frame.y
             && x <= win->frame.x + win->frame.width
             && y <= win->frame.y + win->frame.height) {
+            // CE: clip-rect symmetry — when a clip rect is set, hit
+            // testing is bounded by (frame ∩ clip_rect), matching what
+            // composites visibly. Clicks in the cropped-out area fall
+            // through to underlying windows instead of being eaten by
+            // the invisible part of this one.
+            if (win->has_clip) {
+                TigRect effective_frame;
+                if (tig_rect_intersection(&(win->frame), &(win->clip_rect), &effective_frame) != TIG_OK) {
+                    continue;
+                }
+                if (x < effective_frame.x
+                    || y < effective_frame.y
+                    || x > effective_frame.x + effective_frame.width
+                    || y > effective_frame.y + effective_frame.height) {
+                    continue;
+                }
+            }
             if ((win->flags & TIG_WINDOW_TRANSPARENT) != 0) {
                 if (tig_video_buffer_get_pixel_color(win->video_buffer, x - win->frame.x, y - win->frame.y, &color) == TIG_OK
                     && color == win->color_key) {
@@ -1379,6 +1511,15 @@ bool tig_window_filter_message(TigMessage* msg)
     TigWindowMessageFilterFunc filters[TIG_WINDOW_MAX];
     int cnt;
 
+    // CE: clip-rect aware dispatch was originally also gated here for
+    // positional messages, but that broke filters that piggy-back on a
+    // clipped window's filter to dispatch their own positional logic
+    // outside the clip (e.g. dialog UI options rendered inside the iso
+    // window are routed through the bar's filter via the bar's
+    // message-filter chain). Button hit-testing in
+    // tig_window_get_at_position already respects the clip, which is
+    // enough to make in-clip buttons exclusive and out-of-clip pixels
+    // fall through to the world picker.
     cnt = 0;
     for (index = tig_window_num_windows - 1; index >= 0; index--) {
         window_handle = tig_window_stack[index];
@@ -1488,6 +1629,113 @@ bool tig_window_is_hidden(tig_window_handle_t window_handle)
     return (windows[window_index].flags & TIG_WINDOW_HIDDEN) != 0;
 }
 
+// CE: Set/clear an optional composite clip rect on a window.
+// Passing NULL clears any existing clip. Invalidates the union of
+// the old and new visible regions so the screen recomposites cleanly
+// (the now-uncovered area falls through to the window beneath).
+int tig_window_clip_rect_set(tig_window_handle_t window_handle, const TigRect* clip_rect)
+{
+    int window_index;
+    TigWindow* win;
+    TigRect old_effective;
+    TigRect new_effective;
+    bool had_clip;
+
+    if (window_handle == TIG_WINDOW_HANDLE_INVALID) {
+        return TIG_ERR_INVALID_PARAM;
+    }
+    if (!tig_window_initialized) {
+        return TIG_ERR_NOT_INITIALIZED;
+    }
+
+    window_index = tig_window_handle_to_index(window_handle);
+    win = &(windows[window_index]);
+
+    // Compute the old effective rect (what currently composites).
+    had_clip = win->has_clip;
+    if (had_clip) {
+        if (tig_rect_intersection(&(win->frame), &(win->clip_rect), &old_effective) != TIG_OK) {
+            old_effective.x = 0;
+            old_effective.y = 0;
+            old_effective.width = 0;
+            old_effective.height = 0;
+        }
+    } else {
+        old_effective = win->frame;
+    }
+
+    if (clip_rect == NULL) {
+        win->has_clip = false;
+        new_effective = win->frame;
+    } else {
+        win->has_clip = true;
+        win->clip_rect = *clip_rect;
+        if (tig_rect_intersection(&(win->frame), &(win->clip_rect), &new_effective) != TIG_OK) {
+            new_effective.x = 0;
+            new_effective.y = 0;
+            new_effective.width = 0;
+            new_effective.height = 0;
+        }
+    }
+
+    // Invalidate union of old + new visible regions so both the
+    // newly-revealed area (which needs the lower window to draw)
+    // and the newly-hidden area (which needs our window to redraw
+    // its now-cropped portion) get re-composited.
+    if (old_effective.width > 0 && old_effective.height > 0) {
+        tig_window_invalidate_rect(&old_effective);
+    }
+    if (new_effective.width > 0 && new_effective.height > 0
+        && !(new_effective.x == old_effective.x
+            && new_effective.y == old_effective.y
+            && new_effective.width == old_effective.width
+            && new_effective.height == old_effective.height)) {
+        tig_window_invalidate_rect(&new_effective);
+    }
+
+    return TIG_OK;
+}
+
+int tig_window_near_black_alpha_set(tig_window_handle_t window_handle,
+    bool enabled,
+    tig_window_handle_t underlay_handle,
+    uint8_t threshold,
+    uint8_t opacity)
+{
+    int window_index;
+    TigWindow* win;
+
+    if (window_handle == TIG_WINDOW_HANDLE_INVALID) {
+        return TIG_ERR_INVALID_PARAM;
+    }
+    if (!tig_window_initialized) {
+        return TIG_ERR_NOT_INITIALIZED;
+    }
+    window_index = tig_window_handle_to_index(window_handle);
+    win = &(windows[window_index]);
+    bool was_enabled = win->near_black_alpha_enabled;
+    win->near_black_alpha_enabled = enabled;
+    win->near_black_threshold = threshold;
+    win->near_black_opacity = opacity;
+    win->near_black_underlay = underlay_handle;
+    // Force a recomposite of the whole window so the new mode applies
+    // immediately rather than waiting on the next region invalidation.
+    if (was_enabled != enabled) {
+        tig_window_invalidate_rect(&(win->frame));
+    }
+    return TIG_OK;
+}
+
+int tig_window_modal_translucent_black_set(bool enabled,
+    uint8_t threshold,
+    uint8_t opacity)
+{
+    tig_window_modal_translucent_enabled = enabled;
+    tig_window_modal_translucent_threshold = threshold;
+    tig_window_modal_translucent_opacity = opacity;
+    return TIG_OK;
+}
+
 // 0x51EA10
 int tig_window_vbid_get(tig_window_handle_t window_handle, TigVideoBuffer** video_buffer_ptr)
 {
@@ -1508,6 +1756,27 @@ int tig_window_vbid_get(tig_window_handle_t window_handle, TigVideoBuffer** vide
     *video_buffer_ptr = win->video_buffer;
 
     return TIG_OK;
+}
+
+int tig_window_set_video_buffer(tig_window_handle_t window_handle, TigVideoBuffer* vb)
+{
+    int window_index;
+    TigWindow* win;
+
+    if (!tig_window_initialized) {
+        return TIG_ERR_NOT_INITIALIZED;
+    }
+
+    window_index = tig_window_handle_to_index(window_handle);
+    win = &(windows[window_index]);
+    win->video_buffer = vb;
+
+    return TIG_OK;
+}
+
+void tig_window_set_invalidate_suppressed(bool suppressed)
+{
+    tig_window_invalidate_suppressed = suppressed;
 }
 
 // 0x51EA60
@@ -1571,6 +1840,50 @@ int tig_window_modal_dialog(TigWindowModalDialogInfo* modal_info, TigWindowModal
 
     if (tig_window_create(&window_data, &tig_window_modal_dialog_window_handle) != TIG_OK) {
         return TIG_ERR_GENERIC;
+    }
+
+    // CE: if gamelib opted modals into near-black see-through, find
+    // an underlay window whose frame FULLY CONTAINS the modal rect so
+    // every modal pixel has a fresh source to blend with. We walk down
+    // from the topmost non-modal non-hidden window — usually picks the
+    // mainmenu window when in a menu, or the iso world window in-game
+    // (the bar partially overlaps the modal so it'd leave gaps).
+    if (tig_window_modal_translucent_enabled) {
+        tig_window_handle_t underlay = TIG_WINDOW_HANDLE_INVALID;
+        int modal_idx = tig_window_handle_to_index(tig_window_modal_dialog_window_handle);
+        TigWindow* modal_w = &(windows[modal_idx]);
+        for (int i = tig_window_num_windows - 1; i >= 0; i--) {
+            tig_window_handle_t h = tig_window_stack[i];
+            int wi = tig_window_handle_to_index(h);
+            if (wi == modal_idx) {
+                continue;
+            }
+            TigWindow* w = &(windows[wi]);
+            if ((w->flags & TIG_WINDOW_HIDDEN) != 0) {
+                continue;
+            }
+            if ((w->flags & TIG_WINDOW_MODAL) != 0) {
+                continue;
+            }
+            // Require full containment: pixels outside the underlay's
+            // frame fall back to stale screen reads, which converges
+            // to black across frames.
+            if (modal_w->frame.x < w->frame.x
+                || modal_w->frame.y < w->frame.y
+                || modal_w->frame.x + modal_w->frame.width > w->frame.x + w->frame.width
+                || modal_w->frame.y + modal_w->frame.height > w->frame.y + w->frame.height) {
+                continue;
+            }
+            underlay = h;
+            break;
+        }
+        if (underlay != TIG_WINDOW_HANDLE_INVALID) {
+            tig_window_near_black_alpha_set(tig_window_modal_dialog_window_handle,
+                true,
+                underlay,
+                tig_window_modal_translucent_threshold,
+                tig_window_modal_translucent_opacity);
+        }
     }
 
     tig_window_modal_dialog_create_buttons(modal_info->type, tig_window_modal_dialog_window_handle);

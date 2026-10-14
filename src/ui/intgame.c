@@ -2,8 +2,12 @@
 
 #include <stdio.h>
 
+#include "game/dialog_camera.h"
+#include "game/iso_zoom.h"
+#include "game/location.h"
 #include "game/ai.h"
 #include "game/anim.h"
+#include "game/camera_follow.h"
 #include "game/bless.h"
 #include "game/broadcast.h"
 #include "game/combat.h"
@@ -161,6 +165,7 @@ static void iso_interface_window_enable(RotatingWindowType window_type);
 static void intgame_mt_spells_enable(void);
 static int find_interface_window_index(int x, int y);
 static void sub_5517F0(void);
+static bool intgame_adjust_mouse_for_zoom(int x, int y, int* adj_x, int* adj_y);
 static bool sub_5518C0(int x, int y);
 static void sub_551910(TigMessage* msg);
 static void sub_551A10(int64_t obj);
@@ -170,6 +175,17 @@ static void sub_551F80(void);
 static bool sub_552050(int x, int y, TargetDescriptor* td);
 static void sub_5520D0(RotatingWindowType window_type, int step);
 static void iso_interface_window_swap(RotatingWindowType window_type);
+static void intgame_hud_apply_clips(void);
+// CE: MINI-peek press handler. Returns true if the press should be
+// swallowed (peek-expand to MEDIUM, or return-from-peek to MINI),
+// false if it should fall through to normal rotwin toggle-off.
+static bool intgame_hud_handle_mini_peek_press(void);
+// CE: re-establish MINI invariants (stage=MINI, type=SKILLS, button
+// state synced) regardless of how we got here.
+static void intgame_hud_enter_mini_with_skills(void);
+// CE: true when the HUD is in the MINI crop stage. Used by code that
+// runs ahead of where intgame_hud_stage is declared.
+static bool intgame_hud_in_mini_stage(void);
 static void intgame_clock_refresh(void);
 static void sub_552740(int64_t obj, ChareditMode mode);
 static void sub_552770(UiMessage* ui_message);
@@ -288,8 +304,12 @@ static UiButtonInfo intgame_sleep_button_info = { 605, 9, 137, TIG_BUTTON_HANDLE
 // 0x5C6548
 static UiButtonInfo intgame_rotwin_button_info[ROTWIN_TYPE_COUNT] = {
     /*        ROTWIN_TYPE_MSG */ { 196, 492, 354, TIG_BUTTON_HANDLE_INVALID },
-    /*     ROTWIN_TYPE_SPELLS */ { 196, 492, 8, TIG_BUTTON_HANDLE_INVALID },
-    /*     ROTWIN_TYPE_SKILLS */ { 196, 492, 274, TIG_BUTTON_HANDLE_INVALID },
+    // CE: SKILLS / SPELLS chrome sits 1px higher than the other rotwin
+    // arts to align with the inner UI elements (college buttons / spell
+    // slots / skill widgets) that were placed relative to the visual
+    // indent inside the art frame.
+    /*     ROTWIN_TYPE_SPELLS */ { 196, 491, 8, TIG_BUTTON_HANDLE_INVALID },
+    /*     ROTWIN_TYPE_SKILLS */ { 196, 491, 274, TIG_BUTTON_HANDLE_INVALID },
     /*       ROTWIN_TYPE_CHAT */ { 196, 492, 642, TIG_BUTTON_HANDLE_INVALID },
     /*      ROTWIN_TYPE_TRAPS */ { 196, 492, 290, TIG_BUTTON_HANDLE_INVALID },
     /*   ROTWIN_TYPE_DIALOGUE */ { 196, 492, 354, TIG_BUTTON_HANDLE_INVALID },
@@ -452,8 +472,11 @@ static RotatingWindowType dword_5C6D58 = ROTWIN_TYPE_INVALID;
 // 0x5C6D60
 struct IntgameIsoWindowTypeInfo intgame_rotwin_text_frame[ROTWIN_TYPE_COUNT] = {
     /*        ROTWIN_TYPE_MSG */ { { 211, 503, 383, 82 }, TIG_WINDOW_HANDLE_INVALID },
-    /*     ROTWIN_TYPE_SPELLS */ { { 208, 574, 387, 18 }, TIG_WINDOW_HANDLE_INVALID },
-    /*     ROTWIN_TYPE_SKILLS */ { { 208, 567, 387, 18 }, TIG_WINDOW_HANDLE_INVALID },
+    // CE: SPELLS/SKILLS chrome shifted up 1px (see intgame_rotwin_button_info);
+    // their inner text rows shift in lockstep so the rolling text stays
+    // aligned with the chrome's visible text well.
+    /*     ROTWIN_TYPE_SPELLS */ { { 208, 573, 387, 18 }, TIG_WINDOW_HANDLE_INVALID },
+    /*     ROTWIN_TYPE_SKILLS */ { { 208, 566, 387, 18 }, TIG_WINDOW_HANDLE_INVALID },
     /*       ROTWIN_TYPE_CHAT */ { { 291, 566, 268, 19 }, TIG_WINDOW_HANDLE_INVALID },
     /*      ROTWIN_TYPE_TRAPS */ { { 208, 574, 387, 18 }, TIG_WINDOW_HANDLE_INVALID },
     /*   ROTWIN_TYPE_DIALOGUE */ { { 211, 507, 383, 84 }, TIG_WINDOW_HANDLE_INVALID },
@@ -1257,6 +1280,19 @@ void iso_interface_create(tig_window_handle_t window_handle)
         window_data.rect.x = 0;
         window_data.rect.y = 0;
         tig_window_blit_art(dword_64C4F8[index], &art_blit_info);
+
+        // CE: bottom strip opts into per-pixel see-through for the
+        // panel art's near-black background. Threshold 8 catches the
+        // mixed near-black shades (010008, 000808, 000000) exactly
+        // without snagging dark chrome detail; opacity 128 = 50%
+        // src / 50% dst. The iso window is the underlay — the
+        // blend samples its VB directly (which always has the current
+        // world content) instead of reading the stale screen surface.
+        // Gated by the TranslucentBlackUI cfg flag.
+        if (index == 1 && settings_get_value(&settings, TRANSLUCENT_BLACK_UI_KEY)) {
+            tig_window_near_black_alpha_set(dword_64C4F8[index],
+                true, intgame_iso_window, 8, 128);
+        }
     }
 
     for (index = 0; index < 5; index++) {
@@ -1834,6 +1870,39 @@ void intgame_ammo_icon_refresh(tig_art_id_t art_id)
     tig_window_blit_art(dword_64C4F8[index], &blt);
 }
 
+static bool intgame_handle_view_controls(TigMessage* msg)
+{
+    if (mainmenu_ui_is_active() || textedit_ui_is_focused()
+        || !intgame_mode_supports_scrolling(intgame_mode_get())
+        || intgame_mode_get() == INTGAME_MODE_WMAP) {
+        return false;
+    }
+    if (msg->type == TIG_MESSAGE_MOUSE && msg->data.mouse.event == TIG_MESSAGE_MOUSE_WHEEL
+        && tig_kb_get_modifier(SDL_KMOD_CTRL) && sub_5517A0(msg)) {
+        iso_zoom_wheel(msg->data.mouse.dy);
+        gamelib_invalidate_rect(NULL);
+        return true;
+    }
+    if (msg->type != TIG_MESSAGE_KEYBOARD) {
+        return false;
+    }
+    bool zoom_in = input_binding_matches_keyboard(INPUT_ACTION_ZOOM_IN, msg);
+    bool zoom_out = input_binding_matches_keyboard(INPUT_ACTION_ZOOM_OUT, msg);
+    bool zoom_reset = input_binding_matches_keyboard(INPUT_ACTION_ZOOM_RESET, msg);
+    bool cycle_hud = input_binding_matches_keyboard(INPUT_ACTION_CYCLE_HUD, msg);
+    if (!zoom_in && !zoom_out && !zoom_reset && !cycle_hud) {
+        return false;
+    }
+    if (!msg->data.keyboard.pressed) {
+        if (zoom_in) iso_zoom_step_in();
+        if (zoom_out) iso_zoom_step_out();
+        if (zoom_reset) iso_zoom_reset();
+        if (cycle_hud) intgame_hud_user_toggle();
+        gamelib_invalidate_rect(NULL);
+    }
+    return true;
+}
+
 static bool intgame_handle_camera_pan(TigMessage* msg)
 {
     if (intgame_mode_get() != INTGAME_MODE_MAIN
@@ -1907,7 +1976,7 @@ bool sub_54B5D0(TigMessage* msg)
     char time_str_buffer[80];
     char buffer[80];
 
-    if (intgame_handle_camera_pan(msg)) {
+    if (intgame_handle_view_controls(msg) || intgame_handle_camera_pan(msg)) {
         return true;
     }
 
@@ -2742,6 +2811,16 @@ void intgame_secondary_button_toggle(IntgameSecondaryButton btn, RotatingWindowT
         tig_button_state_change(intgame_secondary_buttons[btn].button_handle, TIG_BUTTON_STATE_PRESSED);
         iso_interface_window_set(window_type);
     } else {
+        // CE: when the user is in MINI-peek for this same rotwin (TAB
+        // expanded MINI to MEDIUM via re-press), a second re-press
+        // should NOT dismiss the rotwin — it should collapse the crop
+        // back to MINI while leaving SKILLS/SPELLS active. Otherwise
+        // MINI's slim text row would lose its content. Button stays
+        // PRESSED, fullscreen stays forced.
+        if (intgame_iso_window_type == window_type
+            && intgame_hud_handle_mini_peek_press()) {
+            return;
+        }
         iso_interface_window_set(ROTWIN_TYPE_MSG);
         tig_button_state_change(intgame_secondary_buttons[btn].button_handle, TIG_BUTTON_STATE_RELEASED);
         intgame_unforce_fullscreen();
@@ -2925,7 +3004,7 @@ void intgame_process_event(TigMessage* msg)
                             sub_4B4320(pc_obj);
 
                             tig_mouse_get_state(&mouse_state);
-                            if (location_at(mouse_state.x, mouse_state.y, &loc)
+                            if (location_at_zoomed(mouse_state.x, mouse_state.y, iso_zoom_current(), &loc)
                                 && sub_5517A0(msg)) {
                                 int64_t pc_loc;
                                 tig_art_id_t aid;
@@ -2947,6 +3026,12 @@ void intgame_process_event(TigMessage* msg)
                         sub_575770();
                         intgame_refresh_cursor();
                     }
+                }
+                break;
+            case TIG_MESSAGE_MOUSE_WHEEL:
+                if (iso_zoom_is_available()) {
+                    iso_zoom_wheel(msg->data.mouse.dy);
+                    gamelib_invalidate_rect(NULL);
                 }
                 break;
             case TIG_MESSAGE_MOUSE_IDLE:
@@ -2982,7 +3067,15 @@ void intgame_process_event(TigMessage* msg)
             switch (msg->data.mouse.event) {
             case TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP:
                 if (!inven_ui_is_created()) {
-                    if (target_pick_at_screen_xy(msg->data.mouse.x, msg->data.mouse.y, &td, intgame_fullscreen)) {
+                    int mx = msg->data.mouse.x;
+                    int my = msg->data.mouse.y;
+                    bool picked;
+                    if (intgame_adjust_mouse_for_zoom(mx, my, &mx, &my)) {
+                        picked = target_pick_at_virtual_xy(mx, my, &td, intgame_fullscreen);
+                    } else {
+                        picked = target_pick_at_screen_xy(mx, my, &td, intgame_fullscreen);
+                    }
+                    if (picked) {
                         spell_ui_apply(&td);
                     } else if (target_last_rejection_get() == 0x100000) {
                         spell_ui_error_target_not_damaged();
@@ -3044,11 +3137,18 @@ void intgame_process_event(TigMessage* msg)
         switch (msg->type) {
         case TIG_MESSAGE_MOUSE:
             switch (msg->data.mouse.event) {
-            case TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP:
-                if (target_pick_at_screen_xy(msg->data.mouse.x, msg->data.mouse.y, &td, intgame_fullscreen)) {
+            case TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP: {
+                int mx = msg->data.mouse.x;
+                int my = msg->data.mouse.y;
+                if (intgame_adjust_mouse_for_zoom(mx, my, &mx, &my)) {
+                    if (target_pick_at_virtual_xy(mx, my, &td, intgame_fullscreen)) {
+                        skill_ui_apply(&td);
+                    }
+                } else if (target_pick_at_screen_xy(mx, my, &td, intgame_fullscreen)) {
                     skill_ui_apply(&td);
                 }
                 break;
+            }
             case TIG_MESSAGE_MOUSE_RIGHT_BUTTON_UP:
                 skill_ui_cancel();
                 break;
@@ -3086,24 +3186,33 @@ void intgame_process_event(TigMessage* msg)
         case TIG_MESSAGE_MOUSE:
             switch (msg->data.mouse.event) {
             case TIG_MESSAGE_MOUSE_LEFT_BUTTON_DOWN:
-                if (sub_5517A0(msg)
-                    && target_pick_at_screen_xy(msg->data.mouse.x, msg->data.mouse.y, &td, intgame_fullscreen)
-                    && td.is_loc
-                    && !inven_ui_drag_item_obj_get()
-                    && !critter_is_dead(pc_obj)
-                    && !tig_kb_get_modifier(SDL_KMOD_SHIFT)) {
-                    if ((tig_kb_get_modifier(SDL_KMOD_CTRL)
-                            || input_binding_is_pressed(INPUT_ACTION_ALWAYS_RUN))
-                        && !settings_get_value(&settings, ALWAYS_RUN_KEY)) {
-                        anim_goal_run_to_tile(pc_obj, td.loc);
+                if (sub_5517A0(msg)) {
+                    int mx = msg->data.mouse.x;
+                    int my = msg->data.mouse.y;
+                    bool picked;
+                    if (intgame_adjust_mouse_for_zoom(mx, my, &mx, &my)) {
+                        picked = target_pick_at_virtual_xy(mx, my, &td, intgame_fullscreen);
                     } else {
-                        anim_goal_move_to_tile(pc_obj, td.loc);
+                        picked = target_pick_at_screen_xy(mx, my, &td, intgame_fullscreen);
                     }
+                    if (picked
+                        && td.is_loc
+                        && !inven_ui_drag_item_obj_get()
+                        && !critter_is_dead(pc_obj)
+                        && !tig_kb_get_modifier(SDL_KMOD_SHIFT)) {
+                        if ((tig_kb_get_modifier(SDL_KMOD_CTRL)
+                                || input_binding_is_pressed(INPUT_ACTION_ALWAYS_RUN))
+                            && !settings_get_value(&settings, ALWAYS_RUN_KEY)) {
+                            anim_goal_run_to_tile(pc_obj, td.loc);
+                        } else {
+                            anim_goal_move_to_tile(pc_obj, td.loc);
+                        }
 
-                    if (dword_64C6D8) {
-                        sub_436CF0();
+                        if (dword_64C6D8) {
+                            sub_436CF0();
+                        }
+                        dword_64C6D8 = true;
                     }
-                    dword_64C6D8 = true;
                 }
                 break;
             case TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP:
@@ -3135,13 +3244,22 @@ void intgame_process_event(TigMessage* msg)
         switch (msg->type) {
         case TIG_MESSAGE_MOUSE:
             switch (msg->data.mouse.event) {
-            case TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP:
-                if (target_pick_at_screen_xy(msg->data.mouse.x, msg->data.mouse.y, &td, intgame_fullscreen)) {
+            case TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP: {
+                int mx = msg->data.mouse.x;
+                int my = msg->data.mouse.y;
+                bool picked;
+                if (intgame_adjust_mouse_for_zoom(mx, my, &mx, &my)) {
+                    picked = target_pick_at_virtual_xy(mx, my, &td, intgame_fullscreen);
+                } else {
+                    picked = target_pick_at_screen_xy(mx, my, &td, intgame_fullscreen);
+                }
+                if (picked) {
                     item_ui_apply(&td);
                 } else if (target_last_rejection_get() == 0x100000) {
                     spell_ui_error_target_not_damaged();
                 }
                 break;
+            }
             case TIG_MESSAGE_MOUSE_RIGHT_BUTTON_UP:
                 item_ui_deactivate();
                 break;
@@ -3170,11 +3288,18 @@ void intgame_process_event(TigMessage* msg)
         switch (msg->type) {
         case TIG_MESSAGE_MOUSE:
             switch (msg->data.mouse.event) {
-            case TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP:
-                if (target_pick_at_screen_xy(msg->data.mouse.x, msg->data.mouse.y, &td, intgame_fullscreen)) {
+            case TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP: {
+                int mx = msg->data.mouse.x;
+                int my = msg->data.mouse.y;
+                if (intgame_adjust_mouse_for_zoom(mx, my, &mx, &my)) {
+                    if (target_pick_at_virtual_xy(mx, my, &td, intgame_fullscreen)) {
+                        follower_ui_execute_order(&td);
+                    }
+                } else if (target_pick_at_screen_xy(mx, my, &td, intgame_fullscreen)) {
                     follower_ui_execute_order(&td);
                 }
                 break;
+            }
             case TIG_MESSAGE_MOUSE_RIGHT_BUTTON_UP:
                 follower_ui_end_order_mode();
                 break;
@@ -3267,6 +3392,7 @@ void intgame_center_on_player(void)
         return;
     }
 
+    camera_follow_note_recenter();
     loc = obj_field_int64_get(obj, OBJ_F_LOCATION);
     location_calc_dist_from_screen_center(loc, &x, &y);
 
@@ -4157,13 +4283,39 @@ void iso_interface_window_set(RotatingWindowType window_type)
         intgame_mode_set(INTGAME_MODE_MAIN);
     }
 
+    // CE: capture the effective result before the swap, since the swap
+    // updates intgame_iso_window_type. Same-type re-press is the user's
+    // dismiss gesture (e.g. K → SKILLS → K → MSG).
+    bool toggled_off = (intgame_iso_window_type == window_type);
+    RotatingWindowType effective = toggled_off ? ROTWIN_TYPE_MSG : window_type;
+
+    // CE: MINI-peek special case. See intgame_hud_handle_mini_peek_press
+    // for the full state machine. If it handles the press, we return —
+    // the rotwin type stays as-is, only the crop stage flips.
+    if (toggled_off && intgame_hud_handle_mini_peek_press()) {
+        return;
+    }
+
     intgame_rotwin_step = MAX_INTERFACE_WINDOW_ROTATION_STEPS;
-    if (intgame_iso_window_type == window_type) {
+    if (toggled_off) {
         dword_64C6AC = ROTWIN_TYPE_MSG;
         iso_interface_window_swap(ROTWIN_TYPE_MSG);
     } else {
         dword_64C6AC = window_type;
         iso_interface_window_swap(window_type);
+    }
+
+    // CE: HUD-crop coupling.
+    // - Real rotwin (skills/spells/magictech-weapon/etc.) invoked from
+    //   MINI/HIDDEN: pop to MEDIUM and stash the prior stage.
+    // - Result is MSG (toggle-off or explicit dismiss): restore the
+    //   stashed stage so the user returns to where they were.
+    // Auto-reverts that route through iso_interface_window_swap directly
+    // (cursor leaving the bar, mode exits) bypass this entirely.
+    if (effective == ROTWIN_TYPE_MSG) {
+        intgame_hud_restore_after_rotwin();
+    } else if (effective != ROTWIN_TYPE_INVALID) {
+        intgame_hud_auto_pop_for_rotwin();
     }
 }
 
@@ -4961,13 +5113,16 @@ bool intgame_get_location_under_cursor(int64_t* loc_ptr)
 {
     TigMouseState mouse_state;
     TargetDescriptor td;
+    int x, y;
 
     if (tig_mouse_get_state(&mouse_state) == TIG_OK
-        && sub_5518C0(mouse_state.x, mouse_state.y)
-        && target_pick_at_screen_xy_ex(mouse_state.x, mouse_state.y, &td, TGT_TILE, intgame_fullscreen)
-        && td.is_loc) {
-        *loc_ptr = td.loc;
-        return true;
+        && sub_5518C0(mouse_state.x, mouse_state.y)) {
+        intgame_adjust_mouse_for_zoom(mouse_state.x, mouse_state.y, &x, &y);
+        if (target_pick_at_screen_xy_ex(x, y, &td, TGT_TILE, intgame_fullscreen)
+            && td.is_loc) {
+            *loc_ptr = td.loc;
+            return true;
+        }
     }
 
     *loc_ptr = 0;
@@ -4993,22 +5148,45 @@ bool sub_5518C0(int x, int y)
     return true;
 }
 
+static bool intgame_adjust_mouse_for_zoom(int x, int y, int* adj_x, int* adj_y)
+{
+    float z = iso_zoom_current();
+
+    if (z != 1.0f) {
+        int64_t ax;
+        int64_t ay;
+
+        location_zoom_adjust_screen_xy(x, y, z, &ax, &ay);
+        *adj_x = (int)ax;
+        *adj_y = (int)ay;
+        return true;
+    }
+
+    *adj_x = x;
+    *adj_y = y;
+    return false;
+}
+
 // 0x551910
 void sub_551910(TigMessage* msg)
 {
     TargetDescriptor td;
+    int x;
+    int y;
 
     if (sub_5517A0(msg)) {
         sub_551F80();
 
+        intgame_adjust_mouse_for_zoom(msg->data.mouse.x, msg->data.mouse.y, &x, &y);
+
         if (!map_is_clearing_objects()) {
-            if (target_pick_at_screen_xy_ex(msg->data.mouse.x, msg->data.mouse.y, &td, qword_5C7280, intgame_fullscreen)) {
+            if (target_pick_at_screen_xy_ex(x, y, &td, qword_5C7280, intgame_fullscreen)) {
                 if (!td.is_loc) {
                     sub_57CCF0(player_get_local_pc_obj(), td.obj);
                     object_hover_obj_set(td.obj);
                 }
             } else if (combat_turn_based_is_active()
-                && target_pick_at_screen_xy_ex(msg->data.mouse.x, msg->data.mouse.y, &td, TGT_TILE, intgame_fullscreen)
+                && target_pick_at_screen_xy_ex(x, y, &td, TGT_TILE, intgame_fullscreen)
                 && td.is_loc
                 && intgame_mode_get() == INTGAME_MODE_MAIN) {
                 combat_check_move_to(player_get_local_pc_obj(), td.loc);
@@ -5095,7 +5273,6 @@ bool intgame_mode_set(IntgameMode mode)
             combat_check_use_skill(player_get_local_pc_obj());
             break;
         case INTGAME_MODE_DIALOG:
-            sub_551A10(pc_obj);
             v1 = 1;
             if (v2) {
                 dialog_ui_end_dialog(player_get_local_pc_obj(), 0);
@@ -5321,6 +5498,10 @@ void sub_551F80(void)
 // 0x552050
 bool sub_552050(int x, int y, TargetDescriptor* td)
 {
+    if (intgame_adjust_mouse_for_zoom(x, y, &x, &y)) {
+        sub_551F80();
+        return target_pick_at_virtual_xy(x, y, td, intgame_fullscreen);
+    }
     sub_551F80();
     return target_pick_at_screen_xy(x, y, td, intgame_fullscreen);
 }
@@ -5363,10 +5544,28 @@ void sub_5520D0(RotatingWindowType window_type, int step)
 // 0x552130
 void iso_interface_window_swap(RotatingWindowType window_type)
 {
+    // CE: MINI's slim-row hack assumes SKILLS rotwin is the active
+    // chrome (skill_rot art has a text well at art-local +71 that
+    // exactly matches the MINI band). The engine internally swaps
+    // the rotwin on world-hover (MSG / examine / etc.) — when stage
+    // is MINI, ignore those swaps so the slim row keeps showing
+    // SKILLS content instead of jittering between chrome layouts.
+    // Allow re-swaps to SKILLS itself (used by the MINI-restore path).
+    if (intgame_hud_in_mini_stage()
+        && intgame_iso_window_type == ROTWIN_TYPE_SKILLS
+        && window_type != ROTWIN_TYPE_SKILLS) {
+        return;
+    }
     iso_interface_window_disable(intgame_iso_window_type);
     intgame_rotwin_step = MAX_INTERFACE_WINDOW_ROTATION_STEPS;
     iso_interface_window_enable(window_type);
     dword_5C6D58 = intgame_iso_window_type;
+    // CE: the bottom-strip clip band is anchored to the active chrome's
+    // strip-local y. SKILLS/SPELLS chrome lives 1px higher than other
+    // rotwin arts, so a type swap (e.g. MSG -> SKILLS) shifts the band
+    // by that delta. Re-apply so the crop stays flush with the new
+    // chrome. No-op in FULL stage (clears to NULL clip both times).
+    intgame_hud_apply_clips();
 }
 
 // 0x552160
@@ -6075,6 +6274,7 @@ void intgame_dialog_end(void)
 {
     intgame_dialog_process_event_func = NULL;
     tc_hide();
+    dialog_camera_end(player_get_local_pc_obj());
     intgame_mode_set(INTGAME_MODE_MAIN);
 }
 
@@ -6375,6 +6575,8 @@ void sub_553A70(TigMessage* msg)
 {
     int64_t obj;
     TargetDescriptor td;
+    int x;
+    int y;
 
     if (!sub_5517A0(msg)) {
         return;
@@ -6385,7 +6587,9 @@ void sub_553A70(TigMessage* msg)
         return;
     }
 
-    if (target_pick_at_screen_xy_ex(msg->data.mouse.x, msg->data.mouse.y, &td, qword_5C7280, intgame_fullscreen)) {
+    intgame_adjust_mouse_for_zoom(msg->data.mouse.x, msg->data.mouse.y, &x, &y);
+
+    if (target_pick_at_screen_xy_ex(x, y, &td, qword_5C7280, intgame_fullscreen)) {
         if (obj != td.obj) {
             sub_57CCF0(player_get_local_pc_obj(), td.obj);
             object_hover_obj_set(td.obj);
@@ -8973,6 +9177,73 @@ void intgame_hide(void)
     }
 }
 
+// CE: TAB-cycle HUD-crop state. Bound to the TAB key in main.c.
+//
+// Four stages cycle FULL → MEDIUM → MINI → HIDDEN → FULL. Instead
+// of hiding/moving the strip windows, we use tig's per-window clip
+// rect (tig_window_clip_rect_set) to composite only a chosen band
+// of the bottom strip — the rest of the bar's VB stays intact, so
+// when the user cycles back to FULL the original bar reappears with
+// zero rebuilding. Buttons, rotwin chrome, text writes etc. all
+// continue working in their natural positions; the only thing that
+// changes is which pixels make it to screen.
+//
+// The top strip is always either fully visible (FULL) or fully
+// clipped (everything else).
+//
+// Stage-relative bands within the BOTTOM strip's VB (strip-relative
+// design coords; the strip is 800x159 anchored at y=441 in 800x600
+// reference space):
+//   FULL    → no clip; whole strip composites
+//   MEDIUM  → rotwin region: (196, 51, 410, 107) — the full
+//             skill_rot / dialoguewindow frame area
+//   MINI    → slim row: (205, 122, 394, 25) — the cropped 18px
+//             rollover row (skill_rot region at art-local (9,71))
+//   HIDDEN  → clip to a 0-sized rect; nothing composites
+//
+// When the user presses K/M (skills/spells) and the current stage
+// is HIDDEN or MINI, the cycle auto-pops to MEDIUM so the rotwin
+// becomes interactable. Cycling TAB or pressing K again reverts.
+
+typedef enum IntgameHudStage {
+    INTGAME_HUD_STAGE_FULL = 0,
+    INTGAME_HUD_STAGE_MEDIUM = 1,
+    INTGAME_HUD_STAGE_MINI = 2,
+    INTGAME_HUD_STAGE_HIDDEN = 3,
+    INTGAME_HUD_STAGE_COUNT,
+} IntgameHudStage;
+
+static IntgameHudStage intgame_hud_stage = INTGAME_HUD_STAGE_FULL;
+// CE: pre-rotwin stage snapshot. When the user is in MINI/HIDDEN and
+// invokes a rotwin (K/M, magictech weapon, etc.), we auto-pop to MEDIUM
+// and remember where to return when the rotwin is dismissed. Cleared
+// by user-driven TAB cycling (manual override).
+static IntgameHudStage intgame_hud_saved_stage = INTGAME_HUD_STAGE_FULL;
+static bool intgame_hud_has_saved_stage = false;
+// CE: MINI is a "hack" stage — it silently keeps SKILLS active so the
+// slim text row shows real hover content. Pressing K (or whichever key
+// matches the active rotwin) while MINI is up should NOT dismiss the
+// rotwin (that would swap to MSG and visually break the row); instead
+// it peek-expands to MEDIUM. A second press returns to MINI without
+// dismissing. This flag tracks "we're MEDIUM but only because MINI
+// peeked," so we know to return-to-MINI instead of toggling-off.
+static bool intgame_hud_peek_from_mini = false;
+// Mirror bool kept for the existing intgame_hud_is_user_hidden()
+// consumers (camera-follow margin math, fate/sleep top-bar dock).
+static bool intgame_hud_user_hidden;
+
+// Stage-band design coords inside the bottom strip's 800x159 VB.
+#define INTGAME_HUD_BOTTOM_W 800
+#define INTGAME_HUD_BOTTOM_H 159
+#define INTGAME_HUD_MEDIUM_BAND_X 196
+#define INTGAME_HUD_MEDIUM_BAND_Y 51
+#define INTGAME_HUD_MEDIUM_BAND_W 410
+#define INTGAME_HUD_MEDIUM_BAND_H 107
+#define INTGAME_HUD_MINI_BAND_X 205
+#define INTGAME_HUD_MINI_BAND_Y 122
+#define INTGAME_HUD_MINI_BAND_W 394
+#define INTGAME_HUD_MINI_BAND_H 25
+
 void intgame_show(void)
 {
     int index;
@@ -9006,4 +9277,359 @@ void intgame_show(void)
     tig_window_move(dword_64C4F8[1], rect.x, rect.y);
 
     follower_ui_show();
+
+    tig_window_near_black_alpha_set(dword_64C4F8[1],
+        settings_get_value(&settings, TRANSLUCENT_BLACK_UI_KEY) != 0,
+        intgame_iso_window, 8, 128);
+
+    int desired_stage = settings_get_value(&settings, HUD_STAGE_KEY);
+    if (desired_stage >= 0 && desired_stage < INTGAME_HUD_STAGE_COUNT) {
+        while ((int)intgame_hud_stage != desired_stage) {
+            intgame_hud_user_toggle();
+        }
+    }
+
+    // CE: Re-apply the current TAB stage's clip after a modal menu
+    // cycle (Esc main menu, Options, Save/Load) — intgame_show is
+    // called on close and would otherwise leave the strips fully
+    // visible regardless of the user's TAB stage.
+    intgame_hud_apply_clips();
+}
+
+// Compute and install the per-strip clip rects for the current
+// stage. Idempotent — safe to call from any path that may have
+// reset the strips (intgame_show, mode exits, etc.).
+static void intgame_hud_apply_clips(void)
+{
+    if (!intgame_iso_interface_created) {
+        return;
+    }
+    intgame_hud_user_hidden = (intgame_hud_stage != INTGAME_HUD_STAGE_FULL);
+
+    // CE: invalidate the world (iso VB) under both bar strips on every
+    // stage change. The iso layer only paints into its VB for regions
+    // gamelib has been asked to redraw; while a strip is opaque on top,
+    // iso leaves that band stale. When the clip uncovers part of the
+    // strip, the compositor blits iso's stale pixels through the hole
+    // and the user sees an edge smear. Invalidating here forces the
+    // world to repaint into iso's VB so the newly-exposed band has
+    // fresh content by the next composite.
+    for (int strip_idx = 0; strip_idx < 2; strip_idx++) {
+        if (dword_64C4F8[strip_idx] == TIG_WINDOW_HANDLE_INVALID) {
+            continue;
+        }
+        TigWindowData strip_wd;
+        if (tig_window_data(dword_64C4F8[strip_idx], &strip_wd) == TIG_OK) {
+            iso_invalidate_rect(&strip_wd.rect);
+        }
+    }
+
+    // Top strip: only visible in FULL stage.
+    if (dword_64C4F8[0] != TIG_WINDOW_HANDLE_INVALID) {
+        if (intgame_hud_stage == INTGAME_HUD_STAGE_FULL) {
+            tig_window_clip_rect_set(dword_64C4F8[0], NULL);
+        } else {
+            // Zero-size clip → window composites nothing.
+            TigRect empty = { 0, 0, 0, 0 };
+            tig_window_clip_rect_set(dword_64C4F8[0], &empty);
+        }
+    }
+
+    // Bottom strip: stage-specific band.
+    if (dword_64C4F8[1] != TIG_WINDOW_HANDLE_INVALID) {
+        TigWindowData wd;
+        if (tig_window_data(dword_64C4F8[1], &wd) != TIG_OK) {
+            return;
+        }
+        // wd.rect is the strip's screen-coord frame after hrp_apply.
+        // Bands below are strip-local (design coords); add the
+        // frame origin to get screen coords for the clip rect.
+        int sx = wd.rect.x;
+        int sy = wd.rect.y;
+        TigRect band;
+        // CE: anchor the band's Y to the active rotwin's chrome top so
+        // a per-type anchor offset (e.g. SKILLS/SPELLS shifted 1px up
+        // vs MSG/dialogue) doesn't leave a sliver of bar background
+        // above/below the chrome. Width and X stay constant — the band
+        // is always 410px wide centered on the chrome anchor.
+        int chrome_strip_y = INTGAME_HUD_MEDIUM_BAND_Y;
+        if (intgame_iso_window_type >= 0
+            && intgame_iso_window_type < ROTWIN_TYPE_COUNT) {
+            int btn_y = intgame_rotwin_button_info[intgame_iso_window_type].y;
+            // Skip the zero-sized stub entries (QUANTITY / MP_KICKBAN).
+            if (btn_y > intgame_interface_window_frames[1].y) {
+                chrome_strip_y = btn_y - intgame_interface_window_frames[1].y;
+            }
+        }
+        switch (intgame_hud_stage) {
+        case INTGAME_HUD_STAGE_FULL:
+            tig_window_clip_rect_set(dword_64C4F8[1], NULL);
+            break;
+        case INTGAME_HUD_STAGE_MEDIUM:
+            band.x = sx + INTGAME_HUD_MEDIUM_BAND_X;
+            band.y = sy + chrome_strip_y;
+            band.width = INTGAME_HUD_MEDIUM_BAND_W;
+            band.height = INTGAME_HUD_MEDIUM_BAND_H;
+            tig_window_clip_rect_set(dword_64C4F8[1], &band);
+            break;
+        case INTGAME_HUD_STAGE_MINI:
+            // MINI shows just the inner text-row band of the chrome art
+            // (art-local row at +71). Slides with the chrome anchor.
+            band.x = sx + INTGAME_HUD_MINI_BAND_X;
+            band.y = sy + chrome_strip_y + (INTGAME_HUD_MINI_BAND_Y - INTGAME_HUD_MEDIUM_BAND_Y);
+            band.width = INTGAME_HUD_MINI_BAND_W;
+            band.height = INTGAME_HUD_MINI_BAND_H;
+            tig_window_clip_rect_set(dword_64C4F8[1], &band);
+            break;
+        case INTGAME_HUD_STAGE_HIDDEN:
+        default: {
+            TigRect empty = { 0, 0, 0, 0 };
+            tig_window_clip_rect_set(dword_64C4F8[1], &empty);
+            break;
+        }
+        }
+    }
+
+    // Reposition top-bar-docked panels so they sit flush against the
+    // screen top when the bar is hidden, or below the bar when it's
+    // shown. No-op if the respective panel isn't currently open.
+    fate_ui_reposition();
+    sleep_ui_reposition();
+
+    // Notify the dialog options backdrop of the new bar-gap so it can
+    // drop down into the freed space. No-op when no dialog is active.
+    tc_set_bottom_gap_offset(intgame_hud_bottom_gap_offset());
+}
+
+void intgame_hud_user_toggle(void)
+{
+    if (!intgame_iso_interface_created) {
+        return;
+    }
+    // Manual TAB cycle = user override; drop any auto-pop snapshot so
+    // a later rotwin dismiss won't snap them back to a stage they've
+    // since moved past.
+    intgame_hud_has_saved_stage = false;
+    intgame_hud_peek_from_mini = false;
+    IntgameHudStage prev_stage = intgame_hud_stage;
+    intgame_hud_stage = (intgame_hud_stage + 1) % INTGAME_HUD_STAGE_COUNT;
+    settings_set_value(&settings, HUD_STAGE_KEY, intgame_hud_stage);
+
+    // CE: MINI's only purpose is the slim rollover row — and that row
+    // is driven by whichever rotwin is currently active. On the way
+    // INTO MINI, silently force the SKILLS rotwin so the row shows
+    // skill names / hover text. On the way OUT of MINI (cycling to
+    // HIDDEN or wrapping back to FULL), drop the rotwin back to MSG
+    // so we don't leave SKILLS arbitrarily active afterwards. Use
+    // iso_interface_window_swap directly (not _set) to skip the
+    // K/M-style auto-pop-to-MEDIUM hook — we want the type change
+    // without the stage override. The swap itself re-applies clips,
+    // so we skip the manual apply below in those branches.
+    bool entering_mini = (intgame_hud_stage == INTGAME_HUD_STAGE_MINI
+        && prev_stage != INTGAME_HUD_STAGE_MINI);
+    bool leaving_mini = (prev_stage == INTGAME_HUD_STAGE_MINI
+        && intgame_hud_stage != INTGAME_HUD_STAGE_MINI);
+
+    if (entering_mini) {
+        intgame_hud_enter_mini_with_skills();
+        return;
+    }
+    if (leaving_mini) {
+        // Sync the secondary buttons back to RELEASED so the next K
+        // / M press behaves as an activation, not a dismiss-of-stale.
+        tig_button_state_change(
+            intgame_secondary_buttons[INTGAME_SECONDARY_BUTTON_SKILLS].button_handle,
+            TIG_BUTTON_STATE_RELEASED);
+        tig_button_state_change(
+            intgame_secondary_buttons[INTGAME_SECONDARY_BUTTON_SPELLS].button_handle,
+            TIG_BUTTON_STATE_RELEASED);
+        if (intgame_iso_window_type != ROTWIN_TYPE_MSG) {
+            iso_interface_window_swap(ROTWIN_TYPE_MSG);
+            return;
+        }
+    }
+    intgame_hud_apply_clips();
+}
+
+// Auto-pop to MEDIUM when the user invokes a rotwin (K/M/etc.)
+// while the HUD is in MINI or HIDDEN. Called from the existing
+// iso_interface_window_set hook.
+void intgame_hud_auto_pop_for_rotwin(void)
+{
+    if (!intgame_iso_interface_created) {
+        return;
+    }
+    if (intgame_hud_stage == INTGAME_HUD_STAGE_MINI
+        || intgame_hud_stage == INTGAME_HUD_STAGE_HIDDEN) {
+        // Stash the user's pre-rotwin stage so dismissing the rotwin
+        // can return to it. Don't overwrite an existing snapshot — a
+        // rotwin-to-rotwin switch (SKILLS->SPELLS) is still part of
+        // the same pop, and we want to restore the *original* state.
+        if (!intgame_hud_has_saved_stage) {
+            intgame_hud_saved_stage = intgame_hud_stage;
+            intgame_hud_has_saved_stage = true;
+        }
+        intgame_hud_stage = INTGAME_HUD_STAGE_MEDIUM;
+        intgame_hud_apply_clips();
+    }
+}
+
+// Restore the pre-rotwin stage stashed by intgame_hud_auto_pop_for_rotwin.
+// Called when the rotwin returns to MSG (user re-pressed the dismiss key,
+// hovered off, magictech weapon cleared, etc.). No-op if nothing was
+// stashed or the interface isn't up.
+void intgame_hud_restore_after_rotwin(void)
+{
+    if (!intgame_iso_interface_created) {
+        return;
+    }
+    if (!intgame_hud_has_saved_stage) {
+        return;
+    }
+    IntgameHudStage restored = intgame_hud_saved_stage;
+    intgame_hud_has_saved_stage = false;
+    if (restored == INTGAME_HUD_STAGE_MINI) {
+        // Use the centralized MINI-invariant helper so type, stage,
+        // and button state all line up.
+        intgame_hud_enter_mini_with_skills();
+    } else {
+        intgame_hud_stage = restored;
+        intgame_hud_apply_clips();
+    }
+}
+
+// CE: enforce MINI invariants. MINI's whole point is "SKILLS rotwin
+// silently active so the slim row shows skill hover content". Any
+// path that lands us in MINI must call this so the rotwin and the
+// secondary button state stay in sync — TAB-into-MINI, MEDIUM-peek
+// return, dismiss-while-peeked, etc.
+static bool intgame_hud_in_mini_stage(void)
+{
+    return intgame_iso_interface_created
+        && intgame_hud_stage == INTGAME_HUD_STAGE_MINI;
+}
+
+static void intgame_hud_enter_mini_with_skills(void)
+{
+    if (!intgame_iso_interface_created) {
+        return;
+    }
+    intgame_hud_stage = INTGAME_HUD_STAGE_MINI;
+    if (intgame_iso_window_type != ROTWIN_TYPE_SKILLS) {
+        tig_button_state_change(
+            intgame_secondary_buttons[INTGAME_SECONDARY_BUTTON_SPELLS].button_handle,
+            TIG_BUTTON_STATE_RELEASED);
+        tig_button_state_change(
+            intgame_secondary_buttons[INTGAME_SECONDARY_BUTTON_SKILLS].button_handle,
+            TIG_BUTTON_STATE_PRESSED);
+        // swap re-applies clips for us.
+        iso_interface_window_swap(ROTWIN_TYPE_SKILLS);
+    } else {
+        intgame_hud_apply_clips();
+    }
+}
+
+static bool intgame_hud_handle_mini_peek_press(void)
+{
+    if (!intgame_iso_interface_created) {
+        return false;
+    }
+    // MINI -> MEDIUM peek: rotwin stays active, only the crop expands.
+    if (intgame_hud_stage == INTGAME_HUD_STAGE_MINI) {
+        intgame_hud_peek_from_mini = true;
+        intgame_hud_stage = INTGAME_HUD_STAGE_MEDIUM;
+        intgame_hud_apply_clips();
+        return true;
+    }
+    // MEDIUM (peeked) -> MINI return: same condition, opposite direction.
+    // Re-enter MINI invariants so SKILLS is active even if the user
+    // switched the rotwin to SPELLS while peeking.
+    if (intgame_hud_peek_from_mini
+        && intgame_hud_stage == INTGAME_HUD_STAGE_MEDIUM) {
+        intgame_hud_peek_from_mini = false;
+        intgame_hud_enter_mini_with_skills();
+        return true;
+    }
+    return false;
+}
+
+bool intgame_hud_is_user_hidden(void)
+{
+    return intgame_hud_user_hidden;
+}
+
+int intgame_hud_top_offset(void)
+{
+    // 41 = top HUD strip design height. Fate/sleep panels dock at
+    // y=41 when the top bar is visible (FULL), y=0 otherwise.
+    return intgame_hud_user_hidden ? 0 : 41;
+}
+
+// Half of the bottom strip's currently hidden height (in design coords).
+// The bottom strip is 159px tall; in MEDIUM/MINI/HIDDEN stages portions
+// of it are clipped out. tc.c (dialog options backdrop) shifts down by
+// this amount when shown so it takes half of the visual gap that the
+// cropped bar leaves behind.
+int intgame_hud_bottom_gap_offset(void)
+{
+    switch (intgame_hud_stage) {
+    case INTGAME_HUD_STAGE_FULL:
+        return 0;
+    case INTGAME_HUD_STAGE_MEDIUM:
+        // Chrome 107px visible; ~52 hidden. Half = 26.
+        return 26;
+    case INTGAME_HUD_STAGE_MINI:
+        // Only the 25px slim row visible; 134 hidden. Half = 67.
+        return 67;
+    case INTGAME_HUD_STAGE_HIDDEN:
+        // Entire 159 hidden. Half = 79.
+        return 79;
+    default:
+        return 0;
+    }
+}
+
+void intgame_hud_tick_invalidate_alpha_strips(void)
+{
+    // Currently only the bottom strip + (optionally) the big window opt
+    // in to per-pixel see-through. Tell gamelib to repaint the world
+    // under each every tick so the alpha-blend composite has fresh
+    // world pixels to blend against.
+    if (!intgame_iso_interface_created) {
+        return;
+    }
+    if (dword_64C4F8[1] != TIG_WINDOW_HANDLE_INVALID) {
+        TigWindowData wd;
+        if (tig_window_data(dword_64C4F8[1], &wd) == TIG_OK) {
+            iso_invalidate_rect(&wd.rect);
+        }
+    }
+    if (intgame_big_window_locked
+        && intgame_big_window_handle != TIG_WINDOW_HANDLE_INVALID) {
+        TigWindowData bwd;
+        if (tig_window_data(intgame_big_window_handle, &bwd) == TIG_OK) {
+            iso_invalidate_rect(&bwd.rect);
+        }
+    }
+}
+
+// CE: Apply the optional TranslucentBlackUI effect to a window. Used
+// by inventory / paperdoll / loot / barter screens (and anything else
+// sharing the intgame_big_window_handle) to opt in/out at lock/unlock
+// time, since the big window is shared across UIs that may or may not
+// want the effect. enable=false disables it.
+void intgame_apply_translucent_black(tig_window_handle_t window_handle, bool enable)
+{
+    if (window_handle == TIG_WINDOW_HANDLE_INVALID) {
+        return;
+    }
+    if (enable && !settings_get_value(&settings, TRANSLUCENT_BLACK_UI_KEY)) {
+        // Cfg disables the feature globally — ensure the window has
+        // alpha cleared in case it was set by a prior owner.
+        tig_window_near_black_alpha_set(window_handle, false,
+            TIG_WINDOW_HANDLE_INVALID, 0, 0);
+        return;
+    }
+    tig_window_near_black_alpha_set(window_handle, enable,
+        intgame_iso_window, 8, 128);
 }

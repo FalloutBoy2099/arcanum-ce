@@ -613,10 +613,12 @@ static MainMenuWindowInfo stru_5C4338 = {
 
 // 0x5C43D0
 static MainMenuButtonInfo mainmenu_ui_options_buttons[] = {
-    { 130, 221, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
-    { 130, 261, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
-    { 130, 301, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
-    { 130, 341, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
+    // Keep MainMenu.mes indices 4000-4004; display Audio above Video.
+    { 130, 185, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
+    { 130, 265, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
+    { 130, 225, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
+    { 130, 305, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
+    { 130, 345, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
 };
 
 // 0x5C4490
@@ -1610,6 +1612,7 @@ void mainmenu_ui_start(MainMenuType type)
             object_hover_obj_set(OBJ_HANDLE_NULL);
             break;
         }
+
     }
 }
 
@@ -2183,17 +2186,17 @@ bool mainmenu_ui_press_options(tig_button_handle_t button_handle)
 {
     int index;
 
-    for (index = 0; index < 4; index++) {
+    for (index = 0; index < SDL_arraysize(mainmenu_ui_options_buttons); index++) {
         if (mainmenu_ui_options_buttons[index].button_handle == button_handle) {
             break;
         }
     }
 
-    if (index >= 4) {
+    if (index >= SDL_arraysize(mainmenu_ui_options_buttons)) {
         return options_ui_handle_button_pressed(button_handle);
     }
 
-    if (index != 3) {
+    if (index != SDL_arraysize(mainmenu_ui_options_buttons) - 1) {
         sub_541E20(index);
         return true;
     }
@@ -2237,6 +2240,9 @@ void sub_541E20(int a1)
             break;
         case 2:
             options_ui_start(OPTIONS_UI_TAB_AUDIO, mainmenu_ui_window_handle, stru_5C36B0[mainmenu_ui_type][1] == 0);
+            break;
+        case 3:
+            options_ui_start(OPTIONS_UI_TAB_INTERFACE, mainmenu_ui_window_handle, stru_5C36B0[mainmenu_ui_type][1] == 0);
             break;
         }
     }
@@ -4892,6 +4898,17 @@ void mainmenu_ui_create_window_func(bool should_display)
 
     window->refresh_text_flags |= 0x20;
     mainmenu_ui_active = true;
+
+    // CE: when the menu is being shown over a running game (in-play /
+    // in-play-locked / options), enable near-black see-through alpha
+    // on this menu sub-window so iso world peeks through dark panel
+    // regions. Covers Save / Load / Options / etc. since they all
+    // create their tig window through this same function. Out-of-game
+    // menus skip — no world to show.
+    if (mainmenu_ui_window_handle != TIG_WINDOW_HANDLE_INVALID
+        && stru_5C36B0[mainmenu_ui_type][0]) {
+        intgame_apply_translucent_black(mainmenu_ui_window_handle, true);
+    }
 
     if (window->refresh_func != NULL) {
         window->refresh_func(NULL);

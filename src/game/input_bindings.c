@@ -73,6 +73,10 @@ static const InputBindingDef input_binding_defs[] = {
     { INPUT_ACTION_SCROLL_DOWN, "scroll_down", "DOWN" },
     { INPUT_ACTION_SCROLL_LEFT, "scroll_left", "LEFT" },
     { INPUT_ACTION_SCROLL_RIGHT, "scroll_right", "RIGHT" },
+    { INPUT_ACTION_ZOOM_IN, "zoom_in", "=|Keypad +" },
+    { INPUT_ACTION_ZOOM_OUT, "zoom_out", "-|Keypad -" },
+    { INPUT_ACTION_ZOOM_RESET, "zoom_reset", "Keypad 0" },
+    { INPUT_ACTION_CYCLE_HUD, "cycle_hud", "TAB" },
 };
 
 static InputBindingPart input_bindings[INPUT_ACTION_COUNT][INPUT_BINDING_MAX_PARTS];

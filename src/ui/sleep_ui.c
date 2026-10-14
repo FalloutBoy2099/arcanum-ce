@@ -3,6 +3,7 @@
 #include "game/combat.h"
 #include "game/critter.h"
 #include "game/gfade.h"
+#include "game/gamelib.h"
 #include "game/hrp.h"
 #include "game/magictech.h"
 #include "game/mes.h"
@@ -417,6 +418,34 @@ bool sleep_ui_is_active(void)
     return sleep_ui_active;
 }
 
+// CE: Re-snap the sleep window to its docked-below-top-bar position.
+// Called by the TAB HUD-crop toggle so the panel sits flush against
+// screen-top when the bar is hidden, or back below it when shown.
+// No-op when the panel isn't currently open.
+void sleep_ui_reposition(void)
+{
+    tig_art_id_t art_id;
+    TigArtFrameData art_frame_data;
+    TigRect rect;
+
+    if (!sleep_ui_active || sleep_ui_window == TIG_WINDOW_HANDLE_INVALID) {
+        return;
+    }
+    if (tig_art_interface_id_create(565, 0, 0, 0, &art_id) != TIG_OK) {
+        return;
+    }
+    if (tig_art_frame_data(art_id, &art_frame_data) != TIG_OK) {
+        return;
+    }
+
+    rect.x = 573;
+    rect.y = intgame_hud_top_offset();
+    rect.width = art_frame_data.width;
+    rect.height = art_frame_data.height;
+    hrp_apply(&rect, GRAVITY_CENTER_HORIZONTAL | GRAVITY_TOP);
+    tig_window_move(sleep_ui_window, rect.x, rect.y);
+}
+
 /**
  * Creates the sleep UI window.
  *
@@ -448,9 +477,10 @@ bool sleep_ui_create(void)
         return false;
     }
 
-    // Set up window properties.
+    // Set up window properties. y-offset tracks the top HUD strip:
+    // 41 when the bar is visible, 0 when the user has TAB-hidden it.
     rect.x = 573;
-    rect.y = 41;
+    rect.y = intgame_hud_top_offset();
     rect.width = art_frame_data.width;
     rect.height = art_frame_data.height;
 
@@ -719,6 +749,11 @@ void sleep_ui_wake_up(void)
     fade_data.duration = 2.0f;
     fade_data.steps = 48;
     gfade_run(&fade_data);
+    if (settings_get_value(&settings, AUTOSAVE_SLEEP_KEY) != 0 && !gamelib_in_save()) {
+        if (!gamelib_save("slotNAPS", "Autosave - Sleep")) {
+            tig_debug_printf("Sleep autosave failed.\n");
+        }
+    }
 }
 
 /**

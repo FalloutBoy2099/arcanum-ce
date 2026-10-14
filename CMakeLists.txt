@@ -47,6 +47,10 @@ set(SRCS
     "src/game/brightness.h"
     "src/game/broadcast.c"
     "src/game/broadcast.h"
+    "src/game/camera_follow.c"
+    "src/game/camera_follow.h"
+    "src/game/camera_tween.c"
+    "src/game/camera_tween.h"
     "src/game/ci.c"
     "src/game/ci.h"
     "src/game/combat.c"
@@ -63,6 +67,8 @@ set(SRCS
     "src/game/descriptions.h"
     "src/game/dialog.c"
     "src/game/dialog.h"
+    "src/game/dialog_camera.c"
+    "src/game/dialog_camera.h"
     "src/game/effect.c"
     "src/game/effect.h"
     "src/game/facade.c"
@@ -87,6 +93,8 @@ set(SRCS
     "src/game/input_bindings.h"
     "src/game/invensource.c"
     "src/game/invensource.h"
+    "src/game/iso_zoom.c"
+    "src/game/iso_zoom.h"
     "src/game/item_effect.c"
     "src/game/item_effect.h"
     "src/game/item.c"
@@ -339,6 +347,28 @@ target_include_directories(arcanum-ce PUBLIC
 target_link_libraries(arcanum-ce PUBLIC
     ${TIG_LIBRARY}
 )
+
+option(ARCANUM_BUILD_TESTS "Build headless community-feature regression tests" OFF)
+if(ARCANUM_BUILD_TESTS)
+    enable_testing()
+    add_executable(community_features_test
+        tests/community_features_test.c
+        src/game/highres_config.c
+        src/game/input_bindings.c
+        src/game/settings.c
+        src/game/iso_zoom.c
+    )
+    target_include_directories(community_features_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(community_features_test PRIVATE ${TIG_LIBRARY})
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-runtime")
+    if(WIN32)
+        set(ARCANUM_TEST_FONT "$ENV{WINDIR}/Fonts/calibri.ttf" CACHE FILEPATH "TrueType font for headless rendering tests")
+    else()
+        set(ARCANUM_TEST_FONT "" CACHE FILEPATH "TrueType font for headless rendering tests")
+    endif()
+    add_test(NAME community_features COMMAND community_features_test "${ARCANUM_TEST_FONT}")
+    set_tests_properties(community_features PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-runtime")
+endif()
 
 # SDL HID on Android requires C++ linker.
 if(ANDROID)

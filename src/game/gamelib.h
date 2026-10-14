@@ -6,6 +6,17 @@
 #include "game/timeevent.h"
 
 #define DIFFICULTY_KEY "difficulty"
+#define VSYNC_MODE_KEY "vsync_mode"
+#define ZOOM_FILTER_KEY "zoom_filter"
+#define SCROLL_USING_BORDERS_KEY "scroll_using_borders"
+#define TRANSLUCENT_BLACK_UI_KEY "translucent_black_ui"
+#define DIALOGUE_OPTION_NUMBERS_KEY "dialogue_option_numbers"
+#define DIALOGUE_EMOTE_DIM_KEY "dialogue_emote_dim"
+#define DIALOGUE_EMOTE_DIM_CHOICES_KEY "dialogue_emote_dim_choices"
+#define DIALOGUE_EMOTE_DIM_PERCENT_KEY "dialogue_emote_dim_percent"
+#define AUTOSAVE_TRAVEL_KEY "autosave_travel"
+#define AUTOSAVE_SLEEP_KEY "autosave_sleep"
+#define HUD_STAGE_KEY "hud_stage"
 #define VIOLENCE_FILTER_KEY "violence_filter"
 #define TURN_BASED_KEY "turn_based"
 #define FAST_TURN_BASED_KEY "fast_turn_based"
@@ -161,5 +172,8 @@ void gamelib_redraw(void);
 bool gamelib_copy_version(char* long_version, char* short_version, char* locale);
 void gamelib_patch_lvl_set(const char* patch_lvl);
 const char* gamelib_get_locale(void);
+void gamelib_get_iso_content_rect(TigRect* rect);
+void gamelib_zoom_perf_toggle(void);
+bool gamelib_zoom_perf_is_enabled(void);
 
 #endif /* ARCANUM_GAME_GAMELIB_H_ */

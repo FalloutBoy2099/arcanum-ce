@@ -118,6 +118,9 @@ Check [`ci-build.yml`](.github/workflows/ci-build.yml) for details on how the pr
 
 ## Configuration
 
+See [arcanum_ini.md](arcanum_ini.md) for the complete English reference to INI
+settings, defaults, allowed values, and keyboard/mouse bindings.
+
 Several configuration options are available as command-line switches (admittedly not very user-friendly):
 
 - `-4637`: Enable cheat level 3
@@ -157,6 +160,10 @@ DialogScale=2.0
 ```
 
 ## Contributing
+
+Additional community camera, zoom, HUD, dialogue, VSync and autosave settings are
+documented in [community-features.md](docs/community-features.md), with a complete
+[INI example](docs/community-options.ini).
 
 Play the game and file bugs if any (there are likely many). Attach a save game for investigation. Suggestions for quality of life improvements are also welcome. The major objective for 25H2 is to clarify remaining functions.
 

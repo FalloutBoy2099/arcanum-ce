@@ -7,6 +7,7 @@ typedef enum OptionsUiTab {
     OPTIONS_UI_TAB_GAME,
     OPTIONS_UI_TAB_VIDEO,
     OPTIONS_UI_TAB_AUDIO,
+    OPTIONS_UI_TAB_INTERFACE,
     OPTIONS_UI_TAB_COUNT,
 } OptionsUiTab;
 

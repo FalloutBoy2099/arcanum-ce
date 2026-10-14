@@ -12,15 +12,19 @@
 
 #include "game/ai.h"
 #include "game/anim.h"
+#include "game/camera_follow.h"
+#include "game/camera_tween.h"
 #include "game/combat.h"
 #include "game/critter.h"
 #include "game/descriptions.h"
 #include "game/dialog.h"
+#include "game/dialog_camera.h"
 #include "game/gamelib.h"
 #include "game/gmovie.h"
 #include "game/gsound.h"
 #include "game/highres_config.h"
 #include "game/input_bindings.h"
+#include "game/iso_zoom.h"
 #include "game/hrp.h"
 #include "game/item.h"
 #include "game/level.h"
@@ -247,6 +251,11 @@ int main(int argc, char** argv)
         return EXIT_SUCCESS; // FIXME: Should be `EXIT_FAILURE`.
     }
 
+    iso_zoom_init();
+    camera_tween_init();
+    dialog_camera_init();
+    camera_follow_init();
+
     screenshotter.key = input_binding_primary_scancode(INPUT_ACTION_SCREENSHOT, SDL_SCANCODE_F12);
     tig_video_screenshot_set_settings(&screenshotter);
 
@@ -401,6 +410,7 @@ void main_loop(void)
 
         tig_ping();
         gamelib_ping();
+        intgame_hud_tick_invalidate_alpha_strips();
         iso_redraw();
         tig_window_display();
 
@@ -703,7 +713,7 @@ void main_loop(void)
                                 break;
                             case SDL_SCANCODE_X:
                                 tig_mouse_get_state(&mouse_state);
-                                location_at(mouse_state.x, mouse_state.y, &mouse_loc);
+                                location_at_zoomed(mouse_state.x, mouse_state.y, iso_zoom_current(), &mouse_loc);
                                 snprintf(mouse_state_str, sizeof(mouse_state_str),
                                     "x: %d, y: %d",
                                     (int)LOCATION_GET_X(mouse_loc),
@@ -810,6 +820,11 @@ void handle_mouse_scroll(void)
     int tolerance;
 
     if (!tig_get_active()) {
+        scroll_stop();
+        return;
+    }
+
+    if (settings_get_value(&settings, SCROLL_USING_BORDERS_KEY) == 0) {
         scroll_stop();
         return;
     }
