@@ -141,6 +141,10 @@ Runtime options are stored in `arcanum.ini`. The legacy `arcanum.cfg` file is ke
 
 Bindings accept one or two inputs separated by `|`, for example `center_camera=HOME|MIDDLE_MOUSE`. Supported mouse names are `MIDDLE_MOUSE`, `PREVIOUS_MOUSE`, and `NEXT_MOUSE`.
 
+The `[video]` keys `dialog_font` and `logbook_font` keep using the original `.art` fonts by default. Set `modern_fonts=1` to render dialogue, floating text, and logbook body text through SDL_ttf/Freetype instead, which avoids bitmap scaling artefacts above size 12. `modern_font_path` and `modern_font_size` are global fallbacks; `dialog_font_path`/`dialog_font_size`, `floating_font_path`/`floating_font_size`, and `logbook_font_path`/`logbook_font_size` can override each use independently. `dialog_margin` controls the inner horizontal padding of the dialogue option box.
+
+Logbook text colors can be customized with `#RRGGBB` values such as `logbook_color_active=#000096`. The accepted keys are `logbook_color_default`, `logbook_color_page`, `logbook_color_struck`, `logbook_color_completed`, `logbook_color_failed`, `logbook_color_active`, and `logbook_color_curse`.
+
 `DialogScale` (in `HighRes/config.ini`) enlarges conversation text, which is helpful on high-DPI displays where the original bitmap fonts render very small. It accepts a float in the range `1.0` to `3.0` (values above are clamped); `1.0` (the default) keeps the original size. Both the player's dialogue options and the NPC reply are scaled, the reply bubble is widened so long lines wrap sensibly, and the reply is kept clear of the options box to avoid overlap. Example:
 
 ```ini

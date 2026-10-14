@@ -417,6 +417,7 @@ void main_loop(void)
                 gamelib_redraw();
             }
 
+            input_bindings_handle_message(&message);
             intgame_process_event(&message);
 
             if (gameuilib_wants_mainmenu()) {

@@ -3,6 +3,7 @@
 #include "game/anim.h"
 #include "game/combat.h"
 #include "game/critter.h"
+#include "game/input_bindings.h"
 #include "game/item.h"
 #include "game/magictech.h"
 #include "game/mt_item.h"
@@ -233,7 +234,7 @@ void item_ui_apply(TargetDescriptor* td)
         }
 
         if (tig_kb_get_modifier(SDL_KMOD_LCTRL)
-            || !tig_kb_get_modifier(SDL_KMOD_NUM)
+            || !input_binding_is_pressed(INPUT_ACTION_ALWAYS_RUN)
             || (get_always_run(pc_obj) && !tig_kb_get_modifier(SDL_KMOD_LCTRL))) {
             sub_436C20();
             item_ui_deactivate();

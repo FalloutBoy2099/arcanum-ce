@@ -14,6 +14,7 @@
 #include "game/location.h"
 #include "game/logbook.h"
 #include "game/mes.h"
+#include "game/modern_font.h"
 #include "game/player.h"
 #include "game/quest.h"
 #include "game/reputation.h"
@@ -62,6 +63,8 @@ static void logbook_ui_format_blessing_or_curse(char* buffer, size_t maxlen, int
 static void logbook_ui_format_kill_or_injury(char* buffer, size_t maxlen, int index);
 static void logbook_ui_format_background(char* buffer, size_t maxlen, int index);
 static void logbook_ui_format_key(char* buffer, size_t maxlen, int index);
+static tig_color_t logbook_ui_color(const char* key, int default_red, int default_green, int default_blue);
+static bool logbook_ui_parse_color(const char* str, int* red, int* green, int* blue);
 
 /**
  * Handle to the logbook UI window.
@@ -364,12 +367,20 @@ bool logbook_ui_init(GameInitInfo* init_info)
     int index;
     TigFontFlags body_font_flags = 0;
     float body_font_scale = 1.0f;
+    int body_font_art_num = 229;
+    const char* modern_path = NULL;
 
     (void)init_info;
 
     if (settings_get_value(&settings, LOGBOOK_FONT_KEY) != 0) {
-        body_font_flags = TIG_FONT_SCALE;
-        body_font_scale = 14.0f / 12.0f;
+        body_font_art_num = 230;
+    }
+    if (modern_font_enabled()) {
+        modern_path = modern_font_path_for(LOGBOOK_FONT_PATH_KEY);
+        if (modern_path != NULL) {
+            body_font_flags |= TIG_FONT_MODERN;
+            body_font_scale = modern_font_size_for(LOGBOOK_FONT_SIZE_KEY);
+        }
     }
 
     // Load UI messages (required).
@@ -384,43 +395,45 @@ bool logbook_ui_init(GameInitInfo* init_info)
 
     // Plain black - default body text.
     font_info.flags = body_font_flags;
-    tig_art_interface_id_create(229, 0, 0, 0, &(font_info.art_id));
+    tig_art_interface_id_create(body_font_art_num, 0, 0, 0, &(font_info.art_id));
     font_info.str = NULL;
-    font_info.color = tig_color_make(0, 0, 0);
+    font_info.color = logbook_ui_color(LOGBOOK_COLOR_DEFAULT_KEY, 0, 0, 0);
     font_info.scale = body_font_scale;
+    font_info.modern_font_path = modern_path;
+    font_info.modern_font_size = body_font_scale;
     tig_font_create(&font_info, &logbook_ui_font_default);
 
     // Centred black - page numbers in the footer.
     font_info.flags = TIG_FONT_CENTERED | body_font_flags;
-    tig_art_interface_id_create(229, 0, 0, 0, &(font_info.art_id));
+    tig_art_interface_id_create(body_font_art_num, 0, 0, 0, &(font_info.art_id));
     font_info.str = NULL;
-    font_info.color = tig_color_make(0, 0, 0);
+    font_info.color = logbook_ui_color(LOGBOOK_COLOR_PAGE_KEY, 0, 0, 0);
     font_info.scale = body_font_scale;
     tig_font_create(&font_info, &logbook_ui_font_page_numbers);
 
     // Black strikethrough - quelled rumors and healed injuries.
     font_info.flags = TIG_FONT_STRIKE_THROUGH | body_font_flags;
-    tig_art_interface_id_create(229, 0, 0, 0, &(font_info.art_id));
+    tig_art_interface_id_create(body_font_art_num, 0, 0, 0, &(font_info.art_id));
     font_info.str = NULL;
-    font_info.color = tig_color_make(0, 0, 0);
+    font_info.color = logbook_ui_color(LOGBOOK_COLOR_STRUCK_KEY, 0, 0, 0);
     font_info.strike_through_color = font_info.color;
     font_info.scale = body_font_scale;
     tig_font_create(&font_info, &logbook_ui_font_struck);
 
     // Green strikethrough - quests completed by the player's party.
     font_info.flags = TIG_FONT_STRIKE_THROUGH | body_font_flags;
-    tig_art_interface_id_create(229, 0, 0, 0, &(font_info.art_id));
+    tig_art_interface_id_create(body_font_art_num, 0, 0, 0, &(font_info.art_id));
     font_info.str = NULL;
-    font_info.color = tig_color_make(0, 120, 0);
+    font_info.color = logbook_ui_color(LOGBOOK_COLOR_COMPLETED_KEY, 0, 120, 0);
     font_info.strike_through_color = font_info.color;
     font_info.scale = body_font_scale;
     tig_font_create(&font_info, &logbook_ui_font_quest_completed);
 
     // Red strikethrough - quests that were botched or completed by others.
     font_info.flags = TIG_FONT_STRIKE_THROUGH | body_font_flags;
-    tig_art_interface_id_create(229, 0, 0, 0, &(font_info.art_id));
+    tig_art_interface_id_create(body_font_art_num, 0, 0, 0, &(font_info.art_id));
     font_info.str = NULL;
-    font_info.color = tig_color_make(150, 0, 0);
+    font_info.color = logbook_ui_color(LOGBOOK_COLOR_FAILED_KEY, 150, 0, 0);
     font_info.strike_through_color = font_info.color;
     font_info.scale = body_font_scale;
     tig_font_create(&font_info, &logbook_ui_font_quest_failed);
@@ -429,23 +442,23 @@ bool logbook_ui_init(GameInitInfo* init_info)
     font_info.flags = TIG_FONT_CENTERED;
     tig_art_interface_id_create(27, 0, 0, 0, &(font_info.art_id));
     font_info.str = NULL;
-    font_info.color = tig_color_make(0, 0, 0);
+    font_info.color = logbook_ui_color(LOGBOOK_COLOR_DEFAULT_KEY, 0, 0, 0);
     font_info.scale = 1.0f;
     tig_font_create(&font_info, &logbook_ui_font_header);
 
     // Blue - active quests and blessings currently in effect.
     font_info.flags = body_font_flags;
-    tig_art_interface_id_create(229, 0, 0, 0, &(font_info.art_id));
+    tig_art_interface_id_create(body_font_art_num, 0, 0, 0, &(font_info.art_id));
     font_info.str = NULL;
-    font_info.color = tig_color_make(0, 0, 150);
+    font_info.color = logbook_ui_color(LOGBOOK_COLOR_ACTIVE_KEY, 0, 0, 150);
     font_info.scale = body_font_scale;
     tig_font_create(&font_info, &logbook_ui_font_active);
 
     // Red - active curses currently in effect.
     font_info.flags = body_font_flags;
-    tig_art_interface_id_create(229, 0, 0, 0, &(font_info.art_id));
+    tig_art_interface_id_create(body_font_art_num, 0, 0, 0, &(font_info.art_id));
     font_info.str = NULL;
-    font_info.color = tig_color_make(150, 0, 0);
+    font_info.color = logbook_ui_color(LOGBOOK_COLOR_CURSE_KEY, 150, 0, 0);
     font_info.scale = body_font_scale;
     tig_font_create(&font_info, &logbook_ui_font_curse);
 
@@ -1802,4 +1815,56 @@ void logbook_ui_check(void)
             logbook_ui_draw_text(buffer, logbook_ui_font_default, &rect, true, true, true);
         }
     }
+}
+
+static tig_color_t logbook_ui_color(const char* key, int default_red, int default_green, int default_blue)
+{
+    const char* str;
+    int red;
+    int green;
+    int blue;
+
+    str = settings_get_str_value(&settings, key);
+    if (str != NULL && logbook_ui_parse_color(str, &red, &green, &blue)) {
+        return tig_color_make(red, green, blue);
+    }
+
+    return tig_color_make(default_red, default_green, default_blue);
+}
+
+static bool logbook_ui_parse_color(const char* str, int* red, int* green, int* blue)
+{
+    unsigned int value;
+    int r;
+    int g;
+    int b;
+
+    if (str == NULL) {
+        return false;
+    }
+
+    if (str[0] == '#') {
+        str++;
+    } else if (str[0] == '0' && (str[1] == 'x' || str[1] == 'X')) {
+        str += 2;
+    }
+
+    if (SDL_strlen(str) == 6 && sscanf(str, "%x", &value) == 1) {
+        *red = (value >> 16) & 0xFF;
+        *green = (value >> 8) & 0xFF;
+        *blue = value & 0xFF;
+        return true;
+    }
+
+    if (sscanf(str, "%d,%d,%d", &r, &g, &b) == 3
+        && r >= 0 && r <= 255
+        && g >= 0 && g <= 255
+        && b >= 0 && b <= 255) {
+        *red = r;
+        *green = g;
+        *blue = b;
+        return true;
+    }
+
+    return false;
 }

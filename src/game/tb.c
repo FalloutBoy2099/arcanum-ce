@@ -2,6 +2,7 @@
 
 #include "game/gamelib.h"
 #include "game/highres_config.h"
+#include "game/modern_font.h"
 #include "game/object.h"
 #include "game/tc.h"
 
@@ -209,6 +210,8 @@ bool tb_init(GameInitInfo* init_info)
     TigVideoBufferCreateInfo vb_create_info;
     int idx;
     TigFont font;
+    const char* modern_path;
+    float floating_scale;
 
     // Retrieve window data to set up content rectangle.
     if (tig_window_data(init_info->iso_window_handle, &window_data) != TIG_OK) {
@@ -234,13 +237,17 @@ bool tb_init(GameInitInfo* init_info)
     // a tall narrow column. The wrap width is a fraction of the view width so it
     // never exceeds the screen regardless of scale, and the height grows with
     // the scale to hold the taller lines.
-    if (highres_config_get()->dialog_scale > 1.0f) {
-        float ds = highres_config_get()->dialog_scale;
+    floating_scale = highres_config_get()->dialog_scale;
+    if (modern_font_enabled() && floating_scale < modern_font_size_for(FLOATING_FONT_SIZE_KEY) / 12.0f) {
+        floating_scale = modern_font_size_for(FLOATING_FONT_SIZE_KEY) / 12.0f;
+    }
+
+    if (floating_scale > 1.0f) {
         int wide = (int)(window_data.rect.width * 0.75f);
         if (wide > tb_content_rect.width) {
             tb_content_rect.width = wide;
         }
-        tb_content_rect.height = (int)(TEXT_BUBBLE_HEIGHT * ds + 0.5f);
+        tb_content_rect.height = (int)(TEXT_BUBBLE_HEIGHT * floating_scale + 0.5f);
     }
 
     vb_create_info.flags = TIG_VIDEO_BUFFER_CREATE_SYSTEM_MEMORY | TIG_VIDEO_BUFFER_CREATE_COLOR_KEY;
@@ -267,9 +274,22 @@ bool tb_init(GameInitInfo* init_info)
     // Set up font creation parameters.
     font.flags = TIG_FONT_NO_ALPHA_BLEND | TIG_FONT_CENTERED | TIG_FONT_SHADOW;
     tig_art_interface_id_create(229, 0, 0, 0, &(font.art_id));
+    font.modern_font_path = NULL;
+    font.modern_font_size = 12.0f;
+    font.scale = 1.0f;
+
+    modern_path = NULL;
+    if (modern_font_enabled()) {
+        modern_path = modern_font_path_for(FLOATING_FONT_PATH_KEY);
+        if (modern_path != NULL) {
+            font.flags |= TIG_FONT_MODERN;
+            font.modern_font_path = modern_path;
+            font.modern_font_size = modern_font_size_for(FLOATING_FONT_SIZE_KEY);
+        }
+    }
 
     // Enlarge dialogue text when requested via `DialogScale`.
-    if (highres_config_get()->dialog_scale > 1.0f) {
+    if ((font.flags & TIG_FONT_MODERN) == 0 && highres_config_get()->dialog_scale > 1.0f) {
         font.flags |= TIG_FONT_SCALE;
         font.scale = highres_config_get()->dialog_scale;
     }

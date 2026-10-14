@@ -5,6 +5,8 @@
 #include "tig/rect.h"
 #include "tig/types.h"
 
+typedef struct SDL_Surface SDL_Surface;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -134,6 +136,7 @@ int tig_video_buffer_fill(TigVideoBuffer* video_buffer, TigRect* rect, tig_color
 int tig_video_buffer_line(TigVideoBuffer* video_buffer, TigLine* line, TigRect* a3, tig_color_t color);
 int sub_520FB0(TigVideoBuffer* video_buffer, unsigned int flags);
 int tig_video_buffer_blit(TigVideoBufferBlitInfo* blit_info);
+int tig_video_buffer_blit_sdl_surface(SDL_Surface* surface, TigRect* src_rect, TigVideoBuffer* dst_video_buffer, TigRect* dst_rect);
 int tig_video_buffer_get_pixel_color(TigVideoBuffer* video_buffer, int x, int y, unsigned int* color);
 int tig_video_buffer_tint(TigVideoBuffer* video_buffer, TigRect* rect, tig_color_t tint_color, TigVideoBufferTintMode mode);
 int tig_video_buffer_save_to_bmp(TigVideoBufferSaveToBmpInfo* save_info);

@@ -1,6 +1,7 @@
 #include "game/tf.h"
 
 #include "game/gamelib.h"
+#include "game/modern_font.h"
 #include "game/object.h"
 
 /**
@@ -180,6 +181,7 @@ bool tf_init(GameInitInfo* init_info)
     TigFont font_desc;
     TigArtFrameData art_frame_data;
     int index;
+    const char* modern_path;
 
     // Retrieve window data to set up content rectangle.
     if (tig_window_data(init_info->iso_window_handle, &window_data) != TIG_OK) {
@@ -202,10 +204,38 @@ bool tf_init(GameInitInfo* init_info)
     // Set up font creation parameters.
     font_desc.flags = TIG_FONT_NO_ALPHA_BLEND | TIG_FONT_SHADOW;
     tig_art_interface_id_create(229, 0, 0, 0, &(font_desc.art_id));
+    font_desc.modern_font_path = NULL;
+    font_desc.modern_font_size = 12.0f;
+    font_desc.scale = 1.0f;
+
+    modern_path = NULL;
+    if (modern_font_enabled()) {
+        modern_path = modern_font_path_for(FLOATING_FONT_PATH_KEY);
+        if (modern_path != NULL) {
+            font_desc.flags |= TIG_FONT_MODERN;
+            font_desc.modern_font_path = modern_path;
+            font_desc.modern_font_size = modern_font_size_for(FLOATING_FONT_SIZE_KEY);
+        }
+    }
 
     // Determine line height from font metrics.
-    tig_art_frame_data(font_desc.art_id, &art_frame_data);
-    tf_line_height = art_frame_data.height + 2;
+    if ((font_desc.flags & TIG_FONT_MODERN) != 0) {
+        TigFont measure_font = font_desc;
+        tig_font_handle_t measure_font_handle;
+
+        measure_font.color = tig_color_make(255, 255, 255);
+        tig_font_create(&measure_font, &measure_font_handle);
+        tig_font_push(measure_font_handle);
+        measure_font.str = "test";
+        measure_font.width = 0;
+        tig_font_measure(&measure_font);
+        tig_font_pop();
+        tig_font_destroy(measure_font_handle);
+        tf_line_height = measure_font.height + 2;
+    } else {
+        tig_art_frame_data(font_desc.art_id, &art_frame_data);
+        tf_line_height = art_frame_data.height + 2;
+    }
 
     // Create fonts for each text floater type with appropriate colors.
     for (index = 0; index < TF_TYPE_COUNT; index++) {

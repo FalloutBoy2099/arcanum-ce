@@ -12,6 +12,7 @@ set(CMAKE_C_STANDARD_REQUIRED YES)
 add_subdirectory("third_party/fpattern" EXCLUDE_FROM_ALL)
 add_subdirectory("third_party/sdl3" EXCLUDE_FROM_ALL)
 add_subdirectory("third_party/sdl3_mixer" EXCLUDE_FROM_ALL)
+add_subdirectory("third_party/sdl3_ttf" EXCLUDE_FROM_ALL)
 add_subdirectory("third_party/zlib" EXCLUDE_FROM_ALL)
 
 add_subdirectory("first_party/bink_compat" EXCLUDE_FROM_ALL)
@@ -111,6 +112,8 @@ set(SRCS
     "src/game/material.h"
     "src/game/mes.c"
     "src/game/mes.h"
+    "src/game/modern_font.c"
+    "src/game/modern_font.h"
     "src/game/monstergen.c"
     "src/game/monstergen.h"
     "src/game/mp_utils.c"

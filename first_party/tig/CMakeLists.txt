@@ -76,6 +76,7 @@ target_link_libraries(tig_common INTERFACE
     fpattern::fpattern
     SDL3::SDL3
     SDL3_mixer::SDL3_mixer
+    SDL3_ttf::SDL3_ttf
     ${ZLIB_LIBRARIES}
     ${BINK_COMPAT_LIBRARY}
     ${MSS_COMPAT_LIBRARY}

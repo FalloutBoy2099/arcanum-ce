@@ -18,6 +18,7 @@ typedef uint32_t TigFontFlags;
 #define TIG_FONT_STRIKE_THROUGH 0x0020u
 #define TIG_FONT_NO_ALPHA_BLEND 0x0080u
 #define TIG_FONT_BLEND_ADD 0x0100u
+#define TIG_FONT_MODERN 0x0200u
 
 typedef struct TigFont {
     /* 0000 */ TigFontFlags flags;
@@ -31,6 +32,9 @@ typedef struct TigFont {
     /* 0020 */ int width;
     /* 0024 */ int height;
     /* 0028 */ int field_28;
+    const char* modern_font_path;
+    float modern_font_size;
+    void* modern_font;
 } TigFont;
 
 int tig_font_init(TigInitInfo* init_info);

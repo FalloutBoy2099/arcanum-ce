@@ -25,6 +25,9 @@ typedef struct OptionsUiControlInfo {
     /* 0010 */ const char* mes;
     /* 0014 */ OptionsUiControlValueGetter getter;
     /* 0018 */ OptionsUiControlValueSetter setter;
+    /* 001C */ const char* const* text_array;
+    /* 0020 */ int text_array_size;
+    /* 0024 */ bool force_debug_title;
 } OptionsUiControlInfo;
 
 typedef struct OptionsUiControlData {
@@ -57,6 +60,12 @@ static void options_ui_float_speed_get(int* value_ptr, bool* enabled_ptr);
 static void options_ui_float_speed_set(int value);
 static void options_ui_combat_taunts_get(int* value_ptr, bool* enabled_ptr);
 static void options_ui_combat_taunts_set(int value);
+static void options_ui_dialog_font_get(int* value_ptr, bool* enabled_ptr);
+static void options_ui_dialog_font_set(int value);
+static void options_ui_logbook_font_get(int* value_ptr, bool* enabled_ptr);
+static void options_ui_logbook_font_set(int value);
+static void options_ui_main_menu_art_get(int* value_ptr, bool* enabled_ptr);
+static void options_ui_main_menu_art_set(int value);
 static void options_ui_effects_volume_get(int* value_ptr, bool* enabled_ptr);
 static void options_ui_effects_volume_set(int value);
 static void options_ui_interface_volume_get(int* value_ptr, bool* enabled_ptr);
@@ -102,6 +111,23 @@ static int options_ui_controls_y[MAX_CONTROLS] = {
     347,
 };
 
+static const char* const options_ui_dialog_font_values[] = {
+    "16",
+    "14",
+    "12",
+};
+
+static const char* const options_ui_logbook_font_values[] = {
+    "14",
+    "12",
+};
+
+static const char* const options_ui_main_menu_art_values[] = {
+    "Noir",
+    "Fondu au noir",
+    "Bois",
+};
+
 /**
  * Defines controls metadata.
  *
@@ -124,9 +150,9 @@ static OptionsUiControlInfo options_ui_tab_controls_meta[OPTIONS_UI_TAB_COUNT][M
         { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Floats", "mes\\OptionsFloats.mes", options_ui_floats_get, options_ui_floats_set },
         { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Float Speed", "", options_ui_float_speed_get, options_ui_float_speed_set },
         { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Combat Taunts", "mes\\OptionsOffOn.mes", options_ui_combat_taunts_get, options_ui_combat_taunts_set },
-        { false, 0, 0, "", "", NULL, NULL },
-        { false, 0, 0, "", "", NULL, NULL },
-        { false, 0, 0, "", "", NULL, NULL },
+        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Police dialogue", "", options_ui_dialog_font_get, options_ui_dialog_font_set, options_ui_dialog_font_values, SDL_arraysize(options_ui_dialog_font_values), true },
+        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Police journal", "", options_ui_logbook_font_get, options_ui_logbook_font_set, options_ui_logbook_font_values, SDL_arraysize(options_ui_logbook_font_values), true },
+        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Fond menu", "", options_ui_main_menu_art_get, options_ui_main_menu_art_set, options_ui_main_menu_art_values, SDL_arraysize(options_ui_main_menu_art_values), true },
     },
     {
         { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Effets", "", options_ui_effects_volume_get, options_ui_effects_volume_set },
@@ -238,6 +264,11 @@ void options_ui_start(OptionsUiTab tab, tig_window_handle_t window_handle, bool 
             options_ui_modlist_initialized = true;
         }
 
+        if (meta->type == CYCLIC_UI_CONTROL_TEXT_ARRAY && meta->text_array != NULL) {
+            control_info.text_array = meta->text_array;
+            control_info.text_array_size = meta->text_array_size;
+        }
+
         // Set up control.
         control_info.type = meta->type;
         control_info.window_handle = window_handle;
@@ -245,7 +276,7 @@ void options_ui_start(OptionsUiTab tab, tig_window_handle_t window_handle, bool 
 
         // Load control title from the message file.
         mes_file_entry.num = index + 100 * (tab + 1);
-        control_info.title = tab != OPTIONS_UI_TAB_AUDIO && mes_search(options_ui_mes_file, &mes_file_entry)
+        control_info.title = !meta->force_debug_title && tab != OPTIONS_UI_TAB_AUDIO && mes_search(options_ui_mes_file, &mes_file_entry)
             ? mes_file_entry.str
             : meta->debug_name;
 
@@ -637,6 +668,63 @@ void options_ui_combat_taunts_get(int* value_ptr, bool* enabled_ptr)
 void options_ui_combat_taunts_set(int value)
 {
     settings_set_value(&settings, COMBAT_TAUNTS_KEY, value);
+}
+
+void options_ui_dialog_font_get(int* value_ptr, bool* enabled_ptr)
+{
+    int value;
+
+    value = settings_get_value(&settings, DIALOG_FONT_KEY);
+    if (value < 0) {
+        value = 0;
+    } else if (value > 2) {
+        value = 2;
+    }
+
+    *value_ptr = 2 - value;
+    *enabled_ptr = true;
+}
+
+void options_ui_dialog_font_set(int value)
+{
+    if (value < 0) {
+        value = 0;
+    } else if (value > 2) {
+        value = 2;
+    }
+    settings_set_value(&settings, DIALOG_FONT_KEY, 2 - value);
+}
+
+void options_ui_logbook_font_get(int* value_ptr, bool* enabled_ptr)
+{
+    *value_ptr = settings_get_value(&settings, LOGBOOK_FONT_KEY) ? 0 : 1;
+    *enabled_ptr = true;
+}
+
+void options_ui_logbook_font_set(int value)
+{
+    settings_set_value(&settings, LOGBOOK_FONT_KEY, value ? 0 : 1);
+}
+
+void options_ui_main_menu_art_get(int* value_ptr, bool* enabled_ptr)
+{
+    *value_ptr = settings_get_value(&settings, MAIN_MENU_ART_KEY);
+    if (*value_ptr < 0) {
+        *value_ptr = 0;
+    } else if (*value_ptr > 2) {
+        *value_ptr = 2;
+    }
+    *enabled_ptr = true;
+}
+
+void options_ui_main_menu_art_set(int value)
+{
+    if (value < 0) {
+        value = 0;
+    } else if (value > 2) {
+        value = 2;
+    }
+    settings_set_value(&settings, MAIN_MENU_ART_KEY, value);
 }
 
 /**

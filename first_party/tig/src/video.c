@@ -1025,6 +1025,95 @@ int tig_video_buffer_blit(TigVideoBufferBlitInfo* blit_info)
     return TIG_OK;
 }
 
+int tig_video_buffer_blit_sdl_surface(SDL_Surface* surface, TigRect* src_rect, TigVideoBuffer* dst_video_buffer, TigRect* dst_rect)
+{
+    int x;
+    int y;
+    int width;
+    int height;
+
+    if (surface == NULL || src_rect == NULL || dst_video_buffer == NULL || dst_rect == NULL) {
+        return TIG_ERR_INVALID_PARAM;
+    }
+
+    width = src_rect->width;
+    height = src_rect->height;
+
+    if (src_rect->x < 0) {
+        width += src_rect->x;
+        dst_rect->x -= src_rect->x;
+        src_rect->x = 0;
+    }
+    if (src_rect->y < 0) {
+        height += src_rect->y;
+        dst_rect->y -= src_rect->y;
+        src_rect->y = 0;
+    }
+    if (dst_rect->x < 0) {
+        width += dst_rect->x;
+        src_rect->x -= dst_rect->x;
+        dst_rect->x = 0;
+    }
+    if (dst_rect->y < 0) {
+        height += dst_rect->y;
+        src_rect->y -= dst_rect->y;
+        dst_rect->y = 0;
+    }
+    if (src_rect->x + width > surface->w) {
+        width = surface->w - src_rect->x;
+    }
+    if (src_rect->y + height > surface->h) {
+        height = surface->h - src_rect->y;
+    }
+    if (dst_rect->x + width > dst_video_buffer->surface->w) {
+        width = dst_video_buffer->surface->w - dst_rect->x;
+    }
+    if (dst_rect->y + height > dst_video_buffer->surface->h) {
+        height = dst_video_buffer->surface->h - dst_rect->y;
+    }
+    if (width <= 0 || height <= 0) {
+        return TIG_OK;
+    }
+
+    if (!SDL_LockSurface(surface)) {
+        return TIG_ERR_GENERIC;
+    }
+    if (!SDL_LockSurface(dst_video_buffer->surface)) {
+        SDL_UnlockSurface(surface);
+        return TIG_ERR_GENERIC;
+    }
+
+    for (y = 0; y < height; y++) {
+        uint32_t* dst = (uint32_t*)((uint8_t*)dst_video_buffer->surface->pixels
+            + dst_video_buffer->surface->pitch * (dst_rect->y + y)
+            + 4 * dst_rect->x);
+
+        for (x = 0; x < width; x++) {
+            Uint8 r;
+            Uint8 g;
+            Uint8 b;
+            Uint8 a;
+
+            if (!SDL_ReadSurfacePixel(surface, src_rect->x + x, src_rect->y + y, &r, &g, &b, &a)) {
+                SDL_UnlockSurface(dst_video_buffer->surface);
+                SDL_UnlockSurface(surface);
+                return TIG_ERR_GENERIC;
+            }
+
+            if (a == 255) {
+                dst[x] = tig_color_make(r, g, b);
+            } else if (a != 0) {
+                dst[x] = tig_color_blend_alpha(tig_color_make(r, g, b), dst[x], a);
+            }
+        }
+    }
+
+    SDL_UnlockSurface(dst_video_buffer->surface);
+    SDL_UnlockSurface(surface);
+
+    return TIG_OK;
+}
+
 // 0x522F30
 int tig_video_buffer_get_pixel_color(TigVideoBuffer* video_buffer, int x, int y, unsigned int* color)
 {

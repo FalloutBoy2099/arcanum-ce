@@ -13,6 +13,7 @@
 #include "game/gmovie.h"
 #include "game/gsound.h"
 #include "game/hrp.h"
+#include "game/input_bindings.h"
 #include "game/item.h"
 #include "game/map.h"
 #include "game/mes.h"
@@ -1776,6 +1777,7 @@ bool mainmenu_ui_handle(void)
         tig_window_display();
 
         while (tig_message_dequeue(&msg) == TIG_OK) {
+            input_bindings_handle_message(&msg);
             switch (msg.type) {
             case TIG_MESSAGE_QUIT:
                 if (mainmenu_ui_confirm_quit() == TIG_WINDOW_MODAL_DIALOG_CHOICE_OK) {
@@ -1787,7 +1789,7 @@ bool mainmenu_ui_handle(void)
                 break;
             case TIG_MESSAGE_KEYBOARD:
                 if (!msg.data.keyboard.pressed
-                    && msg.data.keyboard.scancode == SDL_SCANCODE_ESCAPE
+                    && input_binding_matches_keyboard(INPUT_ACTION_MAIN_MENU, &msg)
                     && mainmenu_ui_window_type != MM_WINDOW_MAINMENU) {
                     // If the menu stack has a parent (e.g. user opened
                     // Options from the pause menu, or Save/Load from the
@@ -5393,11 +5395,12 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
             case MM_WINDOW_MAINMENU:
                 return false;
             case MM_WINDOW_OPTIONS:
-                if (msg->data.keyboard.scancode == SDL_SCANCODE_O) {
-                    // O toggles Options closed only when we entered here
-                    // directly via the in-game O shortcut (top of menu
+                if (input_binding_matches_keyboard(INPUT_ACTION_OPTIONS, msg)) {
+                    // The configured Options binding toggles Options closed
+                    // only when we entered here directly via the in-game
+                    // Options shortcut (top of menu
                     // stack). When stacked under another menu — e.g. pause
-                    // menu → Options via its "O" hotkey button — the keyup
+                    // menu → Options via its hotkey button — the keyup
                     // raced in here right after the keydown opened the
                     // window and was auto-dismissing it. Swallow the key
                     // either way so it doesn't fall through to other
@@ -5410,14 +5413,16 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                 }
                 return false;
             case MM_WINDOW_LOAD_GAME:
-                switch (msg->data.keyboard.scancode) {
-                case SDL_SCANCODE_ESCAPE:
+                if (input_binding_matches_keyboard(INPUT_ACTION_MAIN_MENU, msg)) {
                     gsound_play_sfx(0, 1);
                     mainmenu_ui_close(true);
                     if (mainmenu_ui_window_type == MM_WINDOW_0) {
                         sub_5412D0();
                     }
                     return true;
+                }
+
+                switch (msg->data.keyboard.scancode) {
                 case SDL_SCANCODE_UP:
                     sub_543060();
                     return true;
@@ -5438,14 +5443,16 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                 }
                 return false;
             case MM_WINDOW_SAVE_GAME:
-                switch (msg->data.keyboard.scancode) {
-                case SDL_SCANCODE_ESCAPE:
+                if (input_binding_matches_keyboard(INPUT_ACTION_MAIN_MENU, msg)) {
                     gsound_play_sfx(0, 1);
                     mainmenu_ui_close(true);
                     if (mainmenu_ui_window_type == MM_WINDOW_0) {
                         sub_5412D0();
                     }
                     return true;
+                }
+
+                switch (msg->data.keyboard.scancode) {
                 case SDL_SCANCODE_UP:
                     sub_544210();
                     return true;
@@ -5466,14 +5473,16 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                 }
                 return false;
             default:
-                switch (msg->data.keyboard.scancode) {
-                case SDL_SCANCODE_ESCAPE:
+                if (input_binding_matches_keyboard(INPUT_ACTION_MAIN_MENU, msg)) {
                     gsound_play_sfx(0, 1);
                     mainmenu_ui_close(true);
                     if (mainmenu_ui_window_type == MM_WINDOW_0) {
                         sub_5412D0();
                     }
                     return true;
+                }
+
+                switch (msg->data.keyboard.scancode) {
                 default:
                     break;
                 }

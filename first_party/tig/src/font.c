@@ -6,11 +6,22 @@
 #include "tig/rect.h"
 #include "tig/video.h"
 
+#include <SDL3_ttf/SDL_ttf.h>
+
 #define FONT_STACK_SIZE 20
 
 static int sub_535850(TigVideoBuffer* video_buffer, const char* str, int length, TigArtBlitInfo* blit_info, bool shadow);
 static int sub_535C40(tig_art_id_t font_art_id, const char* str, int max_width, int* width_ptr);
 static bool tig_font_glyph_data(tig_art_id_t font_art_id, int ch, int* width_ptr, int* height_ptr, int* dx_ptr, int* dy_ptr);
+static bool tig_font_modern_open(TigFont* font);
+static void tig_font_modern_close(TigFont* font);
+static bool tig_font_modern_measure(TigFont* font);
+static int tig_font_modern_write(TigVideoBuffer* video_buffer, const char* str, const TigRect* rect, TigRect* dirty_rect);
+static SDL_Color tig_font_modern_color(tig_color_t color);
+static SDL_Surface* tig_font_modern_render(TigFont* font, const char* str, int width, tig_color_t color);
+static char* tig_font_modern_to_utf8(const char* str);
+static int tig_font_modern_cp1252_to_codepoint(unsigned char ch);
+static char* tig_font_modern_utf8_append(char* p, int codepoint);
 
 // 0x630CFC
 static int tig_font_stack_index;
@@ -63,7 +74,14 @@ void tig_font_create(TigFont* font_data, tig_font_handle_t* font_handle_ptr)
     copy = (TigFont*)MALLOC(sizeof(TigFont));
     memcpy(copy, font_data, sizeof(TigFont));
 
-    if (tig_art_anim_data(font_data->art_id, &art_anim_data) != TIG_OK) {
+    copy->modern_font = NULL;
+    if ((copy->flags & TIG_FONT_MODERN) != 0) {
+        if (!tig_font_modern_open(copy)) {
+            copy->flags &= ~TIG_FONT_MODERN;
+        }
+    }
+
+    if ((copy->flags & TIG_FONT_MODERN) == 0 && tig_art_anim_data(font_data->art_id, &art_anim_data) != TIG_OK) {
         // Fatal error - missing font art.
         exit(EXIT_FAILURE);
     }
@@ -74,7 +92,10 @@ void tig_font_create(TigFont* font_data, tig_font_handle_t* font_handle_ptr)
 // 0x535330
 void tig_font_destroy(tig_font_handle_t font_handle)
 {
-    FREE((TigFont*)font_handle);
+    TigFont* font = (TigFont*)font_handle;
+
+    tig_font_modern_close(font);
+    FREE(font);
 }
 
 // 0x535340
@@ -124,6 +145,11 @@ void tig_font_measure(TigFont* font)
     font->str = str;
     font->width = width;
     font->height = height;
+
+    if ((font->flags & TIG_FONT_MODERN) != 0 && font->modern_font != NULL) {
+        tig_font_modern_measure(font);
+        return;
+    }
 
     width = 0;
     height = 0;
@@ -209,6 +235,11 @@ int tig_font_write(TigVideoBuffer* video_buffer, const char* str, const TigRect*
     bool shadow;
     int dst_rect_x;
     const char* remainder;
+
+    if ((tig_font_stack[tig_font_stack_index]->flags & TIG_FONT_MODERN) != 0
+        && tig_font_stack[tig_font_stack_index]->modern_font != NULL) {
+        return tig_font_modern_write(video_buffer, str, rect, dirty_rect);
+    }
 
     // NOTE: Initialize to keep compiler happy.
     max_y = 0;
@@ -569,4 +600,236 @@ bool tig_font_glyph_data(tig_art_id_t font_art_id, int ch, int* width_ptr, int* 
     }
 
     return true;
+}
+
+bool tig_font_modern_open(TigFont* font)
+{
+    if (font->modern_font_path == NULL || font->modern_font_path[0] == '\0') {
+        return false;
+    }
+
+    if (!TTF_Init()) {
+        return false;
+    }
+
+    font->modern_font = TTF_OpenFont(font->modern_font_path, font->modern_font_size);
+    if (font->modern_font == NULL) {
+        TTF_Quit();
+        return false;
+    }
+
+    return true;
+}
+
+void tig_font_modern_close(TigFont* font)
+{
+    if (font->modern_font != NULL) {
+        TTF_CloseFont((TTF_Font*)font->modern_font);
+        font->modern_font = NULL;
+        TTF_Quit();
+    }
+}
+
+bool tig_font_modern_measure(TigFont* font)
+{
+    SDL_Surface* surface;
+    int width;
+
+    if (font->str == NULL) {
+        font->height = 0;
+        return true;
+    }
+
+    width = font->width;
+    surface = tig_font_modern_render(font, font->str, width, font->color);
+    if (surface == NULL) {
+        font->height = 0;
+        return false;
+    }
+
+    if (font->width == 0) {
+        font->width = surface->w;
+    }
+    font->height = surface->h;
+
+    SDL_DestroySurface(surface);
+
+    return true;
+}
+
+int tig_font_modern_write(TigVideoBuffer* video_buffer, const char* str, const TigRect* rect, TigRect* dirty_rect)
+{
+    TigFont* font;
+    SDL_Surface* text_surface;
+    SDL_Surface* shadow_surface;
+    TigRect src_rect;
+    TigRect dst_rect;
+    int dx;
+    int rc;
+
+    if (str == NULL) {
+        return TIG_OK;
+    }
+
+    font = tig_font_stack[tig_font_stack_index];
+    text_surface = tig_font_modern_render(font, str, rect->width, font->color);
+    if (text_surface == NULL) {
+        return TIG_ERR_GENERIC;
+    }
+
+    dx = (font->flags & TIG_FONT_CENTERED) != 0
+        ? (rect->width - text_surface->w) / 2
+        : 0;
+    if (dx < 0) {
+        dx = 0;
+    }
+
+    src_rect.x = 0;
+    src_rect.y = 0;
+    src_rect.width = text_surface->w;
+    src_rect.height = text_surface->h;
+
+    dst_rect.x = rect->x + dx;
+    dst_rect.y = rect->y;
+    dst_rect.width = text_surface->w;
+    dst_rect.height = text_surface->h;
+
+    if ((font->flags & TIG_FONT_SHADOW) != 0) {
+        shadow_surface = tig_font_modern_render(font, str, rect->width, tig_font_shadow_color);
+        if (shadow_surface != NULL) {
+            TigRect shadow_rect = dst_rect;
+            shadow_rect.x++;
+            shadow_rect.y++;
+            rc = tig_video_buffer_blit_sdl_surface(shadow_surface, &src_rect, video_buffer, &shadow_rect);
+            SDL_DestroySurface(shadow_surface);
+            if (rc != TIG_OK) {
+                SDL_DestroySurface(text_surface);
+                return rc;
+            }
+        }
+    }
+
+    rc = tig_video_buffer_blit_sdl_surface(text_surface, &src_rect, video_buffer, &dst_rect);
+    SDL_DestroySurface(text_surface);
+    if (rc != TIG_OK) {
+        return rc;
+    }
+
+    if (dirty_rect != NULL) {
+        dirty_rect->x = dst_rect.x;
+        dirty_rect->y = dst_rect.y;
+        dirty_rect->width = dst_rect.width;
+        dirty_rect->height = dst_rect.height;
+        if ((font->flags & TIG_FONT_SHADOW) != 0) {
+            dirty_rect->width++;
+            dirty_rect->height++;
+        }
+    }
+
+    return TIG_OK;
+}
+
+SDL_Color tig_font_modern_color(tig_color_t color)
+{
+    SDL_Color sdl_color;
+
+    sdl_color.r = (Uint8)tig_color_get_red(color);
+    sdl_color.g = (Uint8)tig_color_get_green(color);
+    sdl_color.b = (Uint8)tig_color_get_blue(color);
+    sdl_color.a = 255;
+
+    return sdl_color;
+}
+
+SDL_Surface* tig_font_modern_render(TigFont* font, const char* str, int width, tig_color_t color)
+{
+    TTF_FontStyleFlags style;
+    SDL_Surface* surface;
+    char* utf8;
+
+    style = TTF_STYLE_NORMAL;
+    if ((font->flags & TIG_FONT_UNDERLINE) != 0) {
+        style |= TTF_STYLE_UNDERLINE;
+    }
+    if ((font->flags & TIG_FONT_STRIKE_THROUGH) != 0) {
+        style |= TTF_STYLE_STRIKETHROUGH;
+    }
+    TTF_SetFontStyle((TTF_Font*)font->modern_font, style);
+
+    utf8 = tig_font_modern_to_utf8(str);
+    if (utf8 == NULL) {
+        return NULL;
+    }
+
+    if (width > 0) {
+        surface = TTF_RenderText_Blended_Wrapped((TTF_Font*)font->modern_font, utf8, 0, tig_font_modern_color(color), width);
+    } else {
+        surface = TTF_RenderText_Blended((TTF_Font*)font->modern_font, utf8, 0, tig_font_modern_color(color));
+    }
+    FREE(utf8);
+    if (surface != NULL) {
+        SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_BLEND);
+    }
+
+    return surface;
+}
+
+char* tig_font_modern_to_utf8(const char* str)
+{
+    size_t len;
+    const unsigned char* src;
+    char* utf8;
+    char* dst;
+
+    if (str == NULL) {
+        return NULL;
+    }
+
+    len = SDL_strlen(str);
+    utf8 = (char*)MALLOC(len * 3 + 1);
+    if (utf8 == NULL) {
+        return NULL;
+    }
+
+    src = (const unsigned char*)str;
+    dst = utf8;
+    while (*src != '\0') {
+        dst = tig_font_modern_utf8_append(dst, tig_font_modern_cp1252_to_codepoint(*src));
+        src++;
+    }
+    *dst = '\0';
+
+    return utf8;
+}
+
+int tig_font_modern_cp1252_to_codepoint(unsigned char ch)
+{
+    static const int cp1252_80_9f[32] = {
+        0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021,
+        0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0x008D, 0x017D, 0x008F,
+        0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014,
+        0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D, 0x017E, 0x0178,
+    };
+
+    if (ch >= 0x80 && ch <= 0x9F) {
+        return cp1252_80_9f[ch - 0x80];
+    }
+
+    return ch;
+}
+
+char* tig_font_modern_utf8_append(char* p, int codepoint)
+{
+    if (codepoint < 0x80) {
+        *p++ = (char)codepoint;
+    } else if (codepoint < 0x800) {
+        *p++ = (char)(0xC0 | (codepoint >> 6));
+        *p++ = (char)(0x80 | (codepoint & 0x3F));
+    } else {
+        *p++ = (char)(0xE0 | (codepoint >> 12));
+        *p++ = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+        *p++ = (char)(0x80 | (codepoint & 0x3F));
+    }
+
+    return p;
 }

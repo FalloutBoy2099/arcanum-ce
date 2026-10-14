@@ -49,6 +49,7 @@ typedef enum InputAction {
 } InputAction;
 
 void input_bindings_init(void);
+void input_bindings_handle_message(const TigMessage* msg);
 bool input_binding_matches_keyboard(InputAction action, const TigMessage* msg);
 bool input_binding_matches_mouse(InputAction action, const TigMessage* msg);
 bool input_binding_is_pressed(InputAction action);

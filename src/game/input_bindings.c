@@ -13,6 +13,7 @@ typedef enum InputBindingPartType {
 typedef struct InputBindingPart {
     InputBindingPartType type;
     SDL_Scancode scancode;
+    uint32_t mouse_mask;
     TigMessageMouseEvent mouse_up;
     TigMessageMouseEvent mouse_down;
 } InputBindingPart;
@@ -24,9 +25,11 @@ typedef struct InputBindingDef {
 } InputBindingDef;
 
 static bool input_binding_parse_part(const char* str, InputBindingPart* part);
+static SDL_Scancode input_binding_scancode_from_name(const char* str);
 static void input_binding_trim(char* str);
 static bool input_binding_part_matches_keyboard(const InputBindingPart* part, const TigMessage* msg);
 static bool input_binding_part_matches_mouse(const InputBindingPart* part, const TigMessage* msg);
+static uint32_t input_binding_mouse_mask_from_event(TigMessageMouseEvent event);
 
 static const InputBindingDef input_binding_defs[] = {
     { INPUT_ACTION_MAIN_MENU, "main_menu", "ESCAPE" },
@@ -73,6 +76,7 @@ static const InputBindingDef input_binding_defs[] = {
 };
 
 static InputBindingPart input_bindings[INPUT_ACTION_COUNT][INPUT_BINDING_MAX_PARTS];
+static uint32_t input_binding_mouse_state;
 
 void input_bindings_init(void)
 {
@@ -107,6 +111,35 @@ void input_bindings_init(void)
             input_binding_parse_part(part, &(input_bindings[input_binding_defs[index].action][part_index]));
             part = next;
         }
+    }
+}
+
+void input_bindings_handle_message(const TigMessage* msg)
+{
+    uint32_t mask;
+
+    if (msg->type != TIG_MESSAGE_MOUSE) {
+        return;
+    }
+
+    mask = input_binding_mouse_mask_from_event(msg->data.mouse.event);
+    if (mask == 0) {
+        return;
+    }
+
+    switch (msg->data.mouse.event) {
+    case TIG_MESSAGE_MOUSE_MIDDLE_BUTTON_DOWN:
+    case TIG_MESSAGE_MOUSE_X1_BUTTON_DOWN:
+    case TIG_MESSAGE_MOUSE_X2_BUTTON_DOWN:
+        input_binding_mouse_state |= mask;
+        break;
+    case TIG_MESSAGE_MOUSE_MIDDLE_BUTTON_UP:
+    case TIG_MESSAGE_MOUSE_X1_BUTTON_UP:
+    case TIG_MESSAGE_MOUSE_X2_BUTTON_UP:
+        input_binding_mouse_state &= ~mask;
+        break;
+    default:
+        break;
     }
 }
 
@@ -148,14 +181,20 @@ bool input_binding_is_pressed(InputAction action)
 {
     int index;
     InputBindingPart* part;
+    uint32_t mouse_state;
 
     if (action < 0 || action >= INPUT_ACTION_COUNT) {
         return false;
     }
 
+    mouse_state = SDL_GetMouseState(NULL, NULL) | input_binding_mouse_state;
+
     for (index = 0; index < INPUT_BINDING_MAX_PARTS; index++) {
         part = &(input_bindings[action][index]);
         if (part->type == INPUT_BINDING_PART_KEY && tig_kb_is_key_pressed(part->scancode)) {
+            return true;
+        }
+        if (part->type == INPUT_BINDING_PART_MOUSE && (mouse_state & part->mouse_mask) != 0) {
             return true;
         }
     }
@@ -216,33 +255,35 @@ bool input_binding_parse_part(const char* str, InputBindingPart* part)
 
     if (SDL_strcasecmp(str, "MIDDLE_MOUSE") == 0) {
         part->type = INPUT_BINDING_PART_MOUSE;
+        part->mouse_mask = SDL_BUTTON_MMASK;
         part->mouse_down = TIG_MESSAGE_MOUSE_MIDDLE_BUTTON_DOWN;
         part->mouse_up = TIG_MESSAGE_MOUSE_MIDDLE_BUTTON_UP;
         return true;
     }
 
-    if (SDL_strcasecmp(str, "PREVIOUS_MOUSE") == 0) {
+    if (SDL_strcasecmp(str, "PREVIOUS_MOUSE") == 0
+        || SDL_strcasecmp(str, "BACK_MOUSE") == 0
+        || SDL_strcasecmp(str, "MOUSE4") == 0
+        || SDL_strcasecmp(str, "X1_MOUSE") == 0) {
         part->type = INPUT_BINDING_PART_MOUSE;
+        part->mouse_mask = SDL_BUTTON_X1MASK;
         part->mouse_down = TIG_MESSAGE_MOUSE_X1_BUTTON_DOWN;
         part->mouse_up = TIG_MESSAGE_MOUSE_X1_BUTTON_UP;
         return true;
     }
 
-    if (SDL_strcasecmp(str, "NEXT_MOUSE") == 0) {
+    if (SDL_strcasecmp(str, "NEXT_MOUSE") == 0
+        || SDL_strcasecmp(str, "FORWARD_MOUSE") == 0
+        || SDL_strcasecmp(str, "MOUSE5") == 0
+        || SDL_strcasecmp(str, "X2_MOUSE") == 0) {
         part->type = INPUT_BINDING_PART_MOUSE;
+        part->mouse_mask = SDL_BUTTON_X2MASK;
         part->mouse_down = TIG_MESSAGE_MOUSE_X2_BUTTON_DOWN;
         part->mouse_up = TIG_MESSAGE_MOUSE_X2_BUTTON_UP;
         return true;
     }
 
-    scancode = SDL_GetScancodeFromName(str);
-    if (scancode == SDL_SCANCODE_UNKNOWN && SDL_strlen(str) == 1) {
-        char upper[2];
-        upper[0] = (char)SDL_toupper(str[0]);
-        upper[1] = '\0';
-        scancode = SDL_GetScancodeFromName(upper);
-    }
-
+    scancode = input_binding_scancode_from_name(str);
     if (scancode != SDL_SCANCODE_UNKNOWN) {
         part->type = INPUT_BINDING_PART_KEY;
         part->scancode = scancode;
@@ -250,6 +291,62 @@ bool input_binding_parse_part(const char* str, InputBindingPart* part)
     }
 
     return false;
+}
+
+SDL_Scancode input_binding_scancode_from_name(const char* str)
+{
+    char upper[64];
+    size_t len;
+
+    len = SDL_strlen(str);
+    if (len == 1) {
+        int ch = SDL_toupper(str[0]);
+        if (ch >= 'A' && ch <= 'Z') {
+            return (SDL_Scancode)(SDL_SCANCODE_A + (ch - 'A'));
+        }
+
+        if (ch >= '1' && ch <= '9') {
+            return (SDL_Scancode)(SDL_SCANCODE_1 + (ch - '1'));
+        }
+
+        if (ch == '0') {
+            return SDL_SCANCODE_0;
+        }
+    }
+
+    SDL_strlcpy(upper, str, sizeof(upper));
+    for (size_t index = 0; upper[index] != '\0'; index++) {
+        upper[index] = (char)SDL_toupper(upper[index]);
+    }
+
+    if (SDL_strcasecmp(upper, "ESC") == 0) return SDL_SCANCODE_ESCAPE;
+    if (SDL_strcasecmp(upper, "ESCAPE") == 0) return SDL_SCANCODE_ESCAPE;
+    if (SDL_strcasecmp(upper, "ENTER") == 0) return SDL_SCANCODE_RETURN;
+    if (SDL_strcasecmp(upper, "RETURN") == 0) return SDL_SCANCODE_RETURN;
+    if (SDL_strcasecmp(upper, "SPACE") == 0) return SDL_SCANCODE_SPACE;
+    if (SDL_strcasecmp(upper, "TAB") == 0) return SDL_SCANCODE_TAB;
+    if (SDL_strcasecmp(upper, "BACKSPACE") == 0) return SDL_SCANCODE_BACKSPACE;
+    if (SDL_strcasecmp(upper, "DELETE") == 0) return SDL_SCANCODE_DELETE;
+    if (SDL_strcasecmp(upper, "INSERT") == 0) return SDL_SCANCODE_INSERT;
+    if (SDL_strcasecmp(upper, "HOME") == 0) return SDL_SCANCODE_HOME;
+    if (SDL_strcasecmp(upper, "END") == 0) return SDL_SCANCODE_END;
+    if (SDL_strcasecmp(upper, "PAGEUP") == 0) return SDL_SCANCODE_PAGEUP;
+    if (SDL_strcasecmp(upper, "PAGEDOWN") == 0) return SDL_SCANCODE_PAGEDOWN;
+    if (SDL_strcasecmp(upper, "UP") == 0) return SDL_SCANCODE_UP;
+    if (SDL_strcasecmp(upper, "DOWN") == 0) return SDL_SCANCODE_DOWN;
+    if (SDL_strcasecmp(upper, "LEFT") == 0) return SDL_SCANCODE_LEFT;
+    if (SDL_strcasecmp(upper, "RIGHT") == 0) return SDL_SCANCODE_RIGHT;
+    if (SDL_strcasecmp(upper, "NUMLOCK") == 0) return SDL_SCANCODE_NUMLOCKCLEAR;
+    if (SDL_strcasecmp(upper, "NUMLOCKCLEAR") == 0) return SDL_SCANCODE_NUMLOCKCLEAR;
+
+    if (upper[0] == 'F') {
+        int fn = SDL_atoi(upper + 1);
+        if (fn >= 1 && fn <= 12) {
+            return (SDL_Scancode)(SDL_SCANCODE_F1 + (fn - 1));
+        }
+    }
+
+    return SDL_GetScancodeFromName(str);
 }
 
 void input_binding_trim(char* str)
@@ -279,5 +376,23 @@ bool input_binding_part_matches_keyboard(const InputBindingPart* part, const Tig
 bool input_binding_part_matches_mouse(const InputBindingPart* part, const TigMessage* msg)
 {
     return part->type == INPUT_BINDING_PART_MOUSE
-        && msg->data.mouse.event == part->mouse_up;
+        && msg->data.mouse.event == part->mouse_down
+        && !msg->data.mouse.repeat;
+}
+
+uint32_t input_binding_mouse_mask_from_event(TigMessageMouseEvent event)
+{
+    switch (event) {
+    case TIG_MESSAGE_MOUSE_MIDDLE_BUTTON_DOWN:
+    case TIG_MESSAGE_MOUSE_MIDDLE_BUTTON_UP:
+        return SDL_BUTTON_MMASK;
+    case TIG_MESSAGE_MOUSE_X1_BUTTON_DOWN:
+    case TIG_MESSAGE_MOUSE_X1_BUTTON_UP:
+        return SDL_BUTTON_X1MASK;
+    case TIG_MESSAGE_MOUSE_X2_BUTTON_DOWN:
+    case TIG_MESSAGE_MOUSE_X2_BUTTON_UP:
+        return SDL_BUTTON_X2MASK;
+    default:
+        return 0;
+    }
 }

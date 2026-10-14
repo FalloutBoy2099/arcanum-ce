@@ -3,6 +3,7 @@
 #include "game/dialog.h"
 #include "game/gamelib.h"
 #include "game/highres_config.h"
+#include "game/modern_font.h"
 
 /**
  * The number of lines in the text conversation.
@@ -33,7 +34,10 @@
 static void tc_render_internal(TigRectListNode* node);
 static int tc_dialog_font_size(void);
 static float tc_dialog_font_scale(void);
+static int tc_dialog_font_art_num(void);
+static float tc_dialog_font_art_scale(void);
 static int tc_dialog_options_min(void);
+static int tc_dialog_margin(void);
 static int tc_content_height_for_lines(int lines);
 static void tc_update_content_rect_height(void);
 static int tc_option_index_from_y(int y);
@@ -181,6 +185,7 @@ bool tc_init(GameInitInfo* init_info)
     TigVideoBufferCreateInfo vb_create_info;
     tig_art_id_t art_id;
     TigFont font;
+    const char* modern_path;
 
     tc_editor = init_info->editor;
 
@@ -203,6 +208,9 @@ bool tc_init(GameInitInfo* init_info)
     tc_scale = tc_dialog_font_scale();
     if (tc_scale < highres_config_get()->dialog_scale) {
         tc_scale = highres_config_get()->dialog_scale;
+    }
+    if (modern_font_enabled() && tc_scale < modern_font_size_for(DIALOG_FONT_SIZE_KEY) / 12.0f) {
+        tc_scale = modern_font_size_for(DIALOG_FONT_SIZE_KEY) / 12.0f;
     }
     if (tc_scale < 1.0f) {
         tc_scale = 1.0f;
@@ -237,14 +245,26 @@ bool tc_init(GameInitInfo* init_info)
     }
 
     // Set up font creation parameters.
-    tig_art_interface_id_create(229, 0, 0, 0, &art_id);
+    tig_art_interface_id_create(tc_dialog_font_art_num(), 0, 0, 0, &art_id);
     font.flags = TIG_FONT_SHADOW;
     font.art_id = art_id;
+    font.modern_font_path = NULL;
+    font.modern_font_size = 12.0f;
+
+    modern_path = NULL;
+    if (modern_font_enabled()) {
+        modern_path = modern_font_path_for(DIALOG_FONT_PATH_KEY);
+        if (modern_path != NULL) {
+            font.flags |= TIG_FONT_MODERN;
+            font.modern_font_path = modern_path;
+            font.modern_font_size = modern_font_size_for(DIALOG_FONT_SIZE_KEY);
+        }
+    }
 
     // Enlarge conversation text when requested.
-    if (tc_scale > 1.0f) {
+    font.scale = (font.flags & TIG_FONT_MODERN) != 0 ? 1.0f : tc_dialog_font_art_scale();
+    if ((font.flags & TIG_FONT_MODERN) == 0 && font.scale > 1.0f) {
         font.flags |= TIG_FONT_SCALE;
-        font.scale = tc_scale;
     }
 
     // Create white font for normal text.
@@ -486,9 +506,9 @@ void tc_set_option(int index, const char* str)
     tc_options[index] = str;
     tc_update_content_rect_height();
 
-    rect.x = TEXT_CONVERSATION_HOR_PADDING;
+    rect.x = tc_dialog_margin();
     rect.y = index * (tc_line_height + TEXT_CONVERSATION_VERT_SPACING) + TEXT_CONVERSATION_VERT_SPACING;
-    rect.width = tc_intermediate_video_buffer_rect.width - TEXT_CONVERSATION_HOR_PADDING * 2;
+    rect.width = tc_intermediate_video_buffer_rect.width - tc_dialog_margin() * 2;
     rect.height = tc_line_height;
 
     // Clear scratch (text) video buffer with black color (which is also a key
@@ -530,8 +550,8 @@ void tc_set_option(int index, const char* str)
 
     // Update content rect's width and reposition it if the text in this option
     // is wider than the current width.
-    if (tc_content_rect.width < dirty_rect.width + TEXT_CONVERSATION_HOR_PADDING * 2) {
-        tc_content_rect.width = dirty_rect.width + TEXT_CONVERSATION_HOR_PADDING * 2;
+    if (tc_content_rect.width < dirty_rect.width + tc_dialog_margin() * 2) {
+        tc_content_rect.width = dirty_rect.width + tc_dialog_margin() * 2;
         tc_content_rect.x = (tc_iso_window_rect.width - tc_content_rect.width) / 2;
     }
 
@@ -657,7 +677,28 @@ float tc_dialog_font_scale(void)
     case 1:
         return 14.0f / 12.0f;
     case 2:
-        return 18.0f / 12.0f;
+        return 16.0f / 12.0f;
+    default:
+        return 1.0f;
+    }
+}
+
+int tc_dialog_font_art_num(void)
+{
+    switch (tc_dialog_font_size()) {
+    case 1:
+    case 2:
+        return 230; // "Flare14Font.art".
+    default:
+        return 229; // "Flare12Font.art".
+    }
+}
+
+float tc_dialog_font_art_scale(void)
+{
+    switch (tc_dialog_font_size()) {
+    case 2:
+        return 16.0f / 14.0f;
     default:
         return 1.0f;
     }
@@ -672,6 +713,20 @@ int tc_dialog_options_min(void)
         value = 1;
     } else if (value > TEXT_CONVERSATION_LINES) {
         value = TEXT_CONVERSATION_LINES;
+    }
+
+    return value;
+}
+
+int tc_dialog_margin(void)
+{
+    int value;
+
+    value = settings_get_value(&settings, DIALOG_MARGIN_KEY);
+    if (value < TEXT_CONVERSATION_HOR_PADDING) {
+        value = TEXT_CONVERSATION_HOR_PADDING;
+    } else if (value > 80) {
+        value = 80;
     }
 
     return value;

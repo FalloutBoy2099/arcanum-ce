@@ -1857,8 +1857,8 @@ bool sub_54B5D0(TigMessage* msg)
             return intgame_dialog_process_event_func(msg);
         }
 
-        if (msg->data.keyboard.scancode != SDL_SCANCODE_ESCAPE
-            && msg->data.keyboard.scancode != SDL_SCANCODE_O) {
+        if (!input_binding_matches_keyboard(INPUT_ACTION_MAIN_MENU, msg)
+            && !input_binding_matches_keyboard(INPUT_ACTION_OPTIONS, msg)) {
             return intgame_dialog_process_event_func(msg);
         }
 
