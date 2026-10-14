@@ -723,6 +723,11 @@ static int dword_5C729C[] = {
 // 0x5C72B0
 static int dword_5C72B0 = 1;
 
+static bool intgame_camera_pan_active;
+static bool intgame_camera_pan_moved;
+static int intgame_camera_pan_x;
+static int intgame_camera_pan_y;
+
 // 0x5C72B4
 static bool intgame_mode_scrolling[INTGAME_MODE_COUNT] = {
     /*         INTGAME_MODE_MAIN */ true,
@@ -1829,6 +1834,66 @@ void intgame_ammo_icon_refresh(tig_art_id_t art_id)
     tig_window_blit_art(dword_64C4F8[index], &blt);
 }
 
+static bool intgame_handle_camera_pan(TigMessage* msg)
+{
+    if (intgame_mode_get() != INTGAME_MODE_MAIN
+        || mainmenu_ui_is_active()
+        || intgame_dialog_process_event_func != NULL
+        || inven_ui_drag_item_obj_get() != OBJ_HANDLE_NULL
+        || (combat_turn_based_is_active()
+            && !player_is_local_pc_obj(combat_turn_based_whos_turn_get()))) {
+        intgame_camera_pan_active = false;
+        intgame_camera_pan_moved = false;
+        return false;
+    }
+
+    if (msg->type != TIG_MESSAGE_MOUSE) {
+        return false;
+    }
+
+    switch (msg->data.mouse.event) {
+    case TIG_MESSAGE_MOUSE_RIGHT_BUTTON_DOWN:
+        if (!msg->data.mouse.repeat) {
+            intgame_camera_pan_active = sub_5517A0(msg) && !dword_64C6D8;
+            intgame_camera_pan_moved = false;
+            intgame_camera_pan_x = msg->data.mouse.x;
+            intgame_camera_pan_y = msg->data.mouse.y;
+        }
+        return intgame_camera_pan_active;
+    case TIG_MESSAGE_MOUSE_MOVE:
+        if (intgame_camera_pan_active) {
+            int dx = msg->data.mouse.x - intgame_camera_pan_x;
+            int dy = msg->data.mouse.y - intgame_camera_pan_y;
+
+            // Preserve ordinary right clicks despite small mouse jitter.
+            if (!intgame_camera_pan_moved && dx > -3 && dx < 3 && dy > -3 && dy < 3) {
+                return true;
+            }
+
+            intgame_camera_pan_moved = true;
+            intgame_camera_pan_x = msg->data.mouse.x;
+            intgame_camera_pan_y = msg->data.mouse.y;
+            scroll_from_mouse_drag(dx, dy);
+            return true;
+        }
+        break;
+    case TIG_MESSAGE_MOUSE_RIGHT_BUTTON_UP: {
+        bool moved = intgame_camera_pan_moved;
+        intgame_camera_pan_active = false;
+        intgame_camera_pan_moved = false;
+        // A drag must not also rotate the player or toggle combat on release.
+        return moved;
+    }
+    case TIG_MESSAGE_MOUSE_LEFT_BUTTON_DOWN:
+    case TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP:
+        return intgame_camera_pan_active;
+    default:
+        break;
+    }
+
+    return false;
+}
+
 // 0x54B5D0
 bool sub_54B5D0(TigMessage* msg)
 {
@@ -1841,6 +1906,10 @@ bool sub_54B5D0(TigMessage* msg)
     tig_art_id_t art_id;
     char time_str_buffer[80];
     char buffer[80];
+
+    if (intgame_handle_camera_pan(msg)) {
+        return true;
+    }
 
     if (scrollbar_ui_process_event(msg)
         || handle_button_unhover(msg)
@@ -4981,6 +5050,9 @@ bool intgame_mode_set(IntgameMode mode)
     bool v2 = false;
     bool v17 = false;
     bool v18 = false;
+
+    intgame_camera_pan_active = false;
+    intgame_camera_pan_moved = false;
 
     if (dword_64C6E8) {
         return true;

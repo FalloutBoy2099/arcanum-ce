@@ -214,6 +214,7 @@ static bool sub_5627B0(WmapCoords* coords);
 static bool sub_5627F0(int64_t loc);
 static void sub_562800(int id);
 static void wmap_ui_draw_coords(WmapCoords* coords);
+static void wmap_ui_draw_travel_time(void);
 static void wmap_ui_navigate(int x, int y);
 static void sub_562AF0(int x, int y);
 static void wmap_ui_mode_set(WmapUiMode mode);
@@ -2484,7 +2485,9 @@ void wmap_ui_draw_coords(WmapCoords* coords)
     int index;
     int64_t limit_x;
     int64_t limit_y;
-    char str[32];
+    int64_t coordinate;
+    MesFileEntry direction_label;
+    char str[128];
     TigRect src_rect;
     TigRect dst_rect;
 
@@ -2505,10 +2508,16 @@ void wmap_ui_draw_coords(WmapCoords* coords)
             }
 
             if (index == 0) {
-                snprintf(str, sizeof(str), "%d W", (int)(limit_x - x));
+                coordinate = limit_x - x;
+                direction_label.num = coordinate < 0 ? 913 : 912;
+                direction_label.str = coordinate < 0 ? "E" : "W";
             } else {
-                snprintf(str, sizeof(str), "%d S", y);
+                coordinate = y;
+                direction_label.num = coordinate < 0 ? 910 : 911;
+                direction_label.str = coordinate < 0 ? "N" : "S";
             }
+            mes_search(wmap_ui_worldmap_mes_file, &direction_label);
+            snprintf(str, sizeof(str), "%lld %s", (long long)(coordinate < 0 ? -coordinate : coordinate), direction_label.str);
 
             tig_font_push(wmap_note_type_info[WMAP_NOTE_TYPE_NOTE].font);
             if (tig_font_write(dword_64E7F4, str, &stru_66D708, &dst_rect) == TIG_OK) {
@@ -2679,6 +2688,7 @@ void wmap_ui_mode_set(WmapUiMode mode)
 
         wmap_ui_mode_info[wmap_ui_mode].refresh();
         wmap_ui_draw_coords(&stru_64E7E8);
+        wmap_ui_draw_travel_time();
     }
 }
 
@@ -3762,6 +3772,89 @@ void sub_564970(WmapRouteWaypoint* wp)
 // 0x5649C0
 void sub_5649C0(void)
 {
+    wmap_ui_draw_travel_time();
+}
+
+static void wmap_ui_draw_travel_time(void)
+{
+    WmapRoute* route = &wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD];
+    // The bitmap font has 21-pixel glyph cells; a shorter drawing rectangle
+    // makes tig_font_write silently skip the entire line.
+    TigRect rect = { 684, 222, 86, 24 };
+    TigArtBlitInfo blit_info = { 0 };
+    TigFont font = { 0 };
+    MesFileEntry day_label;
+    MesFileEntry hour_label;
+    char str[128];
+    int hours = 0;
+    int days;
+    int index;
+
+    if (wmap_ui_window == TIG_WINDOW_HANDLE_INVALID || dword_64E7F4 == NULL) {
+        return;
+    }
+
+    // Restore the inset inside the travel-time frame when changing the estimate.
+    tig_art_interface_id_create(138, 0, 0, 0, &blit_info.art_id);
+    blit_info.src_rect = &rect;
+    blit_info.dst_rect = &rect;
+    tig_window_blit_art(wmap_ui_window, &blit_info);
+
+    // Town movement and teleport selection do not use world travel time.
+    if (wmap_ui_mode == WMAP_UI_MODE_TOWN || !dword_66D880 || wmap_ui_selecting || route->length == 0) {
+        return;
+    }
+
+    for (index = 0; index < route->length; index++) {
+        WmapRouteWaypoint* wp = &route->waypoints[index];
+        int start = wp->start > dword_65E968 ? wp->start : dword_65E968;
+        int remaining = wp->start + wp->steps - start;
+
+        // Each sector step takes one hour. The travel callback does not
+        // advance game time on the final step of each waypoint.
+        if (remaining > 1) {
+            hours += remaining - 1;
+        }
+    }
+
+    days = hours / 24;
+    hours %= 24;
+    day_label.num = days == 1 ? 901 : 900;
+    day_label.str = "j";
+    mes_search(wmap_ui_worldmap_mes_file, &day_label);
+    hour_label.num = days == 0 ? (hours == 1 ? 904 : 903) : 905;
+    hour_label.str = "h";
+    mes_search(wmap_ui_worldmap_mes_file, &hour_label);
+    if (days == 0) {
+        snprintf(str, sizeof(str), "%d %s", hours, hour_label.str);
+    } else if (hours == 0) {
+        snprintf(str, sizeof(str), "%d %s", days, day_label.str);
+    } else {
+        snprintf(str, sizeof(str), "%d %s, %d%s", days, day_label.str, hours, hour_label.str);
+    }
+
+    tig_font_push(wmap_note_type_info[WMAP_NOTE_TYPE_NOTE].font);
+    font.str = str;
+    tig_font_measure(&font);
+    if (days > 0 && font.width > rect.width) {
+        // Keep very long durations on one line using the localized short unit.
+        day_label.num = 902;
+        day_label.str = "j";
+        mes_search(wmap_ui_worldmap_mes_file, &day_label);
+        if (hours == 0) {
+            snprintf(str, sizeof(str), "%d %s", days, day_label.str);
+        } else {
+            snprintf(str, sizeof(str), "%d %s, %d%s", days, day_label.str, hours, hour_label.str);
+        }
+        font.width = 0;
+        tig_font_measure(&font);
+    }
+    if (font.width < rect.width) {
+        rect.x += (rect.width - font.width) / 2;
+        rect.width = font.width;
+    }
+    tig_window_text_write(wmap_ui_window, str, &rect);
+    tig_font_pop();
 }
 
 // 0x5649D0

@@ -673,6 +673,12 @@ bool scroll_cursor_art_set(tig_art_id_t art_id)
 
 void scroll_from_mouse_wheel(int dx, int dy)
 {
+    // Wheel steps are larger than the pixel deltas used by mouse dragging.
+    scroll_from_mouse_drag(-dx * 10, dy * 10);
+}
+
+void scroll_from_mouse_drag(int dx, int dy)
+{
     int distance;
     int64_t center_x;
     int64_t center_y;
@@ -686,12 +692,6 @@ void scroll_from_mouse_wheel(int dx, int dy)
     if (scroll_func != NULL) {
         return;
     }
-
-    // Scrolling with the mouse is uniform in both directions and is not
-    // affected by the scroll speed setting. The 10x multipler is based on
-    // subjective perception.
-    dx *= -10;
-    dy *= 10;
 
     // In editor mode, scrolling is unbounded.
     if (scroll_init_info.editor) {
