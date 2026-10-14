@@ -1100,7 +1100,14 @@ int tig_video_buffer_blit_sdl_surface(SDL_Surface* surface, TigRect* src_rect, T
                 return TIG_ERR_GENERIC;
             }
 
-            if (a == 255) {
+            if ((dst_video_buffer->flags & TIG_VIDEO_BUFFER_COLOR_KEY) != 0
+                && dst[x] == dst_video_buffer->color_key) {
+                if (a == 255) {
+                    dst[x] = tig_color_make(r, g, b);
+                } else if (a != 0) {
+                    dst[x] = tig_color_make((r * a) / 255, (g * a) / 255, (b * a) / 255);
+                }
+            } else if (a == 255) {
                 dst[x] = tig_color_make(r, g, b);
             } else if (a != 0) {
                 dst[x] = tig_color_blend_alpha(tig_color_make(r, g, b), dst[x], a);
@@ -1110,6 +1117,45 @@ int tig_video_buffer_blit_sdl_surface(SDL_Surface* surface, TigRect* src_rect, T
 
     SDL_UnlockSurface(dst_video_buffer->surface);
     SDL_UnlockSurface(surface);
+
+    return TIG_OK;
+}
+
+int tig_video_buffer_blend_color(TigVideoBuffer* video_buffer, TigRect* rect, tig_color_t color, int alpha)
+{
+    int rc;
+    TigRect frame;
+    int x;
+    int y;
+
+    if (alpha <= 0) {
+        return TIG_OK;
+    }
+    if (alpha > 255) {
+        alpha = 255;
+    }
+
+    rc = tig_rect_intersection(rect, &(video_buffer->frame), &frame);
+    if (rc != TIG_OK) {
+        return rc;
+    }
+
+    rc = tig_video_buffer_lock(video_buffer);
+    if (rc != TIG_OK) {
+        return rc;
+    }
+
+    for (y = 0; y < frame.height; y++) {
+        uint32_t* dst = (uint32_t*)video_buffer->surface->pixels
+            + (video_buffer->surface->pitch / 4) * (y + frame.y)
+            + frame.x;
+
+        for (x = 0; x < frame.width; x++) {
+            dst[x] = tig_color_blend_alpha(color, dst[x], alpha);
+        }
+    }
+
+    tig_video_buffer_unlock(video_buffer);
 
     return TIG_OK;
 }

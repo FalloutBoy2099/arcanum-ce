@@ -8,11 +8,13 @@
 #include "game/obj.h"
 #include "game/player.h"
 #include "game/skill.h"
+#include "game/snd.h"
 #include "game/tf.h"
 #include "ui/cyclic_ui.h"
 #include "ui/gameuilib.h"
 
 #define MAX_CONTROLS 8
+#define MAX_TAB_CONTROLS 32
 
 typedef void (*OptionsUiControlValueGetter)(int* value_ptr, bool* enabled_ptr);
 typedef void (*OptionsUiControlValueSetter)(int value);
@@ -28,6 +30,7 @@ typedef struct OptionsUiControlInfo {
     /* 001C */ const char* const* text_array;
     /* 0020 */ int text_array_size;
     /* 0024 */ bool force_debug_title;
+    int page;
 } OptionsUiControlInfo;
 
 typedef struct OptionsUiControlData {
@@ -82,6 +85,10 @@ static void options_ui_voice_volume_get(int* value_ptr, bool* enabled_ptr);
 static void options_ui_voice_volume_set(int value);
 static void options_ui_music_volume_get(int* value_ptr, bool* enabled_ptr);
 static void options_ui_music_volume_set(int value);
+static void options_ui_create_page(void);
+static void options_ui_destroy_page(void);
+static void options_ui_draw_page_heading(void);
+static void options_ui_restore_background(TigRect rect);
 
 /**
  * 0x5CCD38
@@ -133,7 +140,7 @@ static const char* const options_ui_main_menu_art_values[] = {
  *
  * 0x5CCD78
  */
-static OptionsUiControlInfo options_ui_tab_controls_meta[OPTIONS_UI_TAB_COUNT][MAX_CONTROLS] = {
+static OptionsUiControlInfo options_ui_tab_controls_meta[OPTIONS_UI_TAB_COUNT][MAX_TAB_CONTROLS] = {
     {
         { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Module", "", options_ui_module_get, NULL },
         { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Difficulty", "mes\\OptionsDifficulty.mes", options_ui_difficulty_get, options_ui_difficutly_set },
@@ -150,8 +157,8 @@ static OptionsUiControlInfo options_ui_tab_controls_meta[OPTIONS_UI_TAB_COUNT][M
         { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Floats", "mes\\OptionsFloats.mes", options_ui_floats_get, options_ui_floats_set },
         { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "Float Speed", "", options_ui_float_speed_get, options_ui_float_speed_set },
         { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "Combat Taunts", "mes\\OptionsOffOn.mes", options_ui_combat_taunts_get, options_ui_combat_taunts_set },
-        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Police dialogue", "", options_ui_dialog_font_get, options_ui_dialog_font_set, options_ui_dialog_font_values, SDL_arraysize(options_ui_dialog_font_values), true },
-        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Police journal", "", options_ui_logbook_font_get, options_ui_logbook_font_set, options_ui_logbook_font_values, SDL_arraysize(options_ui_logbook_font_values), true },
+        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Police dialogue", "", options_ui_dialog_font_get, options_ui_dialog_font_set, options_ui_dialog_font_values, SDL_arraysize(options_ui_dialog_font_values), true, 1 },
+        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Police journal", "", options_ui_logbook_font_get, options_ui_logbook_font_set, options_ui_logbook_font_values, SDL_arraysize(options_ui_logbook_font_values), true, 1 },
         { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "Fond menu", "", options_ui_main_menu_art_get, options_ui_main_menu_art_set, options_ui_main_menu_art_values, SDL_arraysize(options_ui_main_menu_art_values), true },
     },
     {
@@ -210,6 +217,16 @@ static bool options_ui_started;
  */
 static bool options_ui_modlist_initialized;
 
+static OptionsUiTab options_ui_tab;
+static tig_window_handle_t options_ui_window;
+static int options_ui_page;
+static int options_ui_page_count;
+static tig_font_handle_t options_ui_page_font;
+static tig_button_handle_t options_ui_page_buttons[2] = {
+    TIG_BUTTON_HANDLE_INVALID,
+    TIG_BUTTON_HANDLE_INVALID,
+};
+
 /**
  * Opens the options UI at a specified tab.
  *
@@ -224,24 +241,75 @@ static bool options_ui_modlist_initialized;
 void options_ui_start(OptionsUiTab tab, tig_window_handle_t window_handle, bool in_play)
 {
     int index;
-    CyclicUiControlInfo control_info;
-    OptionsUiControlInfo* meta;
-    MesFileEntry mes_file_entry;
-    int value;
+    TigButtonData button_data = { 0 };
+    TigFont font_desc = { 0 };
 
-    // Close fate UI if it's currently visible.
+    // Close the previous options tab if it is still visible.
     if (options_ui_started) {
         options_ui_close();
     }
 
     options_ui_in_play = in_play;
+    options_ui_tab = tab;
+    options_ui_window = window_handle;
+    options_ui_page = 0;
+    options_ui_page_count = 1;
+    for (index = 0; index < MAX_TAB_CONTROLS; index++) {
+        OptionsUiControlInfo* meta = &options_ui_tab_controls_meta[tab][index];
+        if (meta->active && meta->page >= options_ui_page_count) {
+            options_ui_page_count = meta->page + 1;
+        }
+    }
 
     // Load control titles.
     mes_load("mes\\options_ui.mes", &options_ui_mes_file);
 
-    for (index = 0; index < MAX_CONTROLS; index++) {
-        meta = &(options_ui_tab_controls_meta[tab][index]);
-        if (!meta->active) {
+    if (tab == OPTIONS_UI_TAB_GAME && !in_play) {
+        gamelib_modlist_create(&options_ui_modlist, 0);
+        options_ui_modlist_initialized = true;
+    }
+
+    tig_art_interface_id_create(27, 0, 0, 0, &font_desc.art_id);
+    font_desc.flags = TIG_FONT_CENTERED;
+    font_desc.color = tig_color_make(255, 255, 255);
+    tig_font_create(&font_desc, &options_ui_page_font);
+
+    button_data.flags = TIG_BUTTON_MOMENTARY;
+    button_data.window_handle = window_handle;
+    button_data.y = 59;
+    button_data.mouse_down_snd_id = SND_INTERFACE_BUTTON_MEDIUM;
+    button_data.mouse_up_snd_id = SND_INTERFACE_BUTTON_MEDIUM_RELEASE;
+    button_data.mouse_enter_snd_id = -1;
+    button_data.mouse_exit_snd_id = -1;
+    if (options_ui_page_count > 1) {
+        for (index = 0; index < 2; index++) {
+            button_data.x = index == 0 ? 283 : 653;
+            tig_art_interface_id_create(index == 0 ? 272 : 273, 0, 0, 0, &button_data.art_id);
+            tig_button_create(&button_data, &options_ui_page_buttons[index]);
+        }
+    }
+
+    options_ui_create_page();
+
+    // Keep the PC lens centered when opening options during play.
+    if (options_ui_in_play) {
+        location_origin_set(obj_field_int64_get(player_get_local_pc_obj(), OBJ_F_LOCATION));
+    }
+    options_ui_started = true;
+}
+
+static void options_ui_create_page(void)
+{
+    int index;
+    int slot = 0;
+    CyclicUiControlInfo control_info;
+    OptionsUiControlInfo* meta;
+    MesFileEntry mes_file_entry;
+    int value;
+
+    for (index = 0; index < MAX_TAB_CONTROLS && slot < MAX_CONTROLS; index++) {
+        meta = &(options_ui_tab_controls_meta[options_ui_tab][index]);
+        if (!meta->active || meta->page != options_ui_page) {
             continue;
         }
 
@@ -250,18 +318,15 @@ void options_ui_start(OptionsUiTab tab, tig_window_handle_t window_handle, bool 
 
         // Special case - the "Module" control must be turned off when options
         // are opened in the middle of the game.
-        if (tab == OPTIONS_UI_TAB_GAME && index == 0) {
+        if (options_ui_tab == OPTIONS_UI_TAB_GAME && index == 0) {
             if (options_ui_in_play) {
-                options_ui_modlist_initialized = false;
+                slot++;
                 continue;
             }
 
-            // Load available modules and configure control appropriately.
-            gamelib_modlist_create(&options_ui_modlist, 0);
+            // Use the module list retained while navigating within this tab.
             control_info.text_array = (const char* const*)options_ui_modlist.paths;
             control_info.text_array_size = options_ui_modlist.count;
-
-            options_ui_modlist_initialized = true;
         }
 
         if (meta->type == CYCLIC_UI_CONTROL_TEXT_ARRAY && meta->text_array != NULL) {
@@ -271,20 +336,20 @@ void options_ui_start(OptionsUiTab tab, tig_window_handle_t window_handle, bool 
 
         // Set up control.
         control_info.type = meta->type;
-        control_info.window_handle = window_handle;
+        control_info.window_handle = options_ui_window;
         control_info.max_value = meta->max_value;
 
         // Load control title from the message file.
-        mes_file_entry.num = index + 100 * (tab + 1);
-        control_info.title = !meta->force_debug_title && tab != OPTIONS_UI_TAB_AUDIO && mes_search(options_ui_mes_file, &mes_file_entry)
+        mes_file_entry.num = index + 100 * (options_ui_tab + 1);
+        control_info.title = !meta->force_debug_title && options_ui_tab != OPTIONS_UI_TAB_AUDIO && mes_search(options_ui_mes_file, &mes_file_entry)
             ? mes_file_entry.str
             : meta->debug_name;
 
         // Finish control set up.
         control_info.mes_file_path = meta->mes;
         control_info.value_changed_callback = meta->setter;
-        control_info.x = options_ui_controls_x[index];
-        control_info.y = options_ui_controls_y[index];
+        control_info.x = options_ui_controls_x[slot];
+        control_info.y = options_ui_controls_y[slot];
 
         // Query initial value.
         if (meta->getter != NULL) {
@@ -295,21 +360,55 @@ void options_ui_start(OptionsUiTab tab, tig_window_handle_t window_handle, bool 
         }
 
         // Create the control and set its initial value.
-        if (cyclic_ui_control_create(&control_info, &(options_ui_controls[index].id))) {
-            options_ui_controls[index].initialized = true;
-            cyclic_ui_control_set(options_ui_controls[index].id, value);
+        if (cyclic_ui_control_create(&control_info, &(options_ui_controls[slot].id))) {
+            options_ui_controls[slot].initialized = true;
+            cyclic_ui_control_set(options_ui_controls[slot].id, value);
         } else {
+            options_ui_controls[slot].initialized = false;
+        }
+        slot++;
+    }
+    options_ui_draw_page_heading();
+}
+
+static void options_ui_restore_background(TigRect rect)
+{
+    TigArtBlitInfo blit_info = { 0 };
+    TigRect src_rect = rect;
+
+    // The options background starts below the 41-pixel menu top bar.
+    src_rect.y -= 41;
+    tig_art_interface_id_create(669, 0, 0, 0, &blit_info.art_id);
+    blit_info.src_rect = &src_rect;
+    blit_info.dst_rect = &rect;
+    tig_window_blit_art(options_ui_window, &blit_info);
+}
+
+static void options_ui_draw_page_heading(void)
+{
+    TigRect rect = { 360, 63, 260, 39 };
+    char title[32];
+
+    options_ui_restore_background(rect);
+    if (options_ui_page_count <= 1) {
+        return;
+    }
+    SDL_snprintf(title, sizeof(title), "Page %d / %d", options_ui_page + 1, options_ui_page_count);
+    tig_font_push(options_ui_page_font);
+    tig_window_text_write(options_ui_window, title, &rect);
+    tig_font_pop();
+}
+
+static void options_ui_destroy_page(void)
+{
+    int index;
+
+    for (index = 0; index < MAX_CONTROLS; index++) {
+        if (options_ui_controls[index].initialized) {
+            cyclic_ui_control_destroy(options_ui_controls[index].id, false);
             options_ui_controls[index].initialized = false;
         }
     }
-
-    // Special case - when options are opened in the middle of the game, center
-    // viewport on the player, so that PC lens displays correct surroundings.
-    if (options_ui_in_play) {
-        location_origin_set(obj_field_int64_get(player_get_local_pc_obj(), OBJ_F_LOCATION));
-    }
-
-    options_ui_started = true;
 }
 
 /**
@@ -323,7 +422,9 @@ bool options_ui_load_module(void)
 
     if (!options_ui_started
         || !options_ui_modlist_initialized
-        || options_ui_in_play) {
+        || options_ui_in_play
+        || options_ui_page != 0
+        || !options_ui_controls[0].initialized) {
         return true;
     }
 
@@ -338,6 +439,7 @@ bool options_ui_load_module(void)
         return false;
     }
 
+    options_ui_modlist.selected = selected;
     return true;
 }
 
@@ -354,13 +456,15 @@ void options_ui_close(void)
         return;
     }
 
-    // Destroy initialized controls.
-    for (index = 0; index < MAX_CONTROLS; index++) {
-        if (options_ui_controls[index].initialized) {
-            cyclic_ui_control_destroy(options_ui_controls[index].id, false);
-            options_ui_controls[index].initialized = false;
+    options_ui_destroy_page();
+    for (index = 0; index < 2; index++) {
+        if (options_ui_page_buttons[index] != TIG_BUTTON_HANDLE_INVALID) {
+            tig_button_destroy(options_ui_page_buttons[index]);
+            options_ui_page_buttons[index] = TIG_BUTTON_HANDLE_INVALID;
         }
     }
+    options_ui_restore_background((TigRect) { 261, 52, 483, 60 });
+    tig_font_destroy(options_ui_page_font);
 
     // Destroy module list.
     if (options_ui_modlist_initialized) {
@@ -384,6 +488,24 @@ void options_ui_close(void)
  */
 bool options_ui_handle_button_pressed(tig_button_handle_t button_handle)
 {
+    int direction;
+    int page;
+
+    if (!options_ui_started || button_handle == TIG_BUTTON_HANDLE_INVALID) {
+        return false;
+    }
+    for (direction = 0; direction < 2; direction++) {
+        if (button_handle == options_ui_page_buttons[direction]) {
+            page = options_ui_page + (direction == 0 ? -1 : 1);
+            if (page >= 0 && page < options_ui_page_count && options_ui_load_module()) {
+                options_ui_destroy_page();
+                options_ui_page = page;
+                options_ui_create_page();
+            }
+            return true;
+        }
+    }
+
     // Delegate button handling to the cyclic UI system.
     return cyclic_ui_handle_button_pressed(button_handle);
 }

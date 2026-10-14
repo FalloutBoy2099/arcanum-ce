@@ -339,8 +339,13 @@ bool gamelib_init(GameInitInfo* init_info)
     settings_register(&settings, DIALOG_FONT_PATH_KEY, "", NULL);
     settings_register(&settings, DIALOG_FONT_SIZE_KEY, "16", NULL);
     settings_register(&settings, DIALOG_MARGIN_KEY, "16", NULL);
+    settings_register(&settings, DIALOG_MARGIN_VERTICAL_KEY, "8", NULL);
+    settings_register(&settings, DIALOG_BACKGROUND_OPACITY_KEY, "18", NULL);
     settings_register(&settings, FLOATING_FONT_PATH_KEY, "", NULL);
     settings_register(&settings, FLOATING_FONT_SIZE_KEY, "16", NULL);
+    settings_register(&settings, FLOATING_SHADOW_COLOR_KEY, "#000000", NULL);
+    settings_register(&settings, FLOATING_SHADOW_OPACITY_KEY, "71", NULL);
+    settings_register(&settings, FLOATING_SHADOW_DISTANCE_KEY, "1", NULL);
     settings_register(&settings, LOGBOOK_FONT_PATH_KEY, "", NULL);
     settings_register(&settings, LOGBOOK_FONT_SIZE_KEY, "16", NULL);
     settings_register(&settings, LOGBOOK_COLOR_DEFAULT_KEY, "#000000", NULL);

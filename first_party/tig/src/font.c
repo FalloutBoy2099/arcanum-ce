@@ -18,7 +18,9 @@ static void tig_font_modern_close(TigFont* font);
 static bool tig_font_modern_measure(TigFont* font);
 static int tig_font_modern_write(TigVideoBuffer* video_buffer, const char* str, const TigRect* rect, TigRect* dirty_rect);
 static SDL_Color tig_font_modern_color(tig_color_t color);
+static SDL_Color tig_font_modern_shadow_color(TigFont* font);
 static SDL_Surface* tig_font_modern_render(TigFont* font, const char* str, int width, tig_color_t color);
+static SDL_Surface* tig_font_modern_render_color(TigFont* font, const char* str, int width, SDL_Color color);
 static char* tig_font_modern_to_utf8(const char* str);
 static int tig_font_modern_cp1252_to_codepoint(unsigned char ch);
 static char* tig_font_modern_utf8_append(char* p, int codepoint);
@@ -75,6 +77,12 @@ void tig_font_create(TigFont* font_data, tig_font_handle_t* font_handle_ptr)
     memcpy(copy, font_data, sizeof(TigFont));
 
     copy->modern_font = NULL;
+    if (copy->modern_shadow_opacity < 0 || copy->modern_shadow_opacity > 255) {
+        copy->modern_shadow_opacity = 255;
+    }
+    if (copy->modern_shadow_distance < 0) {
+        copy->modern_shadow_distance = 0;
+    }
     if ((copy->flags & TIG_FONT_MODERN) != 0) {
         if (!tig_font_modern_open(copy)) {
             copy->flags &= ~TIG_FONT_MODERN;
@@ -694,12 +702,13 @@ int tig_font_modern_write(TigVideoBuffer* video_buffer, const char* str, const T
     dst_rect.width = text_surface->w;
     dst_rect.height = text_surface->h;
 
-    if ((font->flags & TIG_FONT_SHADOW) != 0) {
-        shadow_surface = tig_font_modern_render(font, str, rect->width, tig_font_shadow_color);
+    // SDL_ttf treats a zero foreground alpha as opaque, so skip hidden shadows.
+    if ((font->flags & TIG_FONT_SHADOW) != 0 && font->modern_shadow_opacity > 0) {
+        shadow_surface = tig_font_modern_render_color(font, str, rect->width, tig_font_modern_shadow_color(font));
         if (shadow_surface != NULL) {
             TigRect shadow_rect = dst_rect;
-            shadow_rect.x++;
-            shadow_rect.y++;
+            shadow_rect.x += font->modern_shadow_distance;
+            shadow_rect.y += font->modern_shadow_distance;
             rc = tig_video_buffer_blit_sdl_surface(shadow_surface, &src_rect, video_buffer, &shadow_rect);
             SDL_DestroySurface(shadow_surface);
             if (rc != TIG_OK) {
@@ -721,8 +730,8 @@ int tig_font_modern_write(TigVideoBuffer* video_buffer, const char* str, const T
         dirty_rect->width = dst_rect.width;
         dirty_rect->height = dst_rect.height;
         if ((font->flags & TIG_FONT_SHADOW) != 0) {
-            dirty_rect->width++;
-            dirty_rect->height++;
+            dirty_rect->width += font->modern_shadow_distance;
+            dirty_rect->height += font->modern_shadow_distance;
         }
     }
 
@@ -741,7 +750,24 @@ SDL_Color tig_font_modern_color(tig_color_t color)
     return sdl_color;
 }
 
-SDL_Surface* tig_font_modern_render(TigFont* font, const char* str, int width, tig_color_t color)
+static SDL_Color tig_font_modern_shadow_color(TigFont* font)
+{
+    SDL_Color sdl_color;
+
+    sdl_color = tig_font_modern_color(font->modern_shadow_color != 0
+        ? font->modern_shadow_color
+        : tig_font_shadow_color);
+    sdl_color.a = (Uint8)font->modern_shadow_opacity;
+
+    return sdl_color;
+}
+
+static SDL_Surface* tig_font_modern_render(TigFont* font, const char* str, int width, tig_color_t color)
+{
+    return tig_font_modern_render_color(font, str, width, tig_font_modern_color(color));
+}
+
+SDL_Surface* tig_font_modern_render_color(TigFont* font, const char* str, int width, SDL_Color color)
 {
     TTF_FontStyleFlags style;
     SDL_Surface* surface;
@@ -762,9 +788,9 @@ SDL_Surface* tig_font_modern_render(TigFont* font, const char* str, int width, t
     }
 
     if (width > 0) {
-        surface = TTF_RenderText_Blended_Wrapped((TTF_Font*)font->modern_font, utf8, 0, tig_font_modern_color(color), width);
+        surface = TTF_RenderText_Blended_Wrapped((TTF_Font*)font->modern_font, utf8, 0, color, width);
     } else {
-        surface = TTF_RenderText_Blended((TTF_Font*)font->modern_font, utf8, 0, tig_font_modern_color(color));
+        surface = TTF_RenderText_Blended((TTF_Font*)font->modern_font, utf8, 0, color);
     }
     FREE(utf8);
     if (surface != NULL) {

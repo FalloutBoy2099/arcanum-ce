@@ -35,6 +35,9 @@ typedef struct TigFont {
     const char* modern_font_path;
     float modern_font_size;
     void* modern_font;
+    tig_color_t modern_shadow_color;
+    int modern_shadow_opacity;
+    int modern_shadow_distance;
 } TigFont;
 
 int tig_font_init(TigInitInfo* init_info);

@@ -361,6 +361,11 @@ static int wmap_ui_scroll_speed_x = 5;
 // 0x5C9B98
 static int wmap_ui_scroll_speed_y = 5;
 
+static bool wmap_ui_pan_active;
+static bool wmap_ui_pan_moved;
+static int wmap_ui_pan_x;
+static int wmap_ui_pan_y;
+
 // 0x64E030
 static tig_color_t dword_64E030;
 
@@ -1411,6 +1416,9 @@ void wmap_ui_close(void)
     int64_t pc_obj;
     int index;
 
+    wmap_ui_pan_active = false;
+    wmap_ui_pan_moved = false;
+
     if (!wmap_ui_created) {
         return;
     }
@@ -1803,7 +1811,24 @@ bool wmap_ui_message_filter(TigMessage* msg)
 
     if (msg->type == TIG_MESSAGE_MOUSE) {
         switch (msg->data.mouse.event) {
+        case TIG_MESSAGE_MOUSE_RIGHT_BUTTON_DOWN:
+            if (msg->data.mouse.repeat) {
+                return wmap_ui_pan_active;
+            }
+            wmap_ui_pan_active = wmap_ui_state != WMAP_UI_STATE_MOVING
+                && wmap_ui_state != WMAP_UI_STATE_1
+                && msg->data.mouse.x >= wmap_info->field_14.x
+                && msg->data.mouse.y >= wmap_info->field_14.y
+                && msg->data.mouse.x < wmap_info->field_14.x + wmap_info->field_14.width
+                && msg->data.mouse.y < wmap_info->field_14.y + wmap_info->field_14.height;
+            wmap_ui_pan_moved = false;
+            wmap_ui_pan_x = msg->data.mouse.x;
+            wmap_ui_pan_y = msg->data.mouse.y;
+            return wmap_ui_pan_active;
         case TIG_MESSAGE_MOUSE_LEFT_BUTTON_DOWN:
+            if (wmap_ui_pan_active) {
+                return true;
+            }
             if (msg->data.mouse.x < wmap_info->field_14.x
                 || msg->data.mouse.y < wmap_info->field_14.y
                 || msg->data.mouse.x >= wmap_info->field_14.x + wmap_info->field_14.width
@@ -1899,6 +1924,9 @@ bool wmap_ui_message_filter(TigMessage* msg)
                 return true;
             }
         case TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP:
+            if (wmap_ui_pan_active) {
+                return true;
+            }
             switch (wmap_ui_mode) {
             case WMAP_UI_MODE_WORLD:
                 wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].field_3C8 = dword_66D880 != 0;
@@ -1992,6 +2020,13 @@ bool wmap_ui_message_filter(TigMessage* msg)
 
             return false;
         case TIG_MESSAGE_MOUSE_RIGHT_BUTTON_UP: {
+            wmap_ui_pan_active = false;
+            if (wmap_ui_pan_moved) {
+                // Releasing a pan must not delete a route waypoint or cancel editing.
+                wmap_ui_pan_moved = false;
+                return true;
+            }
+
             if (wmap_ui_state == WMAP_UI_STATE_EDITING) {
                 if (wmap_ui_mode == WMAP_UI_MODE_WORLD) {
                     wmap_ui_state_set(WMAP_UI_STATE_NORMAL);
@@ -2021,6 +2056,21 @@ bool wmap_ui_message_filter(TigMessage* msg)
             return true;
         }
         case TIG_MESSAGE_MOUSE_MOVE:
+            if (wmap_ui_pan_active) {
+                int dx = wmap_ui_pan_x - msg->data.mouse.x;
+                int dy = wmap_ui_pan_y - msg->data.mouse.y;
+
+                // Keep an ordinary right click usable despite small mouse jitter.
+                if (!wmap_ui_pan_moved && dx > -3 && dx < 3 && dy > -3 && dy < 3) {
+                    return true;
+                }
+
+                wmap_ui_pan_moved = true;
+                wmap_ui_pan_x = msg->data.mouse.x;
+                wmap_ui_pan_y = msg->data.mouse.y;
+                wmap_ui_scroll_by(dx, dy);
+                return true;
+            }
             if (msg->data.mouse.x >= wmap_info->field_14.x
                 && msg->data.mouse.y >= wmap_info->field_14.y
                 && msg->data.mouse.x < wmap_info->field_14.x + wmap_info->field_14.width
@@ -2538,6 +2588,8 @@ void wmap_ui_mode_set(WmapUiMode mode)
     TigRect src_rect;
     TigRect dst_rect;
 
+    wmap_ui_pan_active = false;
+    wmap_ui_pan_moved = false;
     wmap_ui_state_set(WMAP_UI_STATE_NORMAL);
 
     if (wmap_ui_mode == mode) {

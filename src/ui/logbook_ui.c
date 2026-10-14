@@ -401,6 +401,9 @@ bool logbook_ui_init(GameInitInfo* init_info)
     font_info.scale = body_font_scale;
     font_info.modern_font_path = modern_path;
     font_info.modern_font_size = body_font_scale;
+    font_info.modern_shadow_color = tig_color_make(10, 10, 10);
+    font_info.modern_shadow_opacity = 255;
+    font_info.modern_shadow_distance = 1;
     tig_font_create(&font_info, &logbook_ui_font_default);
 
     // Centred black - page numbers in the footer.

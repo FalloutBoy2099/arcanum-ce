@@ -276,6 +276,10 @@ bool tb_init(GameInitInfo* init_info)
     tig_art_interface_id_create(229, 0, 0, 0, &(font.art_id));
     font.modern_font_path = NULL;
     font.modern_font_size = 12.0f;
+    font.modern_shadow_color = modern_font_color_for(FLOATING_SHADOW_COLOR_KEY, 0, 0, 0);
+    // Convert the configured opacity percentage to an 8-bit alpha value.
+    font.modern_shadow_opacity = (modern_font_int_for(FLOATING_SHADOW_OPACITY_KEY, 71, 0, 100) * 255 + 50) / 100;
+    font.modern_shadow_distance = modern_font_int_for(FLOATING_SHADOW_DISTANCE_KEY, 1, 0, 8);
     font.scale = 1.0f;
 
     modern_path = NULL;

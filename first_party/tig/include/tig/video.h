@@ -138,6 +138,7 @@ int sub_520FB0(TigVideoBuffer* video_buffer, unsigned int flags);
 int tig_video_buffer_blit(TigVideoBufferBlitInfo* blit_info);
 int tig_video_buffer_blit_sdl_surface(SDL_Surface* surface, TigRect* src_rect, TigVideoBuffer* dst_video_buffer, TigRect* dst_rect);
 int tig_video_buffer_get_pixel_color(TigVideoBuffer* video_buffer, int x, int y, unsigned int* color);
+int tig_video_buffer_blend_color(TigVideoBuffer* video_buffer, TigRect* rect, tig_color_t color, int alpha);
 int tig_video_buffer_tint(TigVideoBuffer* video_buffer, TigRect* rect, tig_color_t tint_color, TigVideoBufferTintMode mode);
 int tig_video_buffer_save_to_bmp(TigVideoBufferSaveToBmpInfo* save_info);
 int tig_video_buffer_load_from_bmp(const char* filename, TigVideoBuffer** video_buffer_ptr, unsigned int flags);

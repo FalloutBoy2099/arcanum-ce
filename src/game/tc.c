@@ -37,9 +37,12 @@ static float tc_dialog_font_scale(void);
 static int tc_dialog_font_art_num(void);
 static float tc_dialog_font_art_scale(void);
 static int tc_dialog_options_min(void);
-static int tc_dialog_margin(void);
+static int tc_dialog_margin_horizontal(void);
+static int tc_dialog_margin_vertical(void);
+static int tc_dialog_background_opacity(void);
 static int tc_content_height_for_lines(int lines);
 static void tc_update_content_rect_height(void);
+static void tc_render_option(int index, bool highlighted);
 static int tc_option_index_from_y(int y);
 
 /**
@@ -250,6 +253,9 @@ bool tc_init(GameInitInfo* init_info)
     font.art_id = art_id;
     font.modern_font_path = NULL;
     font.modern_font_size = 12.0f;
+    font.modern_shadow_color = tig_color_make(10, 10, 10);
+    font.modern_shadow_opacity = 255;
+    font.modern_shadow_distance = 1;
 
     modern_path = NULL;
     if (modern_font_enabled()) {
@@ -492,11 +498,6 @@ void tc_clear(bool compact)
  */
 void tc_set_option(int index, const char* str)
 {
-    TigRect rect;
-    TigRect dirty_rect;
-    TigMouseState mouse_state;
-    bool highlighted;
-
     // Make sure we're not in the editor.
     if (tc_editor) {
         return;
@@ -506,69 +507,7 @@ void tc_set_option(int index, const char* str)
     tc_options[index] = str;
     tc_update_content_rect_height();
 
-    rect.x = tc_dialog_margin();
-    rect.y = index * (tc_line_height + TEXT_CONVERSATION_VERT_SPACING) + TEXT_CONVERSATION_VERT_SPACING;
-    rect.width = tc_intermediate_video_buffer_rect.width - tc_dialog_margin() * 2;
-    rect.height = tc_line_height;
-
-    // Clear scratch (text) video buffer with black color (which is also a key
-    // color, effectively making it transparent).
-    tig_video_buffer_fill(tc_scratch_video_buffer,
-        &rect,
-        tig_color_make(0, 0, 0));
-
-    highlighted = false;
-
-    // Check of the mouse is over the option's rect and pick an appropriate
-    // font.
-    //
-    // TODO: Probably missing horizontal rect constraints.
-    if (tig_mouse_get_state(&mouse_state) == TIG_OK
-        && mouse_state.x - tc_iso_window_rect.x >= tc_content_rect.x
-        && mouse_state.y - tc_iso_window_rect.y >= tc_content_rect.y
-        && mouse_state.x - tc_iso_window_rect.x < tc_content_rect.x + tc_content_rect.width
-        && mouse_state.y - tc_iso_window_rect.y < tc_content_rect.y + tc_content_rect.height
-        && mouse_state.y - tc_iso_window_rect.y - tc_content_rect.y >= rect.y
-        && mouse_state.y - tc_iso_window_rect.y - tc_content_rect.y < rect.y + rect.height) {
-        highlighted = true;
-
-        if (dword_5FF544) {
-            // NOTE: Since `dword_5FF544` is never set, this code path is dead.
-            tig_font_push(tc_red_font);
-        } else {
-            // Use yellow to highlight option.
-            tig_font_push(tc_yellow_font);
-        }
-    } else {
-        // Use white font for non-highlighted options.
-        tig_font_push(tc_white_font);
-    }
-
-    // Render the option text to the scratch (text) video buffer.
-    tig_font_write(tc_scratch_video_buffer, str, &rect, &dirty_rect);
-    tig_font_pop();
-
-    // Update content rect's width and reposition it if the text in this option
-    // is wider than the current width.
-    if (tc_content_rect.width < dirty_rect.width + tc_dialog_margin() * 2) {
-        tc_content_rect.width = dirty_rect.width + tc_dialog_margin() * 2;
-        tc_content_rect.x = (tc_iso_window_rect.width - tc_content_rect.width) / 2;
-    }
-
-    // Invalidate the content rect if conversation is currently visible.
-    if (tc_active) {
-        tc_iso_window_invalidate_rect(&tc_content_rect);
-    }
-
-    if (highlighted && tc_highlighted_idx != index) {
-        // Refresh the previously highlighted option to remove its highlight.
-        if (tc_highlighted_idx != -1) {
-            if (tc_options[tc_highlighted_idx] != NULL) {
-                tc_set_option(tc_highlighted_idx, tc_options[tc_highlighted_idx]);
-            }
-        }
-        tc_highlighted_idx = index;
-    }
+    tc_render_option(index, false);
 }
 
 /**
@@ -618,6 +557,10 @@ int tc_handle_message(TigMessage* msg)
         // Calculate the option index based on the mouse's vertical position.
         index = tc_option_index_from_y(msg->data.mouse.y - (tc_iso_window_rect.y + tc_content_rect.y));
         if (index != -1 && tc_options[index] != NULL) {
+            if (tc_highlighted_idx != -1) {
+                tc_render_option(tc_highlighted_idx, false);
+                tc_highlighted_idx = -1;
+            }
             return index;
         }
         return -1;
@@ -627,12 +570,12 @@ int tc_handle_message(TigMessage* msg)
 
         // Clear the previous highlight if mouse moved to a different option.
         if (tc_highlighted_idx != index && tc_highlighted_idx != -1) {
-            tc_set_option(tc_highlighted_idx, tc_options[tc_highlighted_idx]);
+            tc_render_option(tc_highlighted_idx, false);
         }
 
         // Highlight the new option if it exists.
-        if (tc_options[index] != NULL) {
-            tc_set_option(index, tc_options[index]);
+        if (index != -1 && tc_options[index] != NULL) {
+            tc_render_option(index, true);
             tc_highlighted_idx = index;
         } else {
             tc_highlighted_idx = -1;
@@ -654,7 +597,7 @@ int tc_content_height_for_lines(int lines)
         lines = TEXT_CONVERSATION_LINES;
     }
 
-    return lines * tc_line_height + (lines + 1) * TEXT_CONVERSATION_VERT_SPACING;
+    return tc_dialog_margin_vertical() * 2 + lines * tc_line_height + (lines + 1) * TEXT_CONVERSATION_VERT_SPACING;
 }
 
 int tc_dialog_font_size(void)
@@ -718,18 +661,19 @@ int tc_dialog_options_min(void)
     return value;
 }
 
-int tc_dialog_margin(void)
+int tc_dialog_margin_horizontal(void)
 {
-    int value;
+    return modern_font_int_for(DIALOG_MARGIN_KEY, 16, TEXT_CONVERSATION_HOR_PADDING, 80);
+}
 
-    value = settings_get_value(&settings, DIALOG_MARGIN_KEY);
-    if (value < TEXT_CONVERSATION_HOR_PADDING) {
-        value = TEXT_CONVERSATION_HOR_PADDING;
-    } else if (value > 80) {
-        value = 80;
-    }
+int tc_dialog_margin_vertical(void)
+{
+    return modern_font_int_for(DIALOG_MARGIN_VERTICAL_KEY, 8, 0, 80);
+}
 
-    return value;
+int tc_dialog_background_opacity(void)
+{
+    return modern_font_int_for(DIALOG_BACKGROUND_OPACITY_KEY, 18, 0, 255);
 }
 
 void tc_update_content_rect_height(void)
@@ -761,20 +705,67 @@ void tc_update_content_rect_height(void)
     }
 }
 
+void tc_render_option(int index, bool highlighted)
+{
+    TigRect rect;
+    TigRect dirty_rect;
+
+    if (index < 0 || index >= TEXT_CONVERSATION_LINES || tc_options[index] == NULL) {
+        return;
+    }
+
+    rect.x = tc_dialog_margin_horizontal();
+    rect.y = tc_dialog_margin_vertical() + index * (tc_line_height + TEXT_CONVERSATION_VERT_SPACING) + TEXT_CONVERSATION_VERT_SPACING;
+    rect.width = tc_intermediate_video_buffer_rect.width - tc_dialog_margin_horizontal() * 2;
+    rect.height = tc_line_height;
+
+    // Clear scratch (text) video buffer with black color (which is also a key
+    // color, effectively making it transparent).
+    tig_video_buffer_fill(tc_scratch_video_buffer,
+        &rect,
+        tig_color_make(0, 0, 0));
+
+    if (highlighted) {
+        if (dword_5FF544) {
+            // NOTE: Since `dword_5FF544` is never set, this code path is dead.
+            tig_font_push(tc_red_font);
+        } else {
+            tig_font_push(tc_yellow_font);
+        }
+    } else {
+        tig_font_push(tc_white_font);
+    }
+
+    tig_font_write(tc_scratch_video_buffer, tc_options[index], &rect, &dirty_rect);
+    tig_font_pop();
+
+    if (tc_content_rect.width < dirty_rect.width + tc_dialog_margin_horizontal() * 2) {
+        tc_content_rect.width = dirty_rect.width + tc_dialog_margin_horizontal() * 2;
+        tc_content_rect.x = (tc_iso_window_rect.width - tc_content_rect.width) / 2;
+    }
+
+    if (tc_active) {
+        tc_iso_window_invalidate_rect(&tc_content_rect);
+    }
+}
+
 int tc_option_index_from_y(int y)
 {
     int index;
+    int option_y;
 
     if (y < 0 || y >= tc_content_rect.height) {
         return -1;
     }
 
-    index = y / (tc_line_height + TEXT_CONVERSATION_VERT_SPACING);
-    if (index < 0 || index >= TEXT_CONVERSATION_LINES) {
-        return -1;
+    for (index = 0; index < TEXT_CONVERSATION_LINES; index++) {
+        option_y = tc_dialog_margin_vertical() + index * (tc_line_height + TEXT_CONVERSATION_VERT_SPACING) + TEXT_CONVERSATION_VERT_SPACING;
+        if (y >= option_y && y < option_y + tc_line_height) {
+            return index;
+        }
     }
 
-    return index;
+    return -1;
 }
 
 /**
@@ -861,10 +852,12 @@ void tc_render_internal(TigRectListNode* node)
             // Copy the window content to the backdrop buffer, tint it, and copy
             // it back.
             tig_window_blit(&win_to_vb_blt);
-            tig_video_buffer_tint(tc_backdrop_video_buffer,
-                &dst_rect,
-                tig_color_make(18, 18, 18),
-                TIG_VIDEO_BUFFER_TINT_MODE_SUB);
+            if (tc_dialog_background_opacity() > 0) {
+                tig_video_buffer_blend_color(tc_backdrop_video_buffer,
+                    &dst_rect,
+                    tig_color_make(0, 0, 0),
+                    tc_dialog_background_opacity());
+            }
             tig_window_blit(&vb_to_win_blt);
 
             // Store the affected rect in a new list for optimized text
