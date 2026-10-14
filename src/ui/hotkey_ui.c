@@ -3,6 +3,7 @@
 #include "game/gamelib.h"
 #include "game/gsound.h"
 #include "game/hrp.h"
+#include "game/input_bindings.h"
 #include "game/item.h"
 #include "game/mt_item.h"
 #include "game/obj_private.h"
@@ -359,8 +360,8 @@ bool hotkey_ui_process_event(TigMessage* msg)
     case TIG_MESSAGE_KEYBOARD:
         if (!textedit_ui_is_focused()
             && !mainmenu_ui_is_active()
-            && msg->data.keyboard.key == SDLK_A
-            && msg->data.keyboard.pressed) {
+            && msg->data.keyboard.pressed
+            && input_binding_matches_keyboard(INPUT_ACTION_REPEAT_ACTION, msg)) {
             intgame_hotkey_activate(stru_683518);
             gsound_play_sfx(0, 1);
             return true;

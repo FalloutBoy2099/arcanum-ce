@@ -7,43 +7,165 @@
 #include "game/obj_private.h"
 
 static SettingsEntry* settings_find(Settings* settings, const char* key);
-static bool settings_key_in_save_order(const char* key, const char* const* save_order);
-static void settings_save_ordered(FILE* stream, Settings* settings, const char* const* save_order);
+static const char* settings_normalize_key(const char* key);
+static const char* settings_normalize_section_key(const char* section, const char* key);
+static const char* settings_output_key(const char* key);
+static bool settings_key_in_save_order(const char* key, const char* const* const* save_order);
+static void settings_save_ordered(FILE* stream, Settings* settings, const char* const* const* save_order, const char* const* section_names);
 static void settings_trim(char* str);
 
-static const char* const arcanum_cfg_save_order[] = {
+static const char* const arcanum_ini_global_save_order[] = {
+    "language",
+    "show_version",
+    NULL,
+};
+
+static const char* const arcanum_ini_game_save_order[] = {
     "difficulty",
-    "violence filter",
-    "turn-based",
-    "fast turn-based",
-    "auto attack",
-    "auto switch",
-    "always run",
-    "follower skills",
-    "",
+    "violence_filter",
+    "turn_based",
+    "fast_turn_based",
+    "auto_attack",
+    "auto_switch",
+    "always_run",
+    "follower_skills",
+    "followers_manually_level_up",
+    NULL,
+};
+
+static const char* const arcanum_ini_video_save_order[] = {
     "brightness",
-    "text duration",
-    "text floaters",
-    "float speed",
-    "combat taunts",
-    "object lighting",
-    "",
-    "effects volume",
-    "interface volume",
+    "text_duration",
+    "text_floaters",
+    "float_speed",
+    "combat_taunts",
+    "dialog_font",
+    "logbook_font",
+    "main_menu_art",
+    "menu_borders",
+    "object_lighting",
+    "shadows",
+    NULL,
+};
+
+static const char* const arcanum_ini_audio_save_order[] = {
+    "effects_volume",
+    "interface_volume",
     "walking_volume",
     "object_volume",
     "spell_volume",
     "critter_volume",
-    "voice volume",
-    "music volume",
-    "",
-    "selected_char_id",
-    "",
-    "splash",
-    "shadows",
-    "",
-    "show version",
+    "voice_volume",
+    "music_volume",
+    "no_combat_music",
     NULL,
+};
+
+static const char* const arcanum_ini_ui_save_order[] = {
+    "dialog_options_min",
+    "dialog_options_max",
+    NULL,
+};
+
+static const char* const arcanum_ini_bindings_save_order[] = {
+    "main_menu",
+    "options",
+    "quick_save",
+    "quick_load",
+    "screenshot",
+    "toggle_compact_ui",
+    "binding_always_run",
+    "center_camera",
+    "",
+    "hotkey1",
+    "hotkey2",
+    "hotkey3",
+    "hotkey4",
+    "hotkey5",
+    "hotkey6",
+    "hotkey7",
+    "hotkey8",
+    "hotkey9",
+    "hotkey0",
+    "",
+    "character",
+    "inventory",
+    "logbook",
+    "map",
+    "fate",
+    "skills",
+    "spells",
+    "schematics",
+    "sleep",
+    "chat",
+    "repeat_action",
+    "combat_mode",
+    "toggle_combat",
+    "end_turn",
+    "",
+    "follower_walk",
+    "follower_attack",
+    "follower_stay_close",
+    "follower_spread_out",
+    "follower_stop",
+    "",
+    "scroll_up",
+    "scroll_down",
+    "scroll_left",
+    "scroll_right",
+    NULL,
+};
+
+static const char* const arcanum_ini_section_names[] = {
+    "global",
+    "game",
+    "video",
+    "audio",
+    "ui",
+    "bindings",
+    NULL,
+};
+
+static const char* const* const arcanum_ini_save_order[] = {
+    arcanum_ini_global_save_order,
+    arcanum_ini_game_save_order,
+    arcanum_ini_video_save_order,
+    arcanum_ini_audio_save_order,
+    arcanum_ini_ui_save_order,
+    arcanum_ini_bindings_save_order,
+    NULL,
+};
+
+static const char* const arcanum_cfg_save_order[] = {
+    "splash",
+    NULL,
+};
+
+typedef struct SettingsKeyAlias {
+    const char* legacy;
+    const char* current;
+} SettingsKeyAlias;
+
+static const SettingsKeyAlias settings_key_aliases[] = {
+    { "violence filter", "violence_filter" },
+    { "turn-based", "turn_based" },
+    { "fast turn-based", "fast_turn_based" },
+    { "auto attack", "auto_attack" },
+    { "auto switch", "auto_switch" },
+    { "always run", "always_run" },
+    { "follower skills", "follower_skills" },
+    { "followers manually level up", "followers_manually_level_up" },
+    { "text duration", "text_duration" },
+    { "text floaters", "text_floaters" },
+    { "float speed", "float_speed" },
+    { "combat taunts", "combat_taunts" },
+    { "object lighting", "object_lighting" },
+    { "effects volume", "effects_volume" },
+    { "interface volume", "interface_volume" },
+    { "voice volume", "voice_volume" },
+    { "music volume", "music_volume" },
+    { "show version", "show_version" },
+    { NULL, NULL },
 };
 
 /**
@@ -55,6 +177,7 @@ void settings_init(Settings* settings, const char* path)
 {
     settings->path = path;
     settings->entries = NULL;
+    settings->flags = 0;
 }
 
 /**
@@ -90,26 +213,51 @@ void settings_exit(Settings* settings)
  */
 void settings_load(Settings* settings)
 {
+    settings_load_legacy(settings, settings->path);
+}
+
+void settings_load_legacy(Settings* settings, const char* path)
+{
     bool exists;
     TigFindFileData find_file_data;
     FILE* stream;
     char buffer[256];
     char* sep;
+    char section[64];
+
+    section[0] = '\0';
 
     // Check if the settings file exists.
-    exists = tig_find_first_file(settings->path, &find_file_data);
+    exists = tig_find_first_file(path, &find_file_data);
     tig_find_close(&find_file_data); // FIX: Memory leak.
 
     if (!exists) {
         return;
     }
 
-    stream = fopen(settings->path, "rt");
+    stream = fopen(path, "rt");
     if (stream == NULL) {
         return;
     }
 
     while (fgets(buffer, sizeof(buffer), stream) != NULL) {
+        settings_trim(buffer);
+        if (buffer[0] == '[') {
+            char* section_end = strchr(buffer, ']');
+            if (section_end != NULL) {
+                *section_end = '\0';
+                SDL_strlcpy(section, buffer + 1, sizeof(section));
+                settings_trim(section);
+            }
+            continue;
+        }
+
+        if (buffer[0] == '\0'
+            || buffer[0] == '#'
+            || buffer[0] == ';') {
+            continue;
+        }
+
         // Find the key-value separator.
         sep = strchr(buffer, '=');
         if (sep != NULL) {
@@ -117,17 +265,19 @@ void settings_load(Settings* settings)
             *sep++ = '\0';
 
             // Trim whitespace from both key and value.
-            settings_trim(buffer);
             settings_trim(sep);
 
             // Only store non-empty key-value pairs.
             if (sep[0] != '\0' && buffer[0] != '\0') {
-                settings_set_str_value(settings, buffer, sep);
+                settings_set_str_value(settings, settings_normalize_section_key(section, buffer), sep);
             }
         }
     }
 
     fclose(stream);
+
+    // Loading existing files must not force an immediate rewrite.
+    settings->flags &= ~SETTINGS_CHANGED;
 }
 
 /**
@@ -156,8 +306,12 @@ void settings_save(Settings* settings)
         return;
     }
 
-    if (SDL_strcasecmp(settings->path, "arcanum.cfg") == 0) {
-        settings_save_ordered(stream, settings, arcanum_cfg_save_order);
+    if (SDL_strcasecmp(settings->path, "arcanum.ini") == 0) {
+        settings_save_ordered(stream, settings, arcanum_ini_save_order, arcanum_ini_section_names);
+    } else if (SDL_strcasecmp(settings->path, "arcanum.cfg") == 0) {
+        const char* const* const cfg_order[] = { arcanum_cfg_save_order, NULL };
+        const char* const cfg_sections[] = { NULL };
+        settings_save_ordered(stream, settings, cfg_order, cfg_sections);
     } else {
         curr = settings->entries;
         while (curr != NULL) {
@@ -186,13 +340,15 @@ void settings_save(Settings* settings)
 void settings_register(Settings* settings, const char* key, const char* default_value, SettingsValueChangedFunc value_changed_func)
 {
     SettingsEntry* entry;
+    const char* normalized_key;
 
-    entry = settings_find(settings, key);
+    normalized_key = settings_normalize_key(key);
+    entry = settings_find(settings, normalized_key);
     if (entry != NULL) {
         entry->value_changed_func = value_changed_func;
     } else {
         entry = (SettingsEntry*)MALLOC(sizeof(*entry));
-        entry->key = STRDUP(key);
+        entry->key = STRDUP(normalized_key);
         entry->value = STRDUP(default_value);
         entry->value_changed_func = value_changed_func;
         entry->next = settings->entries;
@@ -275,15 +431,17 @@ ObjectID settings_get_obj_value(Settings* settings, const char* key)
 void settings_set_str_value(Settings* settings, const char* key, const char* value)
 {
     SettingsEntry* entry;
+    const char* normalized_key;
 
     // Mark settings as changed to trigger saving.
     settings->flags |= SETTINGS_CHANGED;
+    normalized_key = settings_normalize_key(key);
 
     // Check if the key already exists.
-    entry = settings_find(settings, key);
+    entry = settings_find(settings, normalized_key);
     if (entry == NULL) {
         // Add a new entry if the key does not exist.
-        settings_register(settings, key, value, NULL);
+        settings_register(settings, normalized_key, value, NULL);
     } else {
         // Update the existing entry's value.
         if (strlen(value) > strlen(entry->value)) {
@@ -314,7 +472,7 @@ const char* settings_get_str_value(Settings* settings, const char* key)
 {
     SettingsEntry* entry;
 
-    entry = settings_find(settings, key);
+    entry = settings_find(settings, settings_normalize_key(key));
     if (entry != NULL) {
         return entry->value;
     } else {
@@ -342,63 +500,96 @@ SettingsEntry* settings_find(Settings* settings, const char* key)
     return NULL;
 }
 
-bool settings_key_in_save_order(const char* key, const char* const* save_order)
+const char* settings_normalize_key(const char* key)
 {
     int index;
 
-    for (index = 0; save_order[index] != NULL; index++) {
-        if (save_order[index][0] != '\0'
-            && SDL_strcasecmp(key, save_order[index]) == 0) {
-            return true;
+    for (index = 0; settings_key_aliases[index].legacy != NULL; index++) {
+        if (SDL_strcasecmp(key, settings_key_aliases[index].legacy) == 0) {
+            return settings_key_aliases[index].current;
+        }
+    }
+
+    return key;
+}
+
+const char* settings_normalize_section_key(const char* section, const char* key)
+{
+    if (SDL_strcasecmp(section, "bindings") == 0
+        && SDL_strcasecmp(key, "always_run") == 0) {
+        return "binding_always_run";
+    }
+
+    return settings_normalize_key(key);
+}
+
+const char* settings_output_key(const char* key)
+{
+    if (SDL_strcasecmp(key, "binding_always_run") == 0) {
+        return "always_run";
+    }
+
+    return key;
+}
+
+bool settings_key_in_save_order(const char* key, const char* const* const* save_order)
+{
+    int index;
+    int section;
+
+    for (section = 0; save_order[section] != NULL; section++) {
+        for (index = 0; save_order[section][index] != NULL; index++) {
+            if (save_order[section][index][0] != '\0'
+                && SDL_strcasecmp(key, save_order[section][index]) == 0) {
+                return true;
+            }
         }
     }
 
     return false;
 }
 
-void settings_save_ordered(FILE* stream, Settings* settings, const char* const* save_order)
+void settings_save_ordered(FILE* stream, Settings* settings, const char* const* const* save_order, const char* const* section_names)
 {
     SettingsEntry* entry;
-    SettingsEntry* curr;
     bool wrote;
     bool pending_blank;
     int index;
+    int section;
 
-    wrote = false;
-    pending_blank = false;
+    for (section = 0; save_order[section] != NULL; section++) {
+        wrote = false;
+        pending_blank = false;
 
-    for (index = 0; save_order[index] != NULL; index++) {
-        if (save_order[index][0] == '\0') {
-            if (wrote) {
-                pending_blank = true;
+        if (section_names[section] != NULL) {
+            fprintf(stream, "[%s]\n", section_names[section]);
+        }
+
+        for (index = 0; save_order[section][index] != NULL; index++) {
+            if (save_order[section][index][0] == '\0') {
+                if (wrote) {
+                    pending_blank = true;
+                }
+                continue;
             }
-            continue;
-        }
 
-        entry = settings_find(settings, save_order[index]);
-        if (entry == NULL) {
-            continue;
-        }
+            entry = settings_find(settings, save_order[section][index]);
+            if (entry == NULL) {
+                continue;
+            }
 
-        if (pending_blank) {
-            fprintf(stream, "\n");
-            pending_blank = false;
-        }
-
-        fprintf(stream, "%s=%s\n", entry->key, entry->value);
-        wrote = true;
-    }
-
-    curr = settings->entries;
-    while (curr != NULL) {
-        if (!settings_key_in_save_order(curr->key, save_order)) {
-            if (wrote) {
+            if (pending_blank) {
                 fprintf(stream, "\n");
-                wrote = false;
+                pending_blank = false;
             }
-            fprintf(stream, "%s=%s\n", curr->key, curr->value);
+
+            fprintf(stream, "%s=%s\n", settings_output_key(entry->key), entry->value);
+            wrote = true;
         }
-        curr = curr->next;
+
+        if (save_order[section + 1] != NULL) {
+            fprintf(stream, "\n");
+        }
     }
 }
 

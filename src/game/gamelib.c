@@ -24,6 +24,7 @@
 #include "game/gsound.h"
 #include "game/highres_config.h"
 #include "game/hrp.h"
+#include "game/input_bindings.h"
 #include "game/invensource.h"
 #include "game/item.h"
 #include "game/item_effect.h"
@@ -319,16 +320,25 @@ bool gamelib_init(GameInitInfo* init_info)
 
     if (init_info->editor) {
         settings_init(&settings, "worlded.cfg");
+        settings_load(&settings);
     } else {
-        settings_init(&settings, "arcanum.cfg");
+        settings_init(&settings, "arcanum.ini");
+        settings_load_legacy(&settings, "arcanum.cfg");
+        settings_load(&settings);
     }
-
-    settings_load(&settings);
 
     settings_register(&settings, DIFFICULTY_KEY, "1", difficulty_changed);
     difficulty_changed();
 
     settings_register(&settings, FOLLOWERS_MANUALLY_LEVEL_UP_KEY, "0", NULL);
+    settings_register(&settings, DIALOG_FONT_KEY, "0", NULL);
+    settings_register(&settings, LOGBOOK_FONT_KEY, "0", NULL);
+    settings_register(&settings, MAIN_MENU_ART_KEY, "0", NULL);
+    settings_register(&settings, MENU_BORDERS_KEY, "0", NULL);
+    settings_register(&settings, DIALOG_OPTIONS_MIN_KEY, "5", NULL);
+    settings_register(&settings, DIALOG_OPTIONS_MAX_KEY, "5", NULL);
+    settings_register(&settings, SHOW_VERSION_KEY, "0", NULL);
+    input_bindings_init();
 
     gamelib_mod_loaded = false;
     gamelib_load_data();
@@ -1759,6 +1769,7 @@ void gamelib_logo(void)
 // 0x404830
 void gamelib_splash(tig_window_handle_t window_handle)
 {
+    Settings splash_settings;
     int splash;
     TigVideoBuffer* video_buffer;
     TigVideoBufferData vb_data;
@@ -1770,8 +1781,10 @@ void gamelib_splash(tig_window_handle_t window_handle)
     TigRect src_rect;
     TigRect dst_rect;
 
-    settings_register(&settings, SPLASH_KEY, "0", NULL);
-    splash = settings_get_value(&settings, SPLASH_KEY);
+    settings_init(&splash_settings, "arcanum.cfg");
+    settings_load(&splash_settings);
+    settings_register(&splash_settings, SPLASH_KEY, "0", NULL);
+    splash = settings_get_value(&splash_settings, SPLASH_KEY);
 
     tig_file_list_create(&file_list, "art\\splash\\*.bmp");
 
@@ -1814,10 +1827,12 @@ void gamelib_splash(tig_window_handle_t window_handle)
             SDL_PumpEvents();
         }
 
-        settings_set_value(&settings, SPLASH_KEY, value + 1);
+        settings_set_value(&splash_settings, SPLASH_KEY, value + 1);
+        settings_save(&splash_settings);
     }
 
     tig_file_list_destroy(&file_list);
+    settings_exit(&splash_settings);
 }
 
 // 0x404A20

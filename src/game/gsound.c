@@ -610,6 +610,7 @@ bool gsound_init(GameInitInfo* init_info)
     settings_register(&settings, CRITTER_VOLUME_KEY, "5", gsound_critter_volume_changed);
     settings_register(&settings, VOICE_VOLUME_KEY, "5", gsound_voice_volume_changed);
     settings_register(&settings, MUSIC_VOLUME_KEY, "5", gsound_music_volume_changed);
+    settings_register(&settings, NO_COMBAT_MUSIC_KEY, "0", NULL);
     gsound_effects_volume_changed();
     gsound_interface_volume_changed();
     gsound_walking_volume_changed();
@@ -1773,7 +1774,7 @@ void gsound_start_combat_music(int64_t obj)
     char path[TIG_MAX_PATH];
     int type;
 
-    if (gsound_combat_music_active) {
+    if (gsound_combat_music_active || settings_get_value(&settings, NO_COMBAT_MUSIC_KEY) != 0) {
         return;
     }
 

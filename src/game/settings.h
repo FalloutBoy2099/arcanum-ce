@@ -25,6 +25,7 @@ typedef struct Settings {
 void settings_init(Settings* settings, const char* path);
 void settings_exit(Settings* settings);
 void settings_load(Settings* settings);
+void settings_load_legacy(Settings* settings, const char* path);
 void settings_save(Settings* settings);
 void settings_register(Settings* settings, const char* key, const char* default_value, SettingsValueChangedFunc value_changed_func);
 void settings_set_value(Settings* settings, const char* key, int value);

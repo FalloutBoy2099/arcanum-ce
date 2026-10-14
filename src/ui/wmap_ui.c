@@ -10,6 +10,7 @@
 #include "game/gamelib.h"
 #include "game/gsound.h"
 #include "game/hrp.h"
+#include "game/input_bindings.h"
 #include "game/location.h"
 #include "game/magictech.h"
 #include "game/map.h"
@@ -2292,6 +2293,46 @@ bool wmap_ui_message_filter(TigMessage* msg)
             return textedit_ui_process_message(msg);
         }
 
+        if (input_binding_matches_keyboard(INPUT_ACTION_CENTER_CAMERA, msg)) {
+            if (wmap_ui_state != WMAP_UI_STATE_MOVING) {
+                gsound_play_sfx(0, 1);
+                sub_563590(&(wmap_info->field_3C), true);
+            }
+            return true;
+        }
+
+        if (input_binding_matches_keyboard(INPUT_ACTION_SCROLL_LEFT, msg)) {
+            if (wmap_ui_state != WMAP_UI_STATE_MOVING) {
+                gsound_play_sfx(0, 1);
+                wmap_ui_scroll_with_kb(6);
+            }
+            return true;
+        }
+
+        if (input_binding_matches_keyboard(INPUT_ACTION_SCROLL_UP, msg)) {
+            if (wmap_ui_state != WMAP_UI_STATE_MOVING) {
+                gsound_play_sfx(0, 1);
+                wmap_ui_scroll_with_kb(0);
+            }
+            return true;
+        }
+
+        if (input_binding_matches_keyboard(INPUT_ACTION_SCROLL_RIGHT, msg)) {
+            if (wmap_ui_state != WMAP_UI_STATE_MOVING) {
+                gsound_play_sfx(0, 1);
+                wmap_ui_scroll_with_kb(2);
+            }
+            return true;
+        }
+
+        if (input_binding_matches_keyboard(INPUT_ACTION_SCROLL_DOWN, msg)) {
+            if (wmap_ui_state != WMAP_UI_STATE_MOVING) {
+                gsound_play_sfx(0, 1);
+                wmap_ui_scroll_with_kb(4);
+            }
+            return true;
+        }
+
         switch (msg->data.keyboard.scancode) {
         case SDL_SCANCODE_Z:
             if (msg->data.keyboard.pressed) {
@@ -2315,36 +2356,6 @@ bool wmap_ui_message_filter(TigMessage* msg)
                 return true;
             }
 
-            return true;
-        case SDL_SCANCODE_HOME:
-            if (wmap_ui_state != WMAP_UI_STATE_MOVING) {
-                gsound_play_sfx(0, 1);
-                sub_563590(&(wmap_info->field_3C), true);
-            }
-            return true;
-        case SDL_SCANCODE_LEFT:
-            if (wmap_ui_state != WMAP_UI_STATE_MOVING) {
-                gsound_play_sfx(0, 1);
-                wmap_ui_scroll_with_kb(6);
-            }
-            return true;
-        case SDL_SCANCODE_UP:
-            if (wmap_ui_state != WMAP_UI_STATE_MOVING) {
-                gsound_play_sfx(0, 1);
-                wmap_ui_scroll_with_kb(0);
-            }
-            return true;
-        case SDL_SCANCODE_RIGHT:
-            if (wmap_ui_state != WMAP_UI_STATE_MOVING) {
-                gsound_play_sfx(0, 1);
-                wmap_ui_scroll_with_kb(2);
-            }
-            return true;
-        case SDL_SCANCODE_DOWN:
-            if (wmap_ui_state != WMAP_UI_STATE_MOVING) {
-                gsound_play_sfx(0, 1);
-                wmap_ui_scroll_with_kb(4);
-            }
             return true;
         case SDL_SCANCODE_DELETE:
             if (msg->data.keyboard.pressed) {
@@ -2977,17 +2988,17 @@ void wmap_ui_handle_scroll(void)
         dword_66D9D0 = gamelib_ping_time;
 
         if (wmap_ui_state != WMAP_UI_STATE_MOVING) {
-            if (tig_kb_is_key_pressed(SDL_SCANCODE_LEFT)) {
+            if (input_binding_is_pressed(INPUT_ACTION_SCROLL_LEFT)) {
                 scroll_horizontally = true;
                 horizontal_direction = 6;
-            } else if (tig_kb_is_key_pressed(SDL_SCANCODE_RIGHT)) {
+            } else if (input_binding_is_pressed(INPUT_ACTION_SCROLL_RIGHT)) {
                 scroll_horizontally = true;
                 horizontal_direction = 2;
             }
 
-            if (tig_kb_is_key_pressed(SDL_SCANCODE_UP)) {
+            if (input_binding_is_pressed(INPUT_ACTION_SCROLL_UP)) {
                 vertical_direction = 0;
-            } else if (tig_kb_is_key_pressed(SDL_SCANCODE_DOWN)) {
+            } else if (input_binding_is_pressed(INPUT_ACTION_SCROLL_DOWN)) {
                 vertical_direction = 4;
             } else {
                 if (!scroll_horizontally) {

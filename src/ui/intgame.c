@@ -14,6 +14,7 @@
 #include "game/gamelib.h"
 #include "game/gsound.h"
 #include "game/hrp.h"
+#include "game/input_bindings.h"
 #include "game/item.h"
 #include "game/item_effect.h"
 #include "game/level.h"
@@ -139,6 +140,8 @@ static void intgame_ammo_icon_refresh(tig_art_id_t art_id);
 static bool iso_interface_message_filter(TigMessage* msg);
 static void intgame_secondary_button_toggle(IntgameSecondaryButton btn, RotatingWindowType window_type);
 static bool handle_button_unhover(TigMessage* msg);
+static bool intgame_handle_center_camera_binding(TigMessage* msg);
+static bool intgame_handle_follower_binding(TigMessage* msg);
 static void intgame_center_on_player(void);
 static void intgame_combat_mode_toggle(void);
 static void sub_54ECD0(void);
@@ -1865,8 +1868,8 @@ bool sub_54B5D0(TigMessage* msg)
     if (combat_turn_based_is_active()) {
         if (!player_is_local_pc_obj(combat_turn_based_whos_turn_get())) {
             if (msg->type == TIG_MESSAGE_KEYBOARD
-                && msg->data.keyboard.key == SDLK_SPACE
-                && msg->data.keyboard.pressed) {
+                && msg->data.keyboard.pressed
+                && input_binding_matches_keyboard(INPUT_ACTION_TOGGLE_COMBAT, msg)) {
                 combat_turn_based_toggle();
                 return true;
             }
@@ -1916,6 +1919,16 @@ bool sub_54B5D0(TigMessage* msg)
             }
 
             return false;
+        }
+
+        if (input_binding_matches_mouse(INPUT_ACTION_CENTER_CAMERA, msg)) {
+            intgame_center_on_player();
+            return true;
+        }
+
+        if (input_binding_matches_mouse(INPUT_ACTION_TOGGLE_COMBAT, msg)) {
+            intgame_combat_mode_toggle();
+            return true;
         }
 
         switch (msg->data.mouse.event) {
@@ -2493,17 +2506,21 @@ bool sub_54B5D0(TigMessage* msg)
                 break;
             }
         } else {
-            switch (msg->data.keyboard.scancode) {
-            case SDL_SCANCODE_K:
+            if (input_binding_matches_keyboard(INPUT_ACTION_SKILLS, msg)) {
                 if (!mainmenu_ui_is_active()) {
                     intgame_secondary_button_toggle(INTGAME_SECONDARY_BUTTON_SKILLS, ROTWIN_TYPE_SKILLS);
                 }
                 return true;
-            case SDL_SCANCODE_M:
+            }
+
+            if (input_binding_matches_keyboard(INPUT_ACTION_SPELLS, msg)) {
                 if (!mainmenu_ui_is_active()) {
                     intgame_secondary_button_toggle(INTGAME_SECONDARY_BUTTON_SPELLS, ROTWIN_TYPE_SPELLS);
                 }
                 return true;
+            }
+
+            switch (msg->data.keyboard.scancode) {
             case SDL_SCANCODE_COMMA:
             case SDL_SCANCODE_PERIOD:
             case SDL_SCANCODE_SLASH:
@@ -2515,28 +2532,49 @@ bool sub_54B5D0(TigMessage* msg)
         }
 
         if (msg->data.keyboard.pressed) {
-            switch (msg->data.keyboard.key) {
-            case SDLK_SPACE:
+            if (input_binding_matches_keyboard(INPUT_ACTION_TOGGLE_COMBAT, msg)) {
                 combat_turn_based_toggle();
                 gsound_play_sfx(0, 1);
                 return true;
-            case SDLK_C:
+            }
+
+            if (input_binding_matches_keyboard(INPUT_ACTION_CHARACTER, msg)) {
                 sub_552740(player_get_local_pc_obj(), CHAREDIT_MODE_ACTIVE);
                 gsound_play_sfx(0, 1);
                 return true;
-            case SDLK_F:
-                fate_ui_toggle(player_get_local_pc_obj());
-                gsound_play_sfx(0, 1);
-                return true;
-            case SDLK_I:
+            }
+
+            if (input_binding_matches_keyboard(INPUT_ACTION_INVENTORY, msg)) {
                 inven_ui_open(player_get_local_pc_obj(), OBJ_HANDLE_NULL, INVEN_UI_MODE_INVENTORY);
                 gsound_play_sfx(0, 1);
                 return true;
-            case SDLK_R:
+            }
+
+            if (input_binding_matches_keyboard(INPUT_ACTION_LOGBOOK, msg)) {
+                logbook_ui_open(player_get_local_pc_obj());
+                gsound_play_sfx(0, 1);
+                return true;
+            }
+
+            if (input_binding_matches_keyboard(INPUT_ACTION_MAP, msg)) {
+                wmap_ui_open();
+                gsound_play_sfx(0, 1);
+                return true;
+            }
+
+            if (input_binding_matches_keyboard(INPUT_ACTION_FATE, msg)) {
+                fate_ui_toggle(player_get_local_pc_obj());
+                gsound_play_sfx(0, 1);
+                return true;
+            }
+
+            if (input_binding_matches_keyboard(INPUT_ACTION_COMBAT_MODE, msg)) {
                 intgame_combat_mode_toggle();
                 gsound_play_sfx(0, 1);
                 return true;
-            case SDLK_S:
+            }
+
+            if (input_binding_matches_keyboard(INPUT_ACTION_SLEEP, msg)) {
                 // Plain S opens the sleep menu; let Ctrl/Cmd+S fall through
                 // to main.c's Save Game shortcut.
                 if (tig_kb_get_modifier(SDL_KMOD_CTRL | SDL_KMOD_GUI)) {
@@ -2545,15 +2583,15 @@ bool sub_54B5D0(TigMessage* msg)
                 sleep_ui_toggle(OBJ_HANDLE_NULL);
                 gsound_play_sfx(0, 1);
                 return true;
-            case SDLK_T:
+            }
+
+            if (input_binding_matches_keyboard(INPUT_ACTION_SCHEMATICS, msg)) {
                 schematic_ui_toggle(player_get_local_pc_obj(), player_get_local_pc_obj());
                 gsound_play_sfx(0, 1);
                 return true;
-            case SDLK_W:
-                wmap_ui_open();
-                gsound_play_sfx(0, 1);
-                return true;
-            case SDLK_RETURN:
+            }
+
+            if (input_binding_matches_keyboard(INPUT_ACTION_CHAT, msg)) {
                 if (intgame_iso_window_type == ROTWIN_TYPE_QUANTITY) {
                     sub_578B80(intgame_quantity);
                     intgame_mode_set(INTGAME_MODE_MAIN);
@@ -2582,6 +2620,41 @@ bool iso_interface_message_filter(TigMessage* msg)
     // NOTE: Strange case - this function is huge but it's binary identical to
     // 0x54B5D0.
     return sub_54B5D0(msg);
+}
+
+static bool intgame_handle_center_camera_binding(TigMessage* msg)
+{
+    if ((msg->type == TIG_MESSAGE_KEYBOARD
+            && !msg->data.keyboard.pressed
+            && input_binding_matches_keyboard(INPUT_ACTION_CENTER_CAMERA, msg))
+        || (msg->type == TIG_MESSAGE_MOUSE
+            && input_binding_matches_mouse(INPUT_ACTION_CENTER_CAMERA, msg))) {
+        intgame_center_on_player();
+        return true;
+    }
+
+    return false;
+}
+
+static bool intgame_handle_follower_binding(TigMessage* msg)
+{
+    int index;
+    int64_t loc;
+
+    if (msg->type != TIG_MESSAGE_KEYBOARD
+        || msg->data.keyboard.pressed) {
+        return false;
+    }
+
+    index = input_binding_follower_index(msg);
+    if (index == -1) {
+        return false;
+    }
+
+    intgame_get_location_under_cursor(&loc);
+    sub_4C3BE0(index, loc);
+
+    return true;
 }
 
 // 0x54DBF0
@@ -2692,16 +2765,21 @@ void intgame_process_event(TigMessage* msg)
 
     if (msg->type == TIG_MESSAGE_KEYBOARD
         && !textedit_ui_is_focused()
-        && !msg->data.keyboard.pressed
-        && msg->data.keyboard.scancode >= SDL_SCANCODE_1
-        && msg->data.keyboard.scancode <= SDL_SCANCODE_0) {
-        sub_57F1D0(msg->data.keyboard.scancode - SDL_SCANCODE_1);
+        && !msg->data.keyboard.pressed) {
+        int hotkey_index = input_binding_hotkey_index(msg);
+        if (hotkey_index != -1) {
+            sub_57F1D0(hotkey_index);
+        }
     }
 
     switch (intgame_mode_get()) {
     case INTGAME_MODE_MAIN:
         switch (msg->type) {
         case TIG_MESSAGE_MOUSE:
+            if (intgame_handle_center_camera_binding(msg)) {
+                break;
+            }
+
             switch (msg->data.mouse.event) {
             case TIG_MESSAGE_MOUSE_LEFT_BUTTON_DOWN:
                 if (sub_5517A0(msg)
@@ -2731,7 +2809,7 @@ void intgame_process_event(TigMessage* msg)
                         } else if (critter_is_active(pc_obj)
                             && !tig_kb_get_modifier(SDL_KMOD_SHIFT)) {
                             if ((tig_kb_get_modifier(SDL_KMOD_CTRL)
-                                    || tig_kb_get_modifier(SDL_KMOD_NUM))
+                                    || input_binding_is_pressed(INPUT_ACTION_ALWAYS_RUN))
                                 && !settings_get_value(&settings, ALWAYS_RUN_KEY)) {
                                 anim_goal_run_to_tile(pc_obj, td.loc);
                             } else {
@@ -2811,22 +2889,8 @@ void intgame_process_event(TigMessage* msg)
         case TIG_MESSAGE_KEYBOARD:
             if (!textedit_ui_is_focused()
                 && !msg->data.keyboard.pressed) {
-                switch (msg->data.keyboard.scancode) {
-                case SDL_SCANCODE_F1:
-                case SDL_SCANCODE_F2:
-                case SDL_SCANCODE_F3:
-                case SDL_SCANCODE_F4:
-                case SDL_SCANCODE_F5:
-                case SDL_SCANCODE_F6:
-                    intgame_get_location_under_cursor(&loc);
-                    sub_4C3BE0(msg->data.keyboard.scancode - SDL_SCANCODE_F1, loc);
-                    break;
-                case SDL_SCANCODE_HOME:
-                    intgame_center_on_player();
-                    break;
-                default:
-                    break;
-                }
+                intgame_handle_follower_binding(msg);
+                intgame_handle_center_camera_binding(msg);
             }
             break;
         case TIG_MESSAGE_PING:
@@ -2876,21 +2940,11 @@ void intgame_process_event(TigMessage* msg)
                             spell_ui_aggressive_mode_on();
                         }
                         break;
-                    case SDL_SCANCODE_F1:
-                    case SDL_SCANCODE_F2:
-                    case SDL_SCANCODE_F3:
-                    case SDL_SCANCODE_F4:
-                    case SDL_SCANCODE_F5:
-                    case SDL_SCANCODE_F6:
-                        intgame_get_location_under_cursor(&loc);
-                        sub_4C3BE0(msg->data.keyboard.scancode - SDL_SCANCODE_F1, loc);
-                        break;
-                    case SDL_SCANCODE_HOME:
-                        intgame_center_on_player();
-                        break;
                     default:
                         break;
                     }
+                    intgame_handle_follower_binding(msg);
+                    intgame_handle_center_camera_binding(msg);
                 } else {
                     switch (msg->data.keyboard.scancode) {
                     case SDL_SCANCODE_LALT:
@@ -2939,22 +2993,8 @@ void intgame_process_event(TigMessage* msg)
         case TIG_MESSAGE_KEYBOARD:
             if (!textedit_ui_is_focused()) {
                 if (!msg->data.keyboard.pressed) {
-                    switch (msg->data.keyboard.scancode) {
-                    case SDL_SCANCODE_F1:
-                    case SDL_SCANCODE_F2:
-                    case SDL_SCANCODE_F3:
-                    case SDL_SCANCODE_F4:
-                    case SDL_SCANCODE_F5:
-                    case SDL_SCANCODE_F6:
-                        intgame_get_location_under_cursor(&loc);
-                        sub_4C3BE0(msg->data.keyboard.scancode - SDL_SCANCODE_F1, loc);
-                        break;
-                    case SDL_SCANCODE_HOME:
-                        intgame_center_on_player();
-                        break;
-                    default:
-                        break;
-                    }
+                    intgame_handle_follower_binding(msg);
+                    intgame_handle_center_camera_binding(msg);
                 }
             }
             break;
@@ -2984,7 +3024,7 @@ void intgame_process_event(TigMessage* msg)
                     && !critter_is_dead(pc_obj)
                     && !tig_kb_get_modifier(SDL_KMOD_SHIFT)) {
                     if ((tig_kb_get_modifier(SDL_KMOD_CTRL)
-                            || tig_kb_get_modifier(SDL_KMOD_NUM))
+                            || input_binding_is_pressed(INPUT_ACTION_ALWAYS_RUN))
                         && !settings_get_value(&settings, ALWAYS_RUN_KEY)) {
                         anim_goal_run_to_tile(pc_obj, td.loc);
                     } else {
@@ -3079,22 +3119,8 @@ void intgame_process_event(TigMessage* msg)
         case TIG_MESSAGE_KEYBOARD:
             if (textedit_ui_is_focused()
                 && !msg->data.keyboard.pressed) {
-                switch (msg->data.keyboard.scancode) {
-                case SDL_SCANCODE_F1:
-                case SDL_SCANCODE_F2:
-                case SDL_SCANCODE_F3:
-                case SDL_SCANCODE_F4:
-                case SDL_SCANCODE_F5:
-                case SDL_SCANCODE_F6:
-                    intgame_get_location_under_cursor(&loc);
-                    sub_4C3BE0(msg->data.keyboard.scancode - SDL_SCANCODE_F1, loc);
-                    break;
-                case SDL_SCANCODE_HOME:
-                    intgame_center_on_player();
-                    break;
-                default:
-                    break;
-                }
+                intgame_handle_follower_binding(msg);
+                intgame_handle_center_camera_binding(msg);
             }
             break;
         case TIG_MESSAGE_PING:
@@ -3564,7 +3590,7 @@ void sub_54ED30(TargetDescriptor* td)
             if (tig_kb_get_modifier(SDL_KMOD_SHIFT)) {
                 flags |= 0x100;
             } else if (tig_kb_get_modifier(SDL_KMOD_CTRL)
-                || ((!tig_kb_get_modifier(SDL_KMOD_NUM) || get_always_run(pc_obj))
+                || ((!input_binding_is_pressed(INPUT_ACTION_ALWAYS_RUN) || get_always_run(pc_obj))
                     && !tig_kb_get_modifier(SDL_KMOD_CTRL))) {
                 flags |= 0x40;
             }
@@ -3626,7 +3652,7 @@ void sub_54ED30(TargetDescriptor* td)
                     } else if (tig_kb_get_modifier(SDL_KMOD_CTRL)) {
                         turn_on_running(anim_id);
                     } else {
-                        if (tig_kb_get_modifier(SDL_KMOD_NUM)) {
+                        if (input_binding_is_pressed(INPUT_ACTION_ALWAYS_RUN)) {
                             if (get_always_run(pc_obj)
                                 && !tig_kb_get_modifier(SDL_KMOD_CTRL)) {
                                 turn_on_running(anim_id);
@@ -3657,7 +3683,7 @@ void sub_54ED30(TargetDescriptor* td)
                 } else if (tig_kb_get_modifier(SDL_KMOD_CTRL)) {
                     turn_on_running(anim_id);
                 } else {
-                    if (tig_kb_get_modifier(SDL_KMOD_NUM)) {
+                    if (input_binding_is_pressed(INPUT_ACTION_ALWAYS_RUN)) {
                         if (get_always_run(pc_obj)
                             && !tig_kb_get_modifier(SDL_KMOD_CTRL)) {
                             turn_on_running(anim_id);
@@ -3687,7 +3713,7 @@ void sub_54ED30(TargetDescriptor* td)
         if (tig_kb_get_modifier(SDL_KMOD_CTRL)) {
             turn_on_running(anim_id);
         } else {
-            if (tig_kb_get_modifier(SDL_KMOD_NUM)) {
+            if (input_binding_is_pressed(INPUT_ACTION_ALWAYS_RUN)) {
                 if (get_always_run(pc_obj)
                     && !tig_kb_get_modifier(SDL_KMOD_CTRL)) {
                     turn_on_running(anim_id);

@@ -128,7 +128,18 @@ Several configuration options are available as command-line switches (admittedly
 
 When `HighRes/config.ini` from the Unofficial Arcanum Patch is present in the game directory, Community Edition also imports `Width`, `Height`, `Windowed`, `ShowFPS`, `ScrollFPS`, `ScrollDist`, `Logos`, and `Intro` at startup.
 
-In windowed mode the window is resizable. The framebuffer is scaled with nearest-neighbor filtering, so the picture stays sharp when the window is enlarged.
+In windowed mode the window is resizable. The framebuffer is scaled with linear filtering to keep the game view close to the original presentation when the window is enlarged.
+
+Runtime options are stored in `arcanum.ini`. The legacy `arcanum.cfg` file is kept only for the startup `splash` counter. Existing values from `arcanum.cfg` are imported on startup when possible, but new options are written with sectioned keys:
+
+- `[global]`: language and version display.
+- `[game]`: difficulty, combat behavior, auto attack, always run, and follower options.
+- `[video]`: brightness, floaters, dialogue/logbook font size, menu art, UAP-style borders, lighting, and shadows.
+- `[audio]`: effects, interface, walking, object, spell, critter, voice, music, and `no_combat_music`.
+- `[ui]`: dialogue option minimum and maximum.
+- `[bindings]`: keyboard and mouse bindings.
+
+Bindings accept one or two inputs separated by `|`, for example `center_camera=HOME|MIDDLE_MOUSE`. Supported mouse names are `MIDDLE_MOUSE`, `PREVIOUS_MOUSE`, and `NEXT_MOUSE`.
 
 `DialogScale` (in `HighRes/config.ini`) enlarges conversation text, which is helpful on high-DPI displays where the original bitmap fonts render very small. It accepts a float in the range `1.0` to `3.0` (values above are clamped); `1.0` (the default) keeps the original size. Both the player's dialogue options and the NPC reply are scaled, the reply bubble is widened so long lines wrap sensibly, and the reply is kept clear of the options box to avoid overlap. Example:
 

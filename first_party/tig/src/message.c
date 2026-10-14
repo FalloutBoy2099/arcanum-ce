@@ -134,6 +134,12 @@ void tig_message_ping(void)
             case SDL_BUTTON_MIDDLE:
                 tig_mouse_set_button(TIG_MOUSE_BUTTON_MIDDLE, event.button.down);
                 break;
+            case SDL_BUTTON_X1:
+                tig_mouse_set_button(TIG_MOUSE_BUTTON_X1, event.button.down);
+                break;
+            case SDL_BUTTON_X2:
+                tig_mouse_set_button(TIG_MOUSE_BUTTON_X2, event.button.down);
+                break;
             }
             break;
         case SDL_EVENT_MOUSE_WHEEL:

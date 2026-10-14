@@ -3,6 +3,7 @@
 #include "game/anim.h"
 #include "game/combat.h"
 #include "game/hrp.h"
+#include "game/input_bindings.h"
 #include "game/obj.h"
 #include "game/player.h"
 #include "ui/anim_ui.h"
@@ -653,8 +654,12 @@ bool combat_ui_message_filter(TigMessage* msg)
 
     switch (msg->type) {
     case TIG_MESSAGE_BUTTON:
-        if (msg->data.button.state == TIG_BUTTON_STATE_RELEASED
-            && msg->data.button.button_handle == combat_ui_end_turn_button_info.button_handle) {
+    case TIG_MESSAGE_MOUSE:
+        if ((msg->type == TIG_MESSAGE_BUTTON
+                && msg->data.button.state == TIG_BUTTON_STATE_RELEASED
+                && msg->data.button.button_handle == combat_ui_end_turn_button_info.button_handle)
+            || (msg->type == TIG_MESSAGE_MOUSE
+                && input_binding_matches_mouse(INPUT_ACTION_END_TURN, msg))) {
             obj = combat_turn_based_whos_turn_get();
             if (obj != OBJ_HANDLE_NULL
                 && player_is_local_pc_obj(obj)
@@ -669,7 +674,7 @@ bool combat_ui_message_filter(TigMessage* msg)
     case TIG_MESSAGE_KEYBOARD:
         if (!textedit_ui_is_focused()
             && !msg->data.keyboard.pressed
-            && msg->data.keyboard.scancode == SDL_SCANCODE_E) {
+            && input_binding_matches_keyboard(INPUT_ACTION_END_TURN, msg)) {
             obj = combat_turn_based_whos_turn_get();
             if (obj != OBJ_HANDLE_NULL
                 && player_is_local_pc_obj(obj)

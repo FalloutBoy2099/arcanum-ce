@@ -6,6 +6,7 @@
 #include "game/anim.h"
 #include "game/area.h"
 #include "game/critter.h"
+#include "game/gamelib.h"
 #include "game/item.h"
 #include "game/magictech.h"
 #include "game/mes.h"
@@ -388,6 +389,20 @@ bool dialog_init(GameInitInfo* init_info)
     }
 
     return true;
+}
+
+static int dialog_options_max(void)
+{
+    int value;
+
+    value = settings_get_value(&settings, DIALOG_OPTIONS_MAX_KEY);
+    if (value < 1) {
+        value = 1;
+    } else if (value > DIALOG_MAX_OPTIONS) {
+        value = DIALOG_MAX_OPTIONS;
+    }
+
+    return value;
 }
 
 // 0x412D80
@@ -1338,7 +1353,7 @@ int sub_414F50(DialogState* a1, int* a2)
 
     cnt = 0;
 
-    for (idx = (int)(entry - dialog->entries) + 1; idx < dialog->entries_length && cnt < DIALOG_MAX_OPTIONS; idx++) {
+    for (idx = (int)(entry - dialog->entries) + 1; idx < dialog->entries_length && cnt < dialog_options_max(); idx++) {
         entry = &(dialog->entries[idx]);
         if (entry->iq == 0) {
             return cnt;

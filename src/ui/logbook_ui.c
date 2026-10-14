@@ -8,6 +8,7 @@
 #include "game/curse.h"
 #include "game/description.h"
 #include "game/effect.h"
+#include "game/gamelib.h"
 #include "game/gsound.h"
 #include "game/item.h"
 #include "game/location.h"
@@ -361,8 +362,15 @@ bool logbook_ui_init(GameInitInfo* init_info)
 {
     TigFont font_info;
     int index;
+    TigFontFlags body_font_flags = 0;
+    float body_font_scale = 1.0f;
 
     (void)init_info;
+
+    if (settings_get_value(&settings, LOGBOOK_FONT_KEY) != 0) {
+        body_font_flags = TIG_FONT_SCALE;
+        body_font_scale = 14.0f / 12.0f;
+    }
 
     // Load UI messages (required).
     if (!mes_load("mes\\logbk_ui.mes", &logbook_ui_mes_file)) {
@@ -375,41 +383,46 @@ bool logbook_ui_init(GameInitInfo* init_info)
     }
 
     // Plain black - default body text.
-    font_info.flags = 0;
+    font_info.flags = body_font_flags;
     tig_art_interface_id_create(229, 0, 0, 0, &(font_info.art_id));
     font_info.str = NULL;
     font_info.color = tig_color_make(0, 0, 0);
+    font_info.scale = body_font_scale;
     tig_font_create(&font_info, &logbook_ui_font_default);
 
     // Centred black - page numbers in the footer.
-    font_info.flags = TIG_FONT_CENTERED;
+    font_info.flags = TIG_FONT_CENTERED | body_font_flags;
     tig_art_interface_id_create(229, 0, 0, 0, &(font_info.art_id));
     font_info.str = NULL;
     font_info.color = tig_color_make(0, 0, 0);
+    font_info.scale = body_font_scale;
     tig_font_create(&font_info, &logbook_ui_font_page_numbers);
 
     // Black strikethrough - quelled rumors and healed injuries.
-    font_info.flags = TIG_FONT_STRIKE_THROUGH;
+    font_info.flags = TIG_FONT_STRIKE_THROUGH | body_font_flags;
     tig_art_interface_id_create(229, 0, 0, 0, &(font_info.art_id));
     font_info.str = NULL;
     font_info.color = tig_color_make(0, 0, 0);
     font_info.strike_through_color = font_info.color;
+    font_info.scale = body_font_scale;
     tig_font_create(&font_info, &logbook_ui_font_struck);
 
     // Green strikethrough - quests completed by the player's party.
-    font_info.flags = TIG_FONT_STRIKE_THROUGH;
+    font_info.flags = TIG_FONT_STRIKE_THROUGH | body_font_flags;
     tig_art_interface_id_create(229, 0, 0, 0, &(font_info.art_id));
     font_info.str = NULL;
     font_info.color = tig_color_make(0, 120, 0);
     font_info.strike_through_color = font_info.color;
+    font_info.scale = body_font_scale;
     tig_font_create(&font_info, &logbook_ui_font_quest_completed);
 
     // Red strikethrough - quests that were botched or completed by others.
-    font_info.flags = TIG_FONT_STRIKE_THROUGH;
+    font_info.flags = TIG_FONT_STRIKE_THROUGH | body_font_flags;
     tig_art_interface_id_create(229, 0, 0, 0, &(font_info.art_id));
     font_info.str = NULL;
     font_info.color = tig_color_make(150, 0, 0);
     font_info.strike_through_color = font_info.color;
+    font_info.scale = body_font_scale;
     tig_font_create(&font_info, &logbook_ui_font_quest_failed);
 
     // Large centred - tab headings above each page.
@@ -417,20 +430,23 @@ bool logbook_ui_init(GameInitInfo* init_info)
     tig_art_interface_id_create(27, 0, 0, 0, &(font_info.art_id));
     font_info.str = NULL;
     font_info.color = tig_color_make(0, 0, 0);
+    font_info.scale = 1.0f;
     tig_font_create(&font_info, &logbook_ui_font_header);
 
     // Blue - active quests and blessings currently in effect.
-    font_info.flags = 0;
+    font_info.flags = body_font_flags;
     tig_art_interface_id_create(229, 0, 0, 0, &(font_info.art_id));
     font_info.str = NULL;
     font_info.color = tig_color_make(0, 0, 150);
+    font_info.scale = body_font_scale;
     tig_font_create(&font_info, &logbook_ui_font_active);
 
     // Red - active curses currently in effect.
-    font_info.flags = 0;
+    font_info.flags = body_font_flags;
     tig_art_interface_id_create(229, 0, 0, 0, &(font_info.art_id));
     font_info.str = NULL;
     font_info.color = tig_color_make(150, 0, 0);
+    font_info.scale = body_font_scale;
     tig_font_create(&font_info, &logbook_ui_font_curse);
 
     // Measure a single line of the default font (used as inter-entry spacing).

@@ -82,6 +82,8 @@ set(SRCS
     "src/game/highres_config.h"
     "src/game/hrp.c"
     "src/game/hrp.h"
+    "src/game/input_bindings.c"
+    "src/game/input_bindings.h"
     "src/game/invensource.c"
     "src/game/invensource.h"
     "src/game/item_effect.c"

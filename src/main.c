@@ -20,6 +20,7 @@
 #include "game/gmovie.h"
 #include "game/gsound.h"
 #include "game/highres_config.h"
+#include "game/input_bindings.h"
 #include "game/hrp.h"
 #include "game/item.h"
 #include "game/level.h"
@@ -246,6 +247,9 @@ int main(int argc, char** argv)
         return EXIT_SUCCESS; // FIXME: Should be `EXIT_FAILURE`.
     }
 
+    screenshotter.key = input_binding_primary_scancode(INPUT_ACTION_SCREENSHOT, SDL_SCANCODE_F12);
+    tig_video_screenshot_set_settings(&screenshotter);
+
     if (strstr(lpCmdLine, "-dialogcheck") != NULL) {
         dialog_check();
     }
@@ -439,8 +443,29 @@ void main_loop(void)
                 }
 
                 if (!message.data.keyboard.pressed) {
+                    bool main_menu_binding = input_binding_matches_keyboard(INPUT_ACTION_MAIN_MENU, &message);
+                    bool compact_ui_binding = input_binding_matches_keyboard(INPUT_ACTION_TOGGLE_COMPACT_UI, &message);
+                    bool options_binding = input_binding_matches_keyboard(INPUT_ACTION_OPTIONS, &message);
+                    bool quick_save_binding = input_binding_matches_keyboard(INPUT_ACTION_QUICK_SAVE, &message);
+                    bool quick_load_binding = input_binding_matches_keyboard(INPUT_ACTION_QUICK_LOAD, &message);
+
+                    if (main_menu_binding) {
+                        message.data.keyboard.scancode = SDL_SCANCODE_ESCAPE;
+                    } else if (compact_ui_binding) {
+                        message.data.keyboard.scancode = SDL_SCANCODE_F10;
+                    } else if (options_binding) {
+                        message.data.keyboard.scancode = SDL_SCANCODE_O;
+                    } else if (quick_save_binding) {
+                        message.data.keyboard.scancode = SDL_SCANCODE_F7;
+                    } else if (quick_load_binding) {
+                        message.data.keyboard.scancode = SDL_SCANCODE_F8;
+                    }
+
                     switch (message.data.keyboard.scancode) {
                     case SDL_SCANCODE_ESCAPE: {
+                        if (!main_menu_binding) {
+                            break;
+                        }
                         IntgameMode esc_mode = intgame_mode_get();
                         if (esc_mode != INTGAME_MODE_MAIN
                             && esc_mode != INTGAME_MODE_DIALOG) {
@@ -461,6 +486,9 @@ void main_loop(void)
                         break;
                     }
                     case SDL_SCANCODE_F10:
+                        if (!compact_ui_binding) {
+                            break;
+                        }
                         intgame_toggle_interface();
                         tig_debug_printf("iso_redraw...");
                         iso_redraw();
@@ -469,6 +497,10 @@ void main_loop(void)
                         tig_debug_printf("completed.\n");
                         break;
                     case SDL_SCANCODE_O:
+                        if (!options_binding
+                            && !tig_kb_get_modifier(SDL_KMOD_CTRL | SDL_KMOD_GUI)) {
+                            break;
+                        }
                         // Plain O → Options menu (existing in-game shortcut).
                         // Cmd/Ctrl+O → Load Game menu (mnemonic: "Open").
                         if (!textedit_ui_is_focused()) {
@@ -483,6 +515,9 @@ void main_loop(void)
                         }
                         break;
                     case SDL_SCANCODE_F7:
+                        if (!quick_save_binding) {
+                            break;
+                        }
                         if (!critter_is_dead(player_get_local_pc_obj())) {
                             if (wmap_ui_is_created()) {
                                 wmap_ui_close();
@@ -504,6 +539,9 @@ void main_loop(void)
                         }
                         break;
                     case SDL_SCANCODE_F8:
+                        if (!quick_load_binding) {
+                            break;
+                        }
                         mainmenu_ui_feedback_loading();
                         sub_543220();
                         mainmenu_ui_feedback_loading_completed();
@@ -810,25 +848,25 @@ void handle_mouse_scroll(void)
 // 0x402010
 void handle_keyboard_scroll(void)
 {
-    if (tig_kb_is_key_pressed(SDL_SCANCODE_UP)) {
-        if (tig_kb_is_key_pressed(SDL_SCANCODE_LEFT)) {
+    if (input_binding_is_pressed(INPUT_ACTION_SCROLL_UP)) {
+        if (input_binding_is_pressed(INPUT_ACTION_SCROLL_LEFT)) {
             scroll_start(SCROLL_DIRECTION_UP_LEFT);
-        } else if (tig_kb_is_key_pressed(SDL_SCANCODE_RIGHT)) {
+        } else if (input_binding_is_pressed(INPUT_ACTION_SCROLL_RIGHT)) {
             scroll_start(SCROLL_DIRECTION_UP_RIGHT);
         } else {
             scroll_start(SCROLL_DIRECTION_UP);
         }
-    } else if (tig_kb_is_key_pressed(SDL_SCANCODE_DOWN)) {
-        if (tig_kb_is_key_pressed(SDL_SCANCODE_LEFT)) {
+    } else if (input_binding_is_pressed(INPUT_ACTION_SCROLL_DOWN)) {
+        if (input_binding_is_pressed(INPUT_ACTION_SCROLL_LEFT)) {
             scroll_start(SCROLL_DIRECTION_DOWN_LEFT);
-        } else if (tig_kb_is_key_pressed(SDL_SCANCODE_RIGHT)) {
+        } else if (input_binding_is_pressed(INPUT_ACTION_SCROLL_RIGHT)) {
             scroll_start(SCROLL_DIRECTION_DOWN_RIGHT);
         } else {
             scroll_start(SCROLL_DIRECTION_DOWN);
         }
-    } else if (tig_kb_is_key_pressed(SDL_SCANCODE_LEFT)) {
+    } else if (input_binding_is_pressed(INPUT_ACTION_SCROLL_LEFT)) {
         scroll_start(SCROLL_DIRECTION_LEFT);
-    } else if (tig_kb_is_key_pressed(SDL_SCANCODE_RIGHT)) {
+    } else if (input_binding_is_pressed(INPUT_ACTION_SCROLL_RIGHT)) {
         scroll_start(SCROLL_DIRECTION_RIGHT);
     }
 }

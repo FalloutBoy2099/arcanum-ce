@@ -1,6 +1,7 @@
 #include "game/tc.h"
 
 #include "game/dialog.h"
+#include "game/gamelib.h"
 #include "game/highres_config.h"
 
 /**
@@ -30,6 +31,9 @@
 #define TEXT_CONVERSATION_VERT_SPACING 3
 
 static void tc_render_internal(TigRectListNode* node);
+static int tc_dialog_font_size(void);
+static float tc_dialog_font_scale(void);
+static int tc_dialog_options_min(void);
 static int tc_content_height_for_lines(int lines);
 static void tc_update_content_rect_height(void);
 static int tc_option_index_from_y(int y);
@@ -195,8 +199,11 @@ bool tc_init(GameInitInfo* init_info)
 
     tc_iso_window_rect = window_data.rect;
 
-    // Enlarge conversation text when requested via `DialogScale`.
-    tc_scale = highres_config_get()->dialog_scale;
+    // Enlarge conversation text when requested via arcanum.ini.
+    tc_scale = tc_dialog_font_scale();
+    if (tc_scale < highres_config_get()->dialog_scale) {
+        tc_scale = highres_config_get()->dialog_scale;
+    }
     if (tc_scale < 1.0f) {
         tc_scale = 1.0f;
     }
@@ -618,13 +625,56 @@ int tc_handle_message(TigMessage* msg)
 
 int tc_content_height_for_lines(int lines)
 {
-    if (lines < 1) {
-        lines = 1;
+    int min_lines;
+
+    min_lines = tc_dialog_options_min();
+    if (lines < min_lines) {
+        lines = min_lines;
     } else if (lines > TEXT_CONVERSATION_LINES) {
         lines = TEXT_CONVERSATION_LINES;
     }
 
     return lines * tc_line_height + (lines + 1) * TEXT_CONVERSATION_VERT_SPACING;
+}
+
+int tc_dialog_font_size(void)
+{
+    int value;
+
+    value = settings_get_value(&settings, DIALOG_FONT_KEY);
+    if (value < 0) {
+        value = 0;
+    } else if (value > 2) {
+        value = 2;
+    }
+
+    return value;
+}
+
+float tc_dialog_font_scale(void)
+{
+    switch (tc_dialog_font_size()) {
+    case 1:
+        return 14.0f / 12.0f;
+    case 2:
+        return 18.0f / 12.0f;
+    default:
+        return 1.0f;
+    }
+}
+
+int tc_dialog_options_min(void)
+{
+    int value;
+
+    value = settings_get_value(&settings, DIALOG_OPTIONS_MIN_KEY);
+    if (value < 1) {
+        value = 1;
+    } else if (value > TEXT_CONVERSATION_LINES) {
+        value = TEXT_CONVERSATION_LINES;
+    }
+
+    return value;
 }
 
 void tc_update_content_rect_height(void)

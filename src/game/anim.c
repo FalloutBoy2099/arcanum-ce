@@ -8,6 +8,7 @@
 #include "game/descriptions.h"
 #include "game/gamelib.h"
 #include "game/gsound.h"
+#include "game/input_bindings.h"
 #include "game/item.h"
 #include "game/light.h"
 #include "game/light_scheme.h"
@@ -11340,7 +11341,7 @@ bool get_always_run(int64_t obj)
             }
         } else {
             if (tig_kb_get_modifier(SDL_KMOD_CTRL)
-                || tig_kb_get_modifier(SDL_KMOD_NUM)) {
+                || input_binding_is_pressed(INPUT_ACTION_ALWAYS_RUN)) {
                 return true;
             }
         }
