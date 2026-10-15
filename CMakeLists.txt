@@ -366,7 +366,7 @@ if(ARCANUM_BUILD_TESTS)
     else()
         set(ARCANUM_TEST_FONT "" CACHE FILEPATH "TrueType font for headless rendering tests")
     endif()
-    add_test(NAME community_features COMMAND community_features_test "${ARCANUM_TEST_FONT}")
+    add_test(NAME community_features COMMAND community_features_test "${ARCANUM_TEST_FONT}" "${CMAKE_CURRENT_SOURCE_DIR}/art/interface")
     set_tests_properties(community_features PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-runtime")
 endif()
 

@@ -6,6 +6,8 @@
 #include "game/timeevent.h"
 #include "ui/types.h"
 
+void mainmenu_ui_refresh_background(void);
+
 typedef enum MainMenuFont {
     MM_FONT_FLARE12,
     MM_FONT_ARIAL10,

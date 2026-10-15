@@ -11,8 +11,71 @@
 Settings settings;
 static int invalidations;
 static int failures;
-
 #define CHECK(expr) do { if (!(expr)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #expr); failures++; } } while (0)
+static const char* button_art_directory;
+
+static int test_art_path(tig_art_id_t aid, char* path, size_t size)
+{
+    SDL_snprintf(path, size, "%s/OptionsMenu%sBtn.art", button_art_directory,
+        tig_art_num_get(aid) == 4094 ? "Left" : "Right");
+    return TIG_OK;
+}
+
+static tig_art_id_t test_art_normalize(tig_art_id_t aid)
+{
+    return tig_art_id_frame_set(aid, 0);
+}
+
+static void test_button_art(const char* directory)
+{
+    button_art_directory = directory;
+    TigInitInfo info = { 0 };
+    info.bpp = 32;
+    info.art_file_path_resolver = test_art_path;
+    info.art_id_reset_func = test_art_normalize;
+    CHECK(tig_palette_init(&info) == TIG_OK);
+    CHECK(tig_art_init(&info) == TIG_OK);
+    for (int side = 0; side < 2; side++) {
+        tig_art_id_t ids[3];
+        TigArtAnimData anim;
+        int pressed_difference = 0;
+        int hover_difference = 0;
+        int pressed_hover_difference = 0;
+        for (int frame = 0; frame < 3; frame++) {
+            TigArtFrameData data;
+            CHECK(tig_art_interface_id_create(4094 + side, frame, 0, 0, &ids[frame]) == TIG_OK);
+            int rc = tig_art_frame_data(ids[frame], &data);
+            CHECK(rc == TIG_OK);
+            if (rc != TIG_OK) goto finish;
+            CHECK(data.width == 40 && data.height == 40);
+        }
+        CHECK(tig_art_anim_data(ids[0], &anim) == TIG_OK);
+        CHECK(anim.num_frames == 3);
+        for (int y = 0; y < 40; y++) {
+            for (int x = 0; x < 40; x++) {
+                unsigned int normal, pressed, hover;
+                CHECK(sub_502E50(ids[0], x, y, &normal) == TIG_OK);
+                CHECK(sub_502E50(ids[1], x, y, &pressed) == TIG_OK);
+                CHECK(sub_502E50(ids[2], x, y, &hover) == TIG_OK);
+                double dx = x + 0.5 - 20;
+                double dy = y + 0.5 - 20;
+                bool opaque = dx * dx + dy * dy <= 400;
+                CHECK((normal != anim.color_key) == opaque);
+                CHECK((pressed != anim.color_key) == opaque);
+                CHECK((hover != anim.color_key) == opaque);
+                if (normal != pressed) pressed_difference++;
+                if (normal != hover) hover_difference++;
+                if (pressed != hover) pressed_hover_difference++;
+            }
+        }
+        CHECK(pressed_difference > 0);
+        CHECK(hover_difference > 0);
+        CHECK(pressed_hover_difference > 0);
+    }
+finish:
+    tig_art_exit();
+    tig_palette_exit();
+}
 
 void gamelib_invalidate_rect(TigRect* rect)
 {
@@ -229,6 +292,7 @@ int main(int argc, char** argv)
         test_modern_brackets(argv[1], 400);
         test_modern_brackets(argv[1], 90);
     }
+    if (argc > 2) test_button_art(argv[2]);
     settings_exit(&settings);
     tig_color_exit();
     tig_memory_exit();

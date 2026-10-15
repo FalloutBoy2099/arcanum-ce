@@ -54,7 +54,7 @@ the current names below.
 | `combat_taunts` | `0` | Boolean. Enable combat taunts. |
 | `dialog_font` | `0` | Bitmap dialogue preset: `0` = 12, `1` = 14, `2` = 16. Custom font rendering uses `[ui]` settings. |
 | `logbook_font` | `0` | Bitmap logbook preset: `0` = 12, `1` = 14. Custom font rendering uses `[ui]` settings. |
-| `main_menu_art` | `0` | `0` = black, `1` = fade to black, `2` = wood background. |
+| `main_menu_art` | `0` | `0` = black, `1` = fade to black, `2` = wood background. For out-of-game menus, mode `2` uses `art/interface/wood_mask.art` around the centered 800x600 interface. Its center is aligned without scaling. |
 | `menu_borders` | `0` | Boolean. Enable UAP-style menu borders. |
 | `object_lighting` | `1` | Boolean. Enable object lighting. |
 | `shadows` | `0` | Boolean. Enable world object shadows. Text shadows use separate `[ui]` settings. |

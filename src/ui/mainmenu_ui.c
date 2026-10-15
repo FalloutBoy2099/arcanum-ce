@@ -17,6 +17,7 @@
 #include "game/item.h"
 #include "game/map.h"
 #include "game/mes.h"
+#include "game/name.h"
 #include "game/obj.h"
 #include "game/obj_private.h"
 #include "game/object.h"
@@ -192,6 +193,7 @@ static bool dword_5C3620 = true;
 
 // 0x5C3624
 static tig_window_handle_t mainmenu_ui_window_handle = TIG_WINDOW_HANDLE_INVALID;
+static tig_window_handle_t mainmenu_ui_wood_window = TIG_WINDOW_HANDLE_INVALID;
 
 // 0x5C3628
 static TigRect mainmenu_ui_window_rect = { 0, 0, 800, 600 };
@@ -4616,6 +4618,58 @@ void mainmenu_ui_create_window(void)
     mainmenu_ui_create_window_func(true);
 }
 
+// Draw only the four bands outside the centered 800x600 menu. The source
+// mask is centered without scaling, preserving its 800x600 opening.
+void mainmenu_ui_refresh_background(void)
+{
+    if (mainmenu_ui_wood_window != TIG_WINDOW_HANDLE_INVALID) {
+        tig_window_destroy(mainmenu_ui_wood_window);
+        mainmenu_ui_wood_window = TIG_WINDOW_HANDLE_INVALID;
+    }
+    if (stru_5C36B0[mainmenu_ui_type][0]
+        || settings_get_value(&settings, MAIN_MENU_ART_KEY) != 2) {
+        return;
+    }
+
+    tig_art_id_t art_id;
+    TigArtFrameData frame;
+    tig_art_interface_id_create(NAME_MENU_WOOD_MASK, 0, 0, 0, &art_id);
+    if (tig_art_frame_data(art_id, &frame) != TIG_OK) {
+        return;
+    }
+    int width = hrp_iso_window_width_get();
+    int height = hrp_iso_window_height_get();
+    int left = (width - 800) / 2;
+    int top = (height - 600) / 2;
+    if (left <= 0 && top <= 0) {
+        return;
+    }
+    TigWindowData data = { 0 };
+    // Normal-layer window: above the iso background, below always-on-top menus.
+    data.rect = (TigRect) { 0, 0, width, height };
+    data.background_color = tig_color_make(0, 0, 0);
+    if (tig_window_create(&data, &mainmenu_ui_wood_window) != TIG_OK) {
+        return;
+    }
+    TigRect bands[4] = {
+        { 0, 0, left, height },
+        { left + 800, 0, width - left - 800, height },
+        { left, 0, 800, top },
+        { left, top + 600, 800, height - top - 600 },
+    };
+    for (int index = 0; index < 4; index++) {
+        if (bands[index].width <= 0 || bands[index].height <= 0) continue;
+        TigRect source = bands[index];
+        source.x += (frame.width - width) / 2;
+        source.y += (frame.height - height) / 2;
+        TigArtBlitInfo blit = { 0 };
+        blit.art_id = art_id;
+        blit.src_rect = &source;
+        blit.dst_rect = &bands[index];
+        tig_window_blit_art(mainmenu_ui_wood_window, &blit);
+    }
+}
+
 // 0x546340
 void mainmenu_ui_create_window_func(bool should_display)
 {
@@ -4645,6 +4699,7 @@ void mainmenu_ui_create_window_func(bool should_display)
         return;
     }
 
+    mainmenu_ui_refresh_background();
     window = main_menu_window_info[mainmenu_ui_window_type];
     if (window->background_art_num != -1) {
         tig_art_interface_id_create(window->background_art_num, 0, 0, 0, &art_id);
@@ -5044,6 +5099,10 @@ void sub_546DD0(void)
             mainmenu_ui_top_bar_cover_window_handle = TIG_WINDOW_HANDLE_INVALID;
         }
 
+        if (mainmenu_ui_wood_window != TIG_WINDOW_HANDLE_INVALID) {
+            tig_window_destroy(mainmenu_ui_wood_window);
+            mainmenu_ui_wood_window = TIG_WINDOW_HANDLE_INVALID;
+        }
         mainmenu_ui_active = false;
     }
 }

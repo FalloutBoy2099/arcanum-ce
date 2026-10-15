@@ -9,8 +9,10 @@
 #include "game/hrp.h"
 #include "game/iso_zoom.h"
 #include "ui/intgame.h"
+#include "ui/mainmenu_ui.h"
 #include "game/location.h"
 #include "game/mes.h"
+#include "game/name.h"
 #include "game/obj.h"
 #include "game/player.h"
 #include "game/skill.h"
@@ -402,8 +404,18 @@ void options_ui_start(OptionsUiTab tab, tig_window_handle_t window_handle, bool 
     button_data.mouse_exit_snd_id = -1;
     if (options_ui_page_count > 1) {
         for (index = 0; index < 2; index++) {
-            button_data.x = index == 0 ? 283 : 653;
-            tig_art_interface_id_create(index == 0 ? 272 : 273, 0, 0, 0, &button_data.art_id);
+            TigArtAnimData anim_data;
+            tig_art_interface_id_create(index == 0 ? NAME_OPTIONS_MENU_LEFT_BUTTON : NAME_OPTIONS_MENU_RIGHT_BUTTON,
+                0, 0, 0, &button_data.art_id);
+            if (tig_art_anim_data(button_data.art_id, &anim_data) == TIG_OK
+                && anim_data.num_frames >= 3) {
+                button_data.x = index == 0 ? 286 : 648;
+                button_data.y = 62;
+            } else {
+                button_data.x = index == 0 ? 283 : 653;
+                button_data.y = 59;
+                tig_art_interface_id_create(index == 0 ? 272 : 273, 0, 0, 0, &button_data.art_id);
+            }
             tig_button_create(&button_data, &options_ui_page_buttons[index]);
         }
     }
@@ -938,6 +950,7 @@ void options_ui_main_menu_art_set(int value)
         value = 2;
     }
     settings_set_value(&settings, MAIN_MENU_ART_KEY, value);
+    mainmenu_ui_refresh_background();
 }
 
 /**

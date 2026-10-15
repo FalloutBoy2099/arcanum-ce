@@ -943,6 +943,17 @@ int name_resolve_path(tig_art_id_t aid, char* path, size_t maxlen)
         return TIG_OK;
     case TIG_ART_TYPE_INTERFACE:
         mes_file_entry.num = tig_art_num_get(aid);
+        if (mes_file_entry.num == NAME_MENU_WOOD_MASK) {
+            snprintf(path, maxlen, "art\\interface\\wood_mask.art");
+            return TIG_OK;
+        }
+        if (mes_file_entry.num == NAME_OPTIONS_MENU_LEFT_BUTTON
+            || mes_file_entry.num == NAME_OPTIONS_MENU_RIGHT_BUTTON) {
+            snprintf(path, maxlen, "art\\interface\\%s.art",
+                mes_file_entry.num == NAME_OPTIONS_MENU_LEFT_BUTTON
+                    ? "OptionsMenuLeftBtn" : "OptionsMenuRightBtn");
+            return TIG_OK;
+        }
         if (!mes_search(name_interface_mes_file, &mes_file_entry)) {
             return TIG_ERR_GENERIC;
         }

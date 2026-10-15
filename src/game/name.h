@@ -3,6 +3,11 @@
 
 #include "game/context.h"
 
+// Optional loose-file artwork used only by options-page navigation.
+#define NAME_OPTIONS_MENU_LEFT_BUTTON 4094
+#define NAME_OPTIONS_MENU_RIGHT_BUTTON 4095
+#define NAME_MENU_WOOD_MASK 4093
+
 bool name_init(GameInitInfo* init_info);
 void name_exit(void);
 tig_art_id_t name_normalize_aid(tig_art_id_t aid);
