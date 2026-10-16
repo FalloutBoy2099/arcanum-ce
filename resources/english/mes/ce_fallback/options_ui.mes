@@ -1,0 +1,155 @@
+// Arcanum CE options catalog v4 - Windows-1252
+{1}{4}
+
+// Menu
+{10}{Game}
+{11}{Audio}
+{12}{Video}
+{13}{Interface}
+{14}{Shortcuts}
+{15}{Done}
+
+// General messages
+{20}{Page}
+{21}{Language changes take effect after restarting the game.}
+{22}{Hover over a setting to read its description.}
+
+// Game - settings
+{101}{Module}
+{102}{Language}
+{103}{Difficulty}
+{104}{Violence Filter}
+{105}{Default Combat Mode}
+{106}{Auto Attack}
+{107}{Auto Switch Weapons}
+{108}{Always Run}
+{109}{Follower Skills}
+{110}{Save After Travel}
+{111}{Save After Sleep}
+{112}{Action Tooltips}
+{113}{Window Close Mode}
+{114}{Random Encounters}
+{115}{Lighting}
+{116}{Companion components}
+
+// Audio - settings
+{201}{Effects}
+{202}{Interface}
+{203}{Footsteps}
+{204}{Objects}
+{205}{Spells}
+{206}{Creatures}
+{207}{Voice}
+{208}{Music}
+{209}{Combat Music}
+
+// Video - settings
+{301}{Resolution}
+{302}{Vertical Sync}
+{303}{Brightness}
+{304}{Text Duration}
+{305}{Floating Messages}
+{306}{Message Speed}
+{307}{Combat Taunts}
+{308}{Edge Scrolling}
+{309}{Follow Player}
+{310}{Enable Zoom}
+{311}{Zoom Filter}
+
+// Interface - settings
+{401}{Menu Background}
+{402}{Interface Type}
+{403}{Window Transparency}
+{404}{Modern Fonts}
+{405}{Number Dialogue Choices}
+{406}{Dialogue Camera}
+{407}{Dialogue Auto Zoom}
+
+// Shortcuts - settings
+
+// Game - descriptions
+{1101}{Selects the adventure module to play. Available only before entering a game.}
+{1102}{Selects the language packs loaded by the game. Restart the game to apply the change.}
+{1103}{Adjusts the difficulty of combat. Choose Easy, Normal or Hard.}
+{1104}{Reduces graphic violence and gore effects.}
+{1105}{Chooses real-time or turn-based combat as the default mode.}
+{1106}{Automatically continues attacking the selected target.}
+{1107}{Allows automatic weapon switching when the current weapon can no longer be used.}
+{1108}{Prefers running to walking. Also affects movement action-point costs in turn-based combat.}
+{1109}{Allows qualified companions to use their skills for eligible party actions.}
+{1110}{Automatically saves after a successful map transition. Replaces the previous travel autosave.}
+{1111}{Automatically saves when the party wakes up. Replaces the previous sleep autosave.}
+{1112}{Displays movement and attack AP, distance, estimated hit chance, range and spell fatigue in two fixed frames above the HUD. Available only in combat mode.}
+{1113}{Group: close panels through their circular portrait. Modal: also close by clicking outside. Applies to Inventory, Character Sheet, World Map, Schematics and Journal.}
+{1114}{Normal: original behavior. Interesting: skips weak ordinary fights while keeping special encounters. Less frequent: divides random encounter frequency by 2.7.}
+{1115}{Normal: original ambient lighting. 25% or 50%: reduces ambient darkness by that amount, indoors and outdoors. Applies immediately.}
+{1116}{Allow crafting to use unequipped components carried by nearby conscious companions. The crafter must still have the required technical expertise.}
+
+// Audio - descriptions
+{1201}{Adjusts the general sound-effects volume. The lowest level mutes this category.}
+{1202}{Adjusts the volume of interface sounds, including buttons and menus.}
+{1203}{Adjusts the volume of footsteps and walking sounds.}
+{1204}{Adjusts the volume of object sound effects.}
+{1205}{Adjusts the volume of spell sound effects.}
+{1206}{Adjusts the volume of creature sound effects.}
+{1207}{Adjusts the volume of spoken dialogue and character voices.}
+{1208}{Adjusts the music volume. The lowest level mutes music.}
+{1209}{Allows combat music to replace the exploration soundtrack during battles.}
+
+// Video - descriptions
+{1301}{Selects the game resolution. Restart the game to apply the change.}
+{1302}{Synchronizes display updates with the monitor to reduce screen tearing.}
+{1303}{Adjusts image brightness to make dark areas easier to see.}
+{1304}{Adjusts how long ordinary floating text remains visible. Some scripted messages use their own duration.}
+{1305}{Chooses how many floating gameplay messages are shown: Never, Minimal or Verbose.}
+{1306}{Adjusts how quickly floating gameplay messages rise above characters.}
+{1307}{Enables character comments and taunts during combat.}
+{1308}{Moves the camera when the pointer reaches a window edge. Keyboard scrolling and right-button dragging remain available.}
+{1309}{Allows the camera to follow the moving player. Manual scrolling temporarily suspends following.}
+{1310}{Enables world-view zoom with its shortcuts or Ctrl + mouse wheel. Disabling restores normal zoom.}
+{1311}{Sharp pixels preserves pixel edges. Smooth softens the image when zooming.}
+
+// Interface - descriptions
+{1401}{Chooses the menu background: Black, Fade to Black or Wood.}
+{1402}{Chooses how much of the HUD is visible: Full, Medium, Mini or Hidden. Panels can temporarily reveal controls.}
+{1403}{Makes supported black interface areas translucent so the world remains visible behind them.}
+{1404}{Uses TrueType fonts for dialogue, floating text and the journal. Restart the game to apply font changes.}
+{1405}{Numbers dialogue choices and enables number-key selection. Keys 1 to 9 select the first nine choices; 0 selects the tenth.}
+{1406}{Chooses dialogue framing: minimal movement, midpoint between speakers, focus on the NPC, or focus on the player.}
+{1407}{Allows the dialogue camera to zoom out to fit both speakers. Restores the previous zoom when dialogue ends.}
+
+// Shortcuts - descriptions
+
+// Menu background - values
+{2000}{Black}
+{2001}{Fade to black}
+{2002}{Wood}
+
+// Interface type - values
+{2010}{Full}
+{2011}{Medium}
+{2012}{Mini}
+{2013}{Hidden}
+
+// Dialogue camera - values
+{2020}{Minimal}
+{2021}{Dialogue}
+{2022}{NPC}
+{2023}{Player}
+
+// Zoom filter - values
+{2030}{Sharp pixels}
+{2031}{Smooth}
+
+// Window closing mode - values
+{2040}{Group}
+{2041}{Modal}
+
+// Random encounters - values
+{2050}{Normal}
+{2051}{Interesting}
+{2052}{Less frequent}
+
+{2060}{Normal}
+{2061}{25%}
+{2062}{50%}

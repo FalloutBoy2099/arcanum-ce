@@ -63,6 +63,7 @@ typedef struct S64B870 {
 } S64B870;
 
 static void sub_5412E0(bool a1);
+static void mainmenu_ui_close_game_panels(void);
 static TigWindowModalDialogChoice mainmenu_ui_confirm(int num);
 static void sub_541830(char* dst, const char* src);
 static void sub_5418A0(char* str, TigRect* rect, tig_font_handle_t font, unsigned int flags);
@@ -396,6 +397,7 @@ static MainMenuWindowInfo mainmenu_ui_credits_window_info = {
 
 // 0x5C3FB4
 static mes_file_handle_t mainmenu_ui_mainmenu_mes_file = MES_FILE_HANDLE_INVALID;
+static mes_file_handle_t mainmenu_ui_options_mes_file = MES_FILE_HANDLE_INVALID;
 
 // NOTE: Write-only. It's impossible to understand its meaning.
 //
@@ -615,16 +617,16 @@ static MainMenuWindowInfo stru_5C4338 = {
 
 // 0x5C43D0
 static MainMenuButtonInfo mainmenu_ui_options_buttons[] = {
-    // Keep MainMenu.mes indices 4000-4004; display Audio above Video.
-    { 130, 185, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
-    { 130, 265, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
-    { 130, 225, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
-    { 130, 305, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
-    { 130, 345, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
+    // MainMenu.mes indices 4000-4005; display Audio above Video.
+    { 130, 157, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
+    { 130, 237, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
+    { 130, 197, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
+    { 130, 277, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
+    { 130, 317, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
+    { 130, 357, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
 };
 
 // 0x5C4490
-static TigRect stru_5C4490 = { 84, 67, 89, 89 };
 
 // 0x5C44A0
 static MainMenuWindowInfo mainmenu_ui_options_window_info = {
@@ -1284,7 +1286,7 @@ static tig_font_handle_t dword_64BC10[3];
 static char byte_64BC1C[1000];
 
 // 0x64C004
-static MainMenuWindowType mainmenu_ui_window_stack[50];
+static MainMenuHistory mainmenu_ui_history;
 
 // 0x64C0CC
 static tig_font_handle_t dword_64C0CC[2][3];
@@ -1338,7 +1340,6 @@ static bool dword_64C388;
 static bool dword_64C38C;
 
 // 0x64C390
-static int mainmenu_ui_num_windows;
 
 // 0x64C394
 static char byte_64C394[128];
@@ -1529,6 +1530,10 @@ void mainmenu_ui_exit(void)
     tig_font_destroy(dword_64C240);
     mes_unload(mainmenu_ui_rules_mainmenu_mes_file);
     mes_unload(mainmenu_ui_mainmenu_mes_file);
+    if (mainmenu_ui_options_mes_file != MES_FILE_HANDLE_INVALID) {
+        mes_unload(mainmenu_ui_options_mes_file);
+        mainmenu_ui_options_mes_file = MES_FILE_HANDLE_INVALID;
+    }
 
     if (dword_64C41C != NULL) {
         FREE(dword_64C41C);
@@ -1557,7 +1562,7 @@ void mainmenu_ui_start(MainMenuType type)
     tig_art_id_t art_id;
 
     if (!mainmenu_ui_active) {
-        mainmenu_ui_num_windows = 0;
+        mainmenu_history_reset(&mainmenu_ui_history);
 
         // CE: Hide main interface to prevent world view and top/bottom bars
         // to be visible while mainmenu is being presented (visible on custom
@@ -1630,7 +1635,7 @@ void mainmenu_ui_start_at_window(MainMenuWindowType window_type)
         return;
     }
 
-    mainmenu_ui_num_windows = 0;
+    mainmenu_history_reset(&mainmenu_ui_history);
     intgame_hide();
 
     tig_art_interface_id_create(0, 0, 0, 0, &art_id);
@@ -1803,7 +1808,7 @@ bool mainmenu_ui_handle(void)
                     // i.e. we were launched directly into this menu (O key,
                     // Cmd+S/L, etc.) — do we route ESC through the full
                     // exit-to-game restore for the "in-game" menu types.
-                    if (mainmenu_ui_num_windows <= 1
+                    if (mainmenu_ui_history.count <= 1
                         && stru_5C36B0[mainmenu_ui_type][0]) {
                         sub_5412D0();
                     } else {
@@ -1858,8 +1863,9 @@ TigWindowModalDialogChoice mainmenu_ui_confirm(int num)
     return choice;
 }
 
-// 0x541710
-void mainmenu_ui_reset(void)
+// Shared cleanup for reset, Options and Load Game. Keep the close order:
+// individual panels can return through intgame_mode_set while closing.
+static void mainmenu_ui_close_game_panels(void)
 {
     inven_ui_destroy();
     charedit_close();
@@ -1868,6 +1874,12 @@ void mainmenu_ui_reset(void)
     logbook_ui_close();
     fate_ui_close();
     schematic_ui_close();
+}
+
+// 0x541710
+void mainmenu_ui_reset(void)
+{
+    mainmenu_ui_close_game_panels();
     gamelib_reset();
     gameuilib_reset();
 }
@@ -1876,6 +1888,8 @@ void mainmenu_ui_reset(void)
 void mainmenu_ui_open(void)
 {
     if (!mainmenu_ui_active) {
+        // The fate list is a separate window and is not hidden with the HUD.
+        fate_ui_close();
         dword_5C3FB8 = -1;
         if (main_menu_window_info[mainmenu_ui_window_type]->init_func != NULL) {
             main_menu_window_info[mainmenu_ui_window_type]->init_func();
@@ -1913,20 +1927,15 @@ void mainmenu_ui_close(bool back)
 // 0x5417E0
 MainMenuWindowType mainmenu_ui_pop_window_stack(void)
 {
-    if (mainmenu_ui_num_windows > 0) {
-        if (--mainmenu_ui_num_windows > 0) {
-            return mainmenu_ui_window_stack[--mainmenu_ui_num_windows];
-        }
-    } else {
-        mainmenu_ui_num_windows = 0;
-    }
-    return MM_WINDOW_0;
+    return mainmenu_history_back(&mainmenu_ui_history);
 }
 
 // 0x541810
 void mainmenu_ui_push_window_stack(MainMenuWindowType window_type)
 {
-    mainmenu_ui_window_stack[mainmenu_ui_num_windows++] = window_type;
+    if (!mainmenu_history_push(&mainmenu_ui_history, window_type)) {
+        tig_debug_printf("MainMenu: rejected history entry %d (depth %d).\n", window_type, mainmenu_ui_history.count);
+    }
 }
 
 // 0x541830
@@ -2134,12 +2143,22 @@ bool mainmenu_ui_press_mainmenu_in_play_locked(tig_button_handle_t button_handle
 }
 
 // 0x541C70
+static const char* mainmenu_ui_options_label(int index, const char* fallback)
+{
+    static const int ids[] = { 10, 12, 11, 13, 14, 15 };
+    MesFileEntry entry = { 1, NULL };
+    if (index < 0 || index >= SDL_arraysize(ids)) return fallback;
+    if (mainmenu_ui_options_mes_file == MES_FILE_HANDLE_INVALID
+        && !mes_load("mes\\options_ui.mes", &mainmenu_ui_options_mes_file)) return fallback;
+    if (!mes_search(mainmenu_ui_options_mes_file, &entry)
+        || SDL_strcmp(entry.str, "4") != 0) return fallback;
+    entry.num = ids[index];
+    return mes_search(mainmenu_ui_options_mes_file, &entry) ? entry.str : fallback;
+}
+
+// 0x541C70
 void mainmenu_ui_create_options(void)
 {
-    PcLens pc_lens;
-    int64_t pc_obj;
-    int64_t loc;
-
     sub_541D40();
     mainmenu_ui_window_type = MM_WINDOW_OPTIONS;
     mainmenu_ui_create_window_func(false);
@@ -2147,19 +2166,8 @@ void mainmenu_ui_create_options(void)
     options_ui_start(OPTIONS_UI_TAB_GAME, mainmenu_ui_window_handle, stru_5C36B0[mainmenu_ui_type][1] == 0);
     mainmenu_ui_draw_version();
 
-    pc_lens.window_handle = mainmenu_ui_window_handle;
-    pc_lens.rect = &stru_5C4490;
-    tig_art_interface_id_create(670, 0, 0, 0, &pc_lens.art_id);
-    if (stru_5C36B0[mainmenu_ui_type][0]) {
-        pc_obj = player_get_local_pc_obj();
-        loc = obj_field_int64_get(pc_obj, OBJ_F_LOCATION);
-        location_origin_set(loc);
-        intgame_pc_lens_do(PC_LENS_MODE_PASSTHROUGH, &pc_lens);
-    } else {
-        // Pre-game (main menu) Options has no PC to look at — hide the lens
-        // entirely instead of showing the blacked-out widget.
-        intgame_pc_lens_do(PC_LENS_MODE_NONE, NULL);
-    }
+    // The options background and Done button provide the complete interface.
+    intgame_pc_lens_do(PC_LENS_MODE_NONE, NULL);
 
     tig_window_display();
 }
@@ -2167,13 +2175,7 @@ void mainmenu_ui_create_options(void)
 // 0x541D40
 void sub_541D40(void)
 {
-    inven_ui_destroy();
-    charedit_close();
-    sleep_ui_close();
-    wmap_ui_close();
-    logbook_ui_close();
-    fate_ui_close();
-    schematic_ui_close();
+    mainmenu_ui_close_game_panels();
 }
 
 // 0x541D70
@@ -2213,7 +2215,7 @@ bool mainmenu_ui_press_options(tig_button_handle_t button_handle)
     // menu (e.g. pause menu → Options), pop back to that parent. Only
     // fully exit to game when we're at the top of the stack (the O key
     // shortcut or similar direct entry).
-    if (mainmenu_ui_num_windows <= 1
+    if (mainmenu_ui_history.count <= 1
         && stru_5C36B0[mainmenu_ui_type][0]) {
         sub_5412D0();
     } else {
@@ -2245,6 +2247,9 @@ void sub_541E20(int a1)
             break;
         case 3:
             options_ui_start(OPTIONS_UI_TAB_INTERFACE, mainmenu_ui_window_handle, stru_5C36B0[mainmenu_ui_type][1] == 0);
+            break;
+        case 4:
+            options_ui_start(OPTIONS_UI_TAB_SHORTCUTS, mainmenu_ui_window_handle, stru_5C36B0[mainmenu_ui_type][1] == 0);
             break;
         }
     }
@@ -2360,13 +2365,7 @@ void mainmenu_ui_load_game_create(void)
 // 0x542200
 void sub_542200(void)
 {
-    inven_ui_destroy();
-    charedit_close();
-    sleep_ui_close();
-    wmap_ui_close();
-    logbook_ui_close();
-    fate_ui_close();
-    schematic_ui_close();
+    mainmenu_ui_close_game_panels();
 }
 
 // 0x542230
@@ -3666,8 +3665,7 @@ void mainmenu_ui_intro_create(void)
     mainmenu_ui_window_type = MM_WINDOW_INTRO;
     gmovie_play(1, 0, 0);
     gmovie_play(7, 0, 0);
-    mainmenu_ui_num_windows++;
-    mainmenu_ui_pop_window_stack();
+    mainmenu_history_discard_current(&mainmenu_ui_history);
     mainmenu_ui_window_type = MM_WINDOW_SINGLE_PLAYER;
     mainmenu_ui_open();
     dword_64C38C = true;
@@ -3677,8 +3675,7 @@ void mainmenu_ui_intro_create(void)
 void mainmenu_ui_credits_create(void)
 {
     mainmenu_ui_window_type = MM_WINDOW_CREDITS;
-    mainmenu_ui_num_windows++;
-    mainmenu_ui_pop_window_stack();
+    mainmenu_history_discard_current(&mainmenu_ui_history);
     mainmenu_ui_window_type = MM_WINDOW_MAINMENU;
     mainmenu_ui_open();
     dword_64C38C = true;
@@ -4906,7 +4903,9 @@ void mainmenu_ui_create_window_func(bool should_display)
             && (button->flags & 0x4) == 0) {
             mes_get_msg(mainmenu_ui_mainmenu_mes_file, &mes_file_entry);
             tig_font_push(font);
-            font_desc.str = mes_file_entry.str;
+            const char* button_label = mainmenu_ui_window_type == MM_WINDOW_OPTIONS
+                ? mainmenu_ui_options_label(idx, mes_file_entry.str) : mes_file_entry.str;
+            font_desc.str = button_label;
             font_desc.width = 0;
             font_desc.height = 0;
             font_desc.flags = 0;
@@ -4926,7 +4925,7 @@ void mainmenu_ui_create_window_func(bool should_display)
             text_rect.x = button->x - window->field_30;
             text_rect.y = button->y - window->field_34;
             mainmenu_ui_refresh_text(window_handle,
-                mes_file_entry.str,
+                button_label,
                 &text_rect,
                 window->refresh_text_flags | 0x20);
 
@@ -5153,6 +5152,10 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
         return false;
     }
 
+    if (mainmenu_ui_window_type == MM_WINDOW_OPTIONS) {
+        options_ui_update_hover();
+    }
+
     if (msg->type == TIG_MESSAGE_MOUSE) {
         if (msg->data.mouse.event == TIG_MESSAGE_MOUSE_LEFT_BUTTON_DOWN) {
             if (window->scrollbar_rect.width > 0
@@ -5206,7 +5209,7 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                     if (tig_window_data(mainmenu_ui_window_handle, &menu_wd) == TIG_OK
                         && intgame_should_dismiss_overlay_click(
                             original_screen_x, original_screen_y, &menu_wd.rect)) {
-                        if (in_game && mainmenu_ui_num_windows <= 1) {
+                        if (in_game && mainmenu_ui_history.count <= 1) {
                             sub_5412D0();
                         } else {
                             mainmenu_ui_close(true);
@@ -5223,34 +5226,6 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                 mainmenu_ui_open();
                 return true;
             case MM_WINDOW_OPTIONS:
-                // Use _unscale: msg coords are 800x600-local here but the
-                // lens check expects screen coords.
-                if (intgame_pc_lens_check_pt_unscale(msg->data.mouse.x, msg->data.mouse.y)) {
-                    // Mirror the Done button: commit module changes first
-                    // (bails if module load failed so the user stays on the
-                    // Options screen). Then:
-                    //
-                    //   - In-game flavor (lens is PASSTHROUGH showing the
-                    //     game world): treat the lens tap as a shortcut
-                    //     straight back to game, regardless of how deep
-                    //     we are in the menu stack. This matches Save
-                    //     Game's PC-lens behavior and lets pause→Options
-                    //     → lens-tap return to game in one click instead
-                    //     of popping back to the pause menu first.
-                    //
-                    //   - Pre-game main-menu Options (lens is NONE, so
-                    //     this branch isn't normally reachable via a
-                    //     real click): fall back to pop-to-parent.
-                    if (options_ui_load_module()) {
-                        if (stru_5C36B0[mainmenu_ui_type][0]) {
-                            sub_5412D0();
-                        } else {
-                            gsound_play_sfx(0, 1);
-                            mainmenu_ui_close(true);
-                        }
-                    }
-                    return true;
-                }
                 break;
             case MM_WINDOW_LOAD_GAME:
                 if (intgame_pc_lens_check_pt_unscale(msg->data.mouse.x, msg->data.mouse.y)) {
@@ -5482,7 +5457,7 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                     // either way so it doesn't fall through to other
                     // handlers.
                     if (!stru_5C36B0[mainmenu_ui_type][1]
-                        && mainmenu_ui_num_windows <= 1) {
+                        && mainmenu_ui_history.count <= 1) {
                         sub_5412D0();
                     }
                     return true;
@@ -5648,10 +5623,9 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                     switch (idx) {
                     case 3:
                         if (mainmenu_ui_confirm_quit() == TIG_WINDOW_MODAL_DIALOG_CHOICE_OK) {
-                            // FIXME: Looks wrong.
-                            tig_button_hide(3);
+                            tig_button_hide(window->buttons[idx].button_handle);
 
-                            return sub_549310(3);
+                            return sub_549310(window->buttons[idx].button_handle);
                         }
                         return true;
                     case 4:
@@ -5670,10 +5644,9 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                     switch (idx) {
                     case 1:
                         if (mainmenu_ui_confirm_quit() == TIG_WINDOW_MODAL_DIALOG_CHOICE_OK) {
-                            // FIXME: Looks wrong.
-                            tig_button_hide(1);
+                            tig_button_hide(window->buttons[idx].button_handle);
 
-                            return sub_549310(1);
+                            return sub_549310(window->buttons[idx].button_handle);
                         }
                         return true;
                     case 2:
@@ -5737,7 +5710,8 @@ void mainmenu_ui_refresh_button_text(int btn, unsigned int flags)
             rect.x = button->x - window->field_30;
             rect.y = button->y - window->field_34;
             mainmenu_ui_refresh_text(mainmenu_ui_window_handle,
-                mes_file_entry.str,
+                mainmenu_ui_window_type == MM_WINDOW_OPTIONS
+                    ? mainmenu_ui_options_label(btn, mes_file_entry.str) : mes_file_entry.str,
                 &rect,
                 window->refresh_text_flags | flags);
         }
@@ -5856,7 +5830,7 @@ void sub_5480C0(int a1)
             // so intgame_show() and the rest of the restore steps run.
             // When stacked under a parent menu (pause menu → Save/Load),
             // fall back to the normal close-back that pops to the parent.
-            if (mainmenu_ui_num_windows <= 1
+            if (mainmenu_ui_history.count <= 1
                 && stru_5C36B0[mainmenu_ui_type][0]) {
                 sub_5412D0();
             } else {
@@ -5963,7 +5937,7 @@ bool sub_549310(tig_button_handle_t button_handle)
     if (mainmenu_ui_active) {
         mainmenu_ui_close(false);
         mainmenu_ui_window_type = MM_WINDOW_MAINMENU;
-        mainmenu_ui_num_windows = 0;
+        mainmenu_history_reset(&mainmenu_ui_history);
         mainmenu_ui_type = !dword_5C4000 ? MM_TYPE_1 : MM_TYPE_DEFAULT;
         mainmenu_ui_open();
     } else {
@@ -6232,8 +6206,9 @@ void sub_549960(void)
 // 0x549990
 void sub_549990(int* a1, int num)
 {
-    memcpy(&(mainmenu_ui_window_stack[1]), a1, sizeof(*a1) * num);
-    mainmenu_ui_num_windows = num + 1;
+    if (!mainmenu_history_seed(&mainmenu_ui_history, a1, num)) {
+        tig_debug_printf("MainMenu: rejected history route (length %d).\n", num);
+    }
 }
 
 // 0x549A40

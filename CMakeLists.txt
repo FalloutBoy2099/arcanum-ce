@@ -41,6 +41,9 @@ set(SRCS
     "src/game/area.h"
     "src/game/background.c"
     "src/game/background.h"
+    "src/game/benchmark.c"
+    "src/game/benchmark.h"
+    "src/game/benchmark_route.c"
     "src/game/bless.c"
     "src/game/bless.h"
     "src/game/brightness.c"
@@ -55,7 +58,14 @@ set(SRCS
     "src/game/ci.h"
     "src/game/combat.c"
     "src/game/combat.h"
+    "src/game/companion_movement.c"
+    "src/game/companion_movement.h"
+    "src/game/encounter_options.h"
     "src/game/context.h"
+    "src/game/conversation_history.c"
+    "src/game/conversation_history.h"
+    "src/game/crafting.c"
+    "src/game/crafting.h"
     "src/game/criticals.h"
     "src/game/critter.c"
     "src/game/critter.h"
@@ -86,10 +96,14 @@ set(SRCS
     "src/game/gsound.c"
     "src/game/gsound.h"
     "src/game/highres_config.c"
+    "src/game/language.c"
+    "src/game/language.h"
     "src/game/highres_config.h"
     "src/game/hrp.c"
     "src/game/hrp.h"
     "src/game/input_bindings.c"
+    "src/game/controller.c"
+    "src/game/controller.h"
     "src/game/input_bindings.h"
     "src/game/invensource.c"
     "src/game/invensource.h"
@@ -99,6 +113,9 @@ set(SRCS
     "src/game/item_effect.h"
     "src/game/item.c"
     "src/game/item.h"
+    "src/game/journal_memory.c"
+    "src/game/journal_memory.h"
+    "src/game/journal_text.h"
     "src/game/jumppoint.c"
     "src/game/jumppoint.h"
     "src/game/level.c"
@@ -117,6 +134,8 @@ set(SRCS
     "src/game/magictech.h"
     "src/game/map.c"
     "src/game/map.h"
+    "src/game/map_marker.c"
+    "src/game/map_marker.h"
     "src/game/material.h"
     "src/game/mes.c"
     "src/game/mes.h"
@@ -265,9 +284,13 @@ set(SRCS
     "src/game/written.h"
     "src/ui/anim_ui.c"
     "src/ui/anim_ui.h"
+    "src/ui/benchmark_input.h"
+    "src/ui/benchmark_ui.c"
+    "src/ui/benchmark_ui.h"
     "src/ui/broadcast_ui.c"
     "src/ui/broadcast_ui.h"
     "src/ui/charedit_ui.c"
+    "src/ui/cache_key.h"
     "src/ui/charedit_ui.h"
     "src/ui/combat_ui.c"
     "src/ui/combat_ui.h"
@@ -287,6 +310,8 @@ set(SRCS
     "src/ui/hotkey_ui.h"
     "src/ui/intgame.c"
     "src/ui/intgame.h"
+    "src/ui/intgame_mode.c"
+    "src/ui/intgame_mode.h"
     "src/ui/inven_ui.c"
     "src/ui/inven_ui.h"
     "src/ui/iso.c"
@@ -297,6 +322,9 @@ set(SRCS
     "src/ui/logbook_ui.h"
     "src/ui/mainmenu_ui.c"
     "src/ui/mainmenu_ui.h"
+    "src/ui/mainmenu_history.c"
+    "src/ui/mainmenu_history.h"
+    "src/ui/map_marker_input.h"
     "src/ui/options_ui.c"
     "src/ui/options_ui.h"
     "src/ui/roller_ui.c"
@@ -305,6 +333,10 @@ set(SRCS
     "src/ui/schematic_ui.h"
     "src/ui/scrollbar_ui.c"
     "src/ui/scrollbar_ui.h"
+    "src/ui/search_cache.c"
+    "src/ui/search_cache.h"
+    "src/ui/search_bar.c"
+    "src/ui/search_bar.h"
     "src/ui/skill_ui.c"
     "src/ui/skill_ui.h"
     "src/ui/sleep_ui.c"
@@ -319,6 +351,8 @@ set(SRCS
     "src/ui/tech_ui.h"
     "src/ui/textedit_ui.c"
     "src/ui/textedit_ui.h"
+    "src/ui/text_pagination.c"
+    "src/ui/text_pagination.h"
     "src/ui/types.h"
     "src/ui/wmap_rnd.c"
     "src/ui/wmap_rnd.h"
@@ -354,19 +388,55 @@ if(ARCANUM_BUILD_TESTS)
     add_executable(community_features_test
         tests/community_features_test.c
         src/game/highres_config.c
+        src/game/language.c
+        src/game/journal_memory.c
+        src/game/conversation_history.c
+        src/game/map_marker.c
+        src/game/mes.c
+        src/game/sector_script_list.c
         src/game/input_bindings.c
+        src/game/controller.c
         src/game/settings.c
         src/game/iso_zoom.c
     )
     target_include_directories(community_features_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(community_features_test PRIVATE ${TIG_LIBRARY})
+    add_executable(quality_of_life_test tests/quality_of_life_test.c src/game/crafting.c src/game/companion_movement.c src/game/benchmark_route.c)
+    target_include_directories(quality_of_life_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(quality_of_life_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME quality_of_life COMMAND quality_of_life_test)
+    add_executable(performance_test tests/performance_test.c)
+    target_link_libraries(performance_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME performance COMMAND performance_test)
+    add_executable(window_visibility_test tests/window_visibility_test.c src/ui/search_bar.c)
+    target_include_directories(window_visibility_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(window_visibility_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME window_visibility COMMAND window_visibility_test)
+    add_executable(benchmark_test tests/benchmark_test.c src/game/benchmark.c)
+    target_include_directories(benchmark_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    add_test(NAME benchmark COMMAND benchmark_test)
+    add_executable(benchmark_input_test tests/benchmark_input_test.c)
+    target_include_directories(benchmark_input_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(benchmark_input_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME benchmark_input COMMAND benchmark_input_test)
+    add_executable(controller_test tests/controller_test.c)
+    target_link_libraries(controller_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME controller COMMAND controller_test)
+    add_executable(ui_cache_test tests/ui_cache_test.c src/ui/search_cache.c src/ui/text_pagination.c)
+    target_include_directories(ui_cache_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    add_test(NAME ui_cache COMMAND ui_cache_test)
+    add_executable(ui_mode_test tests/ui_mode_test.c src/ui/intgame_mode.c src/ui/mainmenu_history.c)
+    target_include_directories(ui_mode_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    add_test(NAME ui_mode COMMAND ui_mode_test)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/performance-test-runtime")
+    set_tests_properties(performance PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/performance-test-runtime")
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-runtime")
     if(WIN32)
         set(ARCANUM_TEST_FONT "$ENV{WINDIR}/Fonts/calibri.ttf" CACHE FILEPATH "TrueType font for headless rendering tests")
     else()
         set(ARCANUM_TEST_FONT "" CACHE FILEPATH "TrueType font for headless rendering tests")
     endif()
-    add_test(NAME community_features COMMAND community_features_test "${ARCANUM_TEST_FONT}" "${CMAKE_CURRENT_SOURCE_DIR}/art/interface")
+    add_test(NAME community_features COMMAND community_features_test "${ARCANUM_TEST_FONT}" "${CMAKE_CURRENT_SOURCE_DIR}/art/interface" "${CMAKE_CURRENT_SOURCE_DIR}/resources/french/art/interface/NewTimes16Font.ART" "${CMAKE_CURRENT_SOURCE_DIR}/resources")
     set_tests_properties(community_features PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-runtime")
 endif()
 

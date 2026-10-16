@@ -750,7 +750,7 @@ void sleep_ui_wake_up(void)
     fade_data.steps = 48;
     gfade_run(&fade_data);
     if (settings_get_value(&settings, AUTOSAVE_SLEEP_KEY) != 0 && !gamelib_in_save()) {
-        if (!gamelib_save("slotNAPS", "Autosave - Sleep")) {
+        if (!gamelib_save("slotNAPS", mes_localized_get("savegame", 101))) {
             tig_debug_printf("Sleep autosave failed.\n");
         }
     }

@@ -943,6 +943,22 @@ int name_resolve_path(tig_art_id_t aid, char* path, size_t maxlen)
         return TIG_OK;
     case TIG_ART_TYPE_INTERFACE:
         mes_file_entry.num = tig_art_num_get(aid);
+        if (mes_file_entry.num == NAME_MAP_MAIN_XL) {
+            snprintf(path, maxlen, "art\\interface\\MapMain_Xl.art");
+            return TIG_OK;
+        }
+        if (mes_file_entry.num == NAME_SCHEMATIC_BASE_XL
+            || mes_file_entry.num == NAME_BOOK_MAIN_XL
+            || mes_file_entry.num == NAME_BOOK_SIDE_XL) {
+            const char* file = mes_file_entry.num == NAME_SCHEMATIC_BASE_XL ? "Schematic_Base_Xl.art"
+                : mes_file_entry.num == NAME_BOOK_MAIN_XL ? "Book_Main_Xl.art" : "Book_Side_Xl.art";
+            snprintf(path, maxlen, "art\\interface\\%s", file);
+            return TIG_OK;
+        }
+        if (mes_file_entry.num == NAME_JOURNAL_INDEX_BUTTON) {
+            snprintf(path, maxlen, "art\\interface\\PageTurn_U.art");
+            return TIG_OK;
+        }
         if (mes_file_entry.num == NAME_MENU_WOOD_MASK) {
             snprintf(path, maxlen, "art\\interface\\wood_mask.art");
             return TIG_OK;

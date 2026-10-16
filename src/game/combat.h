@@ -136,6 +136,8 @@ bool combat_check_cast_spell(int64_t source_obj);
 bool combat_check_use_skill(int64_t source_obj);
 int combat_required_action_points_get(void);
 int combat_attack_cost(int64_t obj);
+int combat_move_cost(int64_t source_obj, int64_t target_loc, bool adjacent);
+int combat_hit_chance_preview(int64_t source_obj, int64_t target_obj, int hit_loc);
 void combat_turn_based_end_critter_turn(int64_t obj);
 bool combat_consume_action_points(int64_t obj, int action_points);
 void combat_turn_based_add_critter(int64_t obj);

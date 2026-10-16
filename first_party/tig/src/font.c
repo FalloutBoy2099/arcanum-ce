@@ -1,4 +1,5 @@
 #include "tig/font.h"
+#include "tig/performance.h"
 
 #include "tig/art.h"
 #include "tig/color.h"
@@ -16,6 +17,7 @@ static bool tig_font_glyph_data(tig_art_id_t font_art_id, int ch, int* width_ptr
 static bool tig_font_modern_open(TigFont* font);
 static void tig_font_modern_close(TigFont* font);
 static bool tig_font_modern_measure(TigFont* font);
+static void tig_font_modern_apply_style(TigFont* font);
 static int tig_font_modern_write(TigVideoBuffer* video_buffer, const char* str, const TigRect* rect, TigRect* dirty_rect);
 static SDL_Color tig_font_modern_color(tig_color_t color);
 static SDL_Color tig_font_modern_shadow_color(TigFont* font);
@@ -404,6 +406,109 @@ int tig_font_write(TigVideoBuffer* video_buffer, const char* str, const TigRect*
     return TIG_OK;
 }
 
+static void tig_font_underline_segment(TigVideoBuffer* buffer, const TigRect* clip,
+    int x, int y, int width, tig_color_t color)
+{
+    TigRect line = { x, y, width, 1 };
+    TigRect clipped;
+    if (width > 0 && tig_rect_intersection(&line, clip, &clipped) == TIG_OK) {
+        tig_video_buffer_fill(buffer, &clipped, color);
+    }
+}
+
+int tig_font_underline_ranges(TigVideoBuffer* buffer, const char* str, const TigRect* rect,
+    const TigTextRange* ranges, int count)
+{
+    if (buffer == NULL || str == NULL || rect == NULL || count < 0 || (count > 0 && ranges == NULL)) return TIG_ERR_INVALID_PARAM;
+    size_t length = strlen(str);
+    for (int i = 0; i < count; i++) {
+        if (ranges[i].start < 0 || ranges[i].length < 0
+            || (size_t)ranges[i].start > length
+            || (size_t)ranges[i].length > length - ranges[i].start) return TIG_ERR_INVALID_PARAM;
+    }
+    if (count == 0 || rect->width <= 0 || rect->height <= 0) return TIG_OK;
+    TigFont* font = tig_font_stack[tig_font_stack_index];
+    if ((font->flags & TIG_FONT_MODERN) != 0 && font->modern_font != NULL) {
+        tig_font_modern_apply_style(font);
+        char* utf8 = (font->flags & TIG_FONT_UTF8) != 0 ? STRDUP(str) : tig_font_modern_to_utf8(str);
+        if (utf8 == NULL) return TIG_ERR_GENERIC;
+        TTF_Text* layout = TTF_CreateText(NULL, font->modern_font, utf8, 0);
+        if (layout == NULL) { FREE(utf8); return TIG_ERR_GENERIC; }
+        int text_width = 0, text_height = 0;
+        if (!TTF_SetTextWrapWidth(layout, rect->width) || !TTF_GetTextSize(layout, &text_width, &text_height)) {
+            TTF_DestroyText(layout); FREE(utf8); return TIG_ERR_GENERIC;
+        }
+        int dx = (font->flags & TIG_FONT_CENTERED) != 0 ? (rect->width - text_width) / 2
+            : (font->flags & TIG_FONT_RIGHT) != 0 ? rect->width - text_width : 0;
+        dx = SDL_max(dx, 0);
+        char* prefix = STRDUP(str);
+        if (prefix == NULL) { TTF_DestroyText(layout); FREE(utf8); return TIG_ERR_GENERIC; }
+        for (int i = 0; i < count; i++) {
+            if (ranges[i].length == 0) continue;
+            int start = ranges[i].start;
+            int end = start + ranges[i].length;
+            if ((font->flags & TIG_FONT_UTF8) == 0) {
+                memcpy(prefix, str, start); prefix[start] = '\0';
+                char* converted = tig_font_modern_to_utf8(prefix);
+                start = converted != NULL ? (int)strlen(converted) : 0;
+                FREE(converted);
+                memcpy(prefix, str, end); prefix[end] = '\0';
+                converted = tig_font_modern_to_utf8(prefix);
+                end = converted != NULL ? (int)strlen(converted) : start;
+                FREE(converted);
+            }
+            int span_count = 0;
+            TTF_SubString** spans = TTF_GetTextSubStringsForRange(layout, start, end - start, &span_count);
+            if (spans != NULL) {
+                for (int j = 0; j < span_count; j++) {
+                    SDL_Rect span = spans[j]->rect;
+                    tig_font_underline_segment(buffer, rect, rect->x + dx + span.x,
+                        rect->y + span.y + span.h - 2, span.w, font->color);
+                }
+                SDL_free(spans);
+            }
+        }
+        FREE(prefix);
+        TTF_DestroyText(layout);
+        FREE(utf8);
+        return TIG_OK;
+    }
+
+    int glyph_width, glyph_height, glyph_dx, glyph_dy;
+    if (!tig_font_glyph_data(font->art_id, ' ', &glyph_width, &glyph_height, &glyph_dx, &glyph_dy)) return TIG_ERR_GENERIC;
+    float scale = (font->flags & TIG_FONT_SCALE) != 0 ? font->scale : 1.0f;
+    if (scale <= 0) return TIG_ERR_INVALID_PARAM;
+    int advance = (int)(glyph_height * scale);
+    if (advance <= 0) return TIG_ERR_INVALID_PARAM;
+    const char* line = str;
+    int y = rect->y;
+    while (y + advance <= rect->y + rect->height) {
+        int line_width;
+        int line_length = sub_535C40(font->art_id, line, (int)(rect->width / scale), &line_width);
+        if (line_length < 0) break;
+        int dx = (font->flags & TIG_FONT_CENTERED) != 0 ? (rect->width - (int)(line_width * scale)) / 2
+            : (font->flags & TIG_FONT_RIGHT) != 0 ? rect->width - (int)(line_width * scale) : 0;
+        int x = rect->x + dx;
+        for (int p = 0; p <= line_length && line[p] != '\0'; p++) {
+            if (line[p] == '\n') continue;
+            if (!tig_font_glyph_data(font->art_id, (unsigned char)line[p], &glyph_width, &glyph_height, &glyph_dx, &glyph_dy)) return TIG_ERR_GENERIC;
+            int width = (int)(glyph_dx * scale);
+            int offset = (int)(line + p - str);
+            for (int i = 0; i < count; i++) {
+                if (offset >= ranges[i].start && offset - ranges[i].start < ranges[i].length) {
+                    tig_font_underline_segment(buffer, rect, x, y + advance - 1, width, font->color);
+                    break;
+                }
+            }
+            x += width;
+        }
+        if (line[line_length] == '\0') break;
+        line += line_length + 1;
+        y += advance;
+    }
+    return TIG_OK;
+}
+
 // 0x535850
 int sub_535850(TigVideoBuffer* video_buffer, const char* str, int length, TigArtBlitInfo* blit_info, bool shadow, bool* in_bracket)
 {
@@ -657,30 +762,44 @@ void tig_font_modern_close(TigFont* font)
     }
 }
 
+static bool tig_font_modern_measure_impl(TigFont* font);
+
 bool tig_font_modern_measure(TigFont* font)
 {
-    SDL_Surface* surface;
-    int width;
+    Uint64 start = tig_performance_begin();
+    bool result = tig_font_modern_measure_impl(font);
+    tig_performance_end(TIG_PERF_TEXT_MEASURE, start);
+    return result;
+}
 
+static bool tig_font_modern_measure_impl(TigFont* font)
+{
     if (font->str == NULL) {
         font->height = 0;
         return true;
     }
 
-    width = font->width;
-    surface = tig_font_modern_render(font, font->str, width, font->color);
-    if (surface == NULL) {
+    tig_font_modern_apply_style(font);
+    char* utf8 = (font->flags & TIG_FONT_UTF8) != 0 ? STRDUP(font->str) : tig_font_modern_to_utf8(font->str);
+    if (utf8 == NULL) {
         font->height = 0;
         return false;
     }
-
-    if (font->width == 0) {
-        font->width = surface->w;
+    int width = 0;
+    int height = 0;
+    bool measured = font->width > 0
+        ? TTF_GetStringSizeWrapped((TTF_Font*)font->modern_font, utf8, 0, font->width, &width, &height)
+        : TTF_GetStringSize((TTF_Font*)font->modern_font, utf8, 0, &width, &height);
+    FREE(utf8);
+    // Match the previous surface-rendering path for zero-width strings.
+    if (!measured || width <= 0 || height <= 0) {
+        font->height = 0;
+        return false;
     }
-    font->height = surface->h;
-
-    SDL_DestroySurface(surface);
-
+    if (font->width == 0) {
+        font->width = width;
+    }
+    font->height = height;
     return true;
 }
 
@@ -792,7 +911,7 @@ static SDL_Surface* tig_font_modern_render(TigFont* font, const char* str, int w
 
 static void tig_font_modern_dim_brackets(TigFont* font, const char* str, int width, SDL_Surface* surface)
 {
-    char* utf8 = tig_font_modern_to_utf8(str);
+    char* utf8 = (font->flags & TIG_FONT_UTF8) != 0 ? STRDUP(str) : tig_font_modern_to_utf8(str);
     if (utf8 == NULL) return;
     TTF_Text* layout = TTF_CreateText(NULL, (TTF_Font*)font->modern_font, utf8, 0);
     if (layout == NULL) {
@@ -839,13 +958,9 @@ static void tig_font_modern_dim_brackets(TigFont* font, const char* str, int wid
     FREE(utf8);
 }
 
-SDL_Surface* tig_font_modern_render_color(TigFont* font, const char* str, int width, SDL_Color color)
+static void tig_font_modern_apply_style(TigFont* font)
 {
-    TTF_FontStyleFlags style;
-    SDL_Surface* surface;
-    char* utf8;
-
-    style = TTF_STYLE_NORMAL;
+    TTF_FontStyleFlags style = TTF_STYLE_NORMAL;
     if ((font->flags & TIG_FONT_UNDERLINE) != 0) {
         style |= TTF_STYLE_UNDERLINE;
     }
@@ -853,17 +968,26 @@ SDL_Surface* tig_font_modern_render_color(TigFont* font, const char* str, int wi
         style |= TTF_STYLE_STRIKETHROUGH;
     }
     TTF_SetFontStyle((TTF_Font*)font->modern_font, style);
+}
 
-    utf8 = tig_font_modern_to_utf8(str);
+SDL_Surface* tig_font_modern_render_color(TigFont* font, const char* str, int width, SDL_Color color)
+{
+    SDL_Surface* surface;
+    char* utf8;
+    tig_font_modern_apply_style(font);
+
+    utf8 = (font->flags & TIG_FONT_UTF8) != 0 ? STRDUP(str) : tig_font_modern_to_utf8(str);
     if (utf8 == NULL) {
         return NULL;
     }
 
+    Uint64 raster_start = tig_performance_begin();
     if (width > 0) {
         surface = TTF_RenderText_Blended_Wrapped((TTF_Font*)font->modern_font, utf8, 0, color, width);
     } else {
         surface = TTF_RenderText_Blended((TTF_Font*)font->modern_font, utf8, 0, color);
     }
+    tig_performance_end(TIG_PERF_TEXT_RASTER, raster_start);
     FREE(utf8);
     if (surface != NULL) {
         SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_BLEND);

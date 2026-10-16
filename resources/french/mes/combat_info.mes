@@ -1,0 +1,10 @@
+// Combat information frames - Windows-1252
+{1}{Attaque}
+{2}{Toucher}
+{3}{Portée}
+{4}{Déplacement}
+{5}{Dist.}
+{6}{Fatigue}
+{7}{Sort via objet}
+{8}{Chemin inaccessible}
+{9}{PA}

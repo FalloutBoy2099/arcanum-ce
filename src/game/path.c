@@ -1,4 +1,5 @@
 #include "game/path.h"
+#include <tig/performance.h>
 
 #include "game/critter.h"
 #include "game/location.h"
@@ -60,7 +61,17 @@ static int dword_5DE5FC;
 static tig_duration_t dword_5DE600;
 
 // 0x41F3C0
+static int path_make_impl(PathCreateInfo* path_create_info);
+
 int path_make(PathCreateInfo* path_create_info)
+{
+    Uint64 start = tig_performance_begin();
+    int result = path_make_impl(path_create_info);
+    tig_performance_end(TIG_PERF_PATH, start);
+    return result;
+}
+
+static int path_make_impl(PathCreateInfo* path_create_info)
 {
     bool v1 = false;
 
@@ -381,6 +392,8 @@ int sub_41F9F0(PathCreateInfo* path_create_info)
         current_index = -1;
 
         // Grab open node with minimal cost.
+        tig_performance_count(TIG_PERF_PATH_EXPANSIONS, 1);
+        tig_performance_count(TIG_PERF_PATH_SCANNED_CELLS, 4096);
         for (int i = 0; i < 4096; i++) {
             // Check if node is open, i.e. it has a positive cost (negative cost
             // are closed nodes, zero cost are unprocessed nodes).

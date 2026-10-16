@@ -1,4 +1,16 @@
 #include "ui/logbook_ui.h"
+#include <tig/performance.h>
+#include "ui/cache_key.h"
+#include "ui/search_bar.h"
+#include "ui/textedit_ui.h"
+#include "ui/text_pagination.h"
+#include "game/area.h"
+#include "game/conversation_history.h"
+#include "game/journal_memory.h"
+#include "game/journal_text.h"
+#include "game/name.h"
+#include "game/obj_pool.h"
+#include "game/reaction.h"
 
 #include <stdio.h>
 
@@ -11,7 +23,9 @@
 #include "game/gamelib.h"
 #include "game/gsound.h"
 #include "game/item.h"
+#include "game/input_bindings.h"
 #include "game/location.h"
+#include "game/language.h"
 #include "game/logbook.h"
 #include "game/mes.h"
 #include "game/modern_font.h"
@@ -48,13 +62,27 @@ static void logbook_ui_destroy(void);
 static bool logbook_ui_message_filter(TigMessage* msg);
 static void logbook_ui_draw_panel(int border_art_num, bool preserve_page);
 static void logbook_ui_switch_tab(int tab, bool preserve_page);
-static void logbook_ui_turn_page_right(void);
-static void logbook_ui_turn_page_left(void);
 static void logbook_ui_refresh(void);
 static int logbook_ui_draw_page_spread(int start_entry, int max_entry);
 static int logbook_ui_draw_entry(int index, TigRect* rect, bool dry_run, bool can_truncate);
 static int logbook_ui_draw_text(char* buffer, tig_font_handle_t font, TigRect* rect, bool dry_run, bool can_truncate, bool add_line_spacing);
 static void logbook_ui_load_data(void);
+static void logbook_ui_load_index(void);
+static bool logbook_ui_format_entry(char* buffer, size_t maxlen, int index);
+static void logbook_ui_search_changed(TextEdit* edit);
+static void logbook_ui_search_finished(TextEdit* edit);
+static void logbook_ui_draw_search_bar(void);
+static bool logbook_ui_search_input(TigMessage* msg);
+static int logbook_ui_draw_search_text(char* text, tig_font_handle_t font, TigRect* rect,
+    bool dry_run, bool can_truncate, bool spacing, bool heading);
+static void logbook_ui_toggle_index(void);
+static void logbook_ui_index_hover(int x, int y);
+static void logbook_ui_index_open_quests(int index);
+static void logbook_ui_load_subject_quests(void);
+static void logbook_ui_toggle_history(void);
+static void logbook_ui_load_history(void);
+static void logbook_ui_clear_history_chunks(void);
+static void logbook_ui_clear_index_cache(void);
 static void logbook_ui_format_rumor(char* buffer, size_t maxlen, int index);
 static void logbook_ui_format_timestamp(char* buffer, size_t maxlen, int index);
 static void logbook_ui_format_quest(char* buffer, size_t maxlen, int index);
@@ -72,6 +100,15 @@ static bool logbook_ui_parse_color(const char* str, int* red, int* green, int* b
  * 0x5C33F0
  */
 static tig_window_handle_t logbook_ui_window = TIG_WINDOW_HANDLE_INVALID;
+static tig_window_handle_t logbook_ui_search_window = TIG_WINDOW_HANDLE_INVALID;
+static char logbook_ui_search[128];
+static bool logbook_ui_search_focused;
+static bool logbook_ui_search_filter = true;
+static TextEdit logbook_ui_search_edit = { 0, logbook_ui_search, sizeof(logbook_ui_search),
+    logbook_ui_search_finished, logbook_ui_search_changed, logbook_ui_search_finished };
+static TigRect logbook_ui_search_cells[3] = {
+    { 0, 0, 300, 22 }, { 310, 0, 80, 22 }, { 393, 0, 80, 22 },
+};
 
 /**
  * 0x5C33F8
@@ -94,9 +131,38 @@ static TigRect logbook_ui_pc_lens_rect = { 25, 24, 89, 89 };
  * 0x5C3428
  */
 static UiButtonInfo logbook_ui_page_buttons[LOGBOOK_UI_BUTTON_COUNT] = {
-    { 213, 77, 272, TIG_BUTTON_HANDLE_INVALID },
-    { 675, 77, 273, TIG_BUTTON_HANDLE_INVALID },
+    { 213, 380, 272, TIG_BUTTON_HANDLE_INVALID },
+    { 675, 380, 273, TIG_BUTTON_HANDLE_INVALID },
 };
+
+static UiButtonInfo logbook_ui_index_button = { 213, 77, NAME_JOURNAL_INDEX_BUTTON, TIG_BUTTON_HANDLE_INVALID };
+static bool logbook_ui_index_mode;
+static int logbook_ui_saved_page;
+static int logbook_ui_saved_spreads[512];
+typedef struct JournalIndexEntry {
+    const char* name;
+    bool heading;
+    bool hoverable;
+} JournalIndexEntry;
+static JournalIndexEntry logbook_ui_index_entries[3000];
+static bool logbook_ui_index_cache_valid;
+static uint64_t logbook_ui_index_cache_key;
+static int logbook_ui_index_cache_count;
+static TigRect logbook_ui_index_entry_rects[3000];
+static int logbook_ui_index_hovered = -1;
+static char logbook_ui_index_subject[MAX_STRING];
+static int logbook_ui_index_saved_page;
+static int logbook_ui_index_saved_spreads[512];
+static bool logbook_ui_history_mode;
+static int logbook_ui_history_saved_page;
+static int logbook_ui_history_saved_spreads[512];
+static char* logbook_ui_history_chunks[1000];
+static int logbook_ui_history_chunk_count;
+static bool logbook_ui_measure_only;
+static bool logbook_ui_history_cache_valid;
+static uint64_t logbook_ui_history_cache_key;
+static int logbook_ui_history_layout_spreads[512];
+static int logbook_ui_history_latest_page;
 
 /**
  * Defines logbook UI tab buttons.
@@ -248,7 +314,7 @@ static int logbook_ui_current_page;
  *
  * 0x64879C
  */
-static int logbook_ui_page_spread_starts[100];
+static int logbook_ui_page_spread_starts[512];
 
 /**
  * Red strikethrough font. Used for quests that were botched or completed by
@@ -476,12 +542,13 @@ bool logbook_ui_init(GameInitInfo* init_info)
     logbook_ui_border_art_num = -1;
 
     // Initialize page-spread history: spread 0 starts at entry 0.
-    for (index = 0; index < 100; index++) {
+    for (index = 0; index < SDL_arraysize(logbook_ui_page_spread_starts); index++) {
         logbook_ui_page_spread_starts[index] = -1;
     }
     logbook_ui_page_spread_starts[0] = 0;
 
     logbook_ui_tab = LOGBOOK_UI_TAB_RUMORS_AND_NOTES;
+    logbook_ui_index_mode = false;
     logbook_ui_obj = OBJ_HANDLE_NULL;
     logbook_ui_current_page = 1;
     logbook_ui_initialized = true;
@@ -496,6 +563,11 @@ bool logbook_ui_init(GameInitInfo* init_info)
  */
 void logbook_ui_exit(void)
 {
+    ui_search_bar_close(&logbook_ui_search_window);
+    if (logbook_ui_search_focused) textedit_ui_unfocus(&logbook_ui_search_edit);
+    logbook_ui_search_focused = false;
+    logbook_ui_clear_index_cache();
+    logbook_ui_clear_history_chunks();
     mes_unload(logbook_ui_mes_file);
     mes_unload(quotes_mes_file);
     tig_font_destroy(logbook_ui_font_default);
@@ -517,6 +589,17 @@ void logbook_ui_exit(void)
 void logbook_ui_reset(void)
 {
     int index;
+    ui_search_bar_close(&logbook_ui_search_window);
+    if (logbook_ui_search_focused) textedit_ui_unfocus(&logbook_ui_search_edit);
+    logbook_ui_search_focused = false;
+    logbook_ui_search[0] = '\0';
+    logbook_ui_search_filter = true;
+    logbook_ui_index_hovered = -1;
+    logbook_ui_index_subject[0] = '\0';
+    logbook_ui_index_mode = false;
+    logbook_ui_history_mode = false;
+    logbook_ui_clear_history_chunks();
+    logbook_ui_clear_index_cache();
 
     if (logbook_ui_created) {
         logbook_ui_close();
@@ -524,7 +607,7 @@ void logbook_ui_reset(void)
 
     logbook_ui_tab = LOGBOOK_UI_TAB_RUMORS_AND_NOTES;
 
-    for (index = 0; index < 100; index++) {
+    for (index = 0; index < SDL_arraysize(logbook_ui_page_spread_starts); index++) {
         logbook_ui_page_spread_starts[index] = -1;
     }
     logbook_ui_page_spread_starts[0] = 0;
@@ -598,9 +681,6 @@ bool logbook_ui_is_created(void)
  */
 void logbook_ui_create(void)
 {
-    TigArtBlitInfo blit_info;
-    TigRect src_rect;
-    TigRect dst_rect;
     int index;
     tig_button_handle_t button_handles[LOGBOOK_UI_TAB_COUNT];
     PcLens pc_lens;
@@ -609,7 +689,8 @@ void logbook_ui_create(void)
         return;
     }
 
-    if (!intgame_big_window_lock(logbook_ui_message_filter, &logbook_ui_window)) {
+    if (!intgame_big_window_lock_height(logbook_ui_message_filter, &logbook_ui_window,
+            settings_get_value(&settings, LOGBOOK_TOOLBAR_KEY) ? 450 : 400)) {
         tig_debug_printf("logbk_ui_create: ERROR: intgame_big_window_lock failed!\n");
         exit(EXIT_SUCCESS); // FIXME: Should be EXIT_FAILURE.
     }
@@ -617,29 +698,15 @@ void logbook_ui_create(void)
     // Hidden easter egg: holding Left Ctrl + Left Alt while opening logbook
     // switches the "Rumors & Notes" tab into "Bloopers & Quotes" mode.
     if (tig_kb_get_modifier(SDL_KMOD_LCTRL) && tig_kb_get_modifier(SDL_KMOD_LALT)) {
+        logbook_ui_index_mode = false;
         logbook_ui_tab = LOGBOOK_UI_TAB_RUMORS_AND_NOTES;
         logbook_ui_current_page = 1;
         logbook_ui_quotes_mode = true;
         gsound_play_sfx(SND_INTERFACE_BLESS, 1);
     }
 
-    // Blit the sidebar ("logbooks_side.art"). This section never changes in the
-    // window is therefore never redrawn.
-    src_rect.x = 0;
-    src_rect.y = 0;
-    src_rect.width = logbook_ui_background_rects[0].width;
-    src_rect.height = logbook_ui_background_rects[0].height;
-
-    dst_rect.x = 0;
-    dst_rect.y = 0;
-    dst_rect.width = src_rect.width;
-    dst_rect.height = src_rect.height;
-
-    blit_info.flags = 0;
-    tig_art_interface_id_create(264, 0, 0, 0, &(blit_info.art_id));
-    blit_info.src_rect = &src_rect;
-    blit_info.dst_rect = &dst_rect;
-    tig_window_blit_art(logbook_ui_window, &blit_info);
+    ui_panel_background_draw(logbook_ui_window,
+        settings_get_value(&settings, LOGBOOK_TOOLBAR_KEY) ? NAME_BOOK_SIDE_XL : 264, 0, 0);
 
     // Create page-turn buttons. Both start hidden, and will be made visible
     // when there is a need for them.
@@ -649,6 +716,9 @@ void logbook_ui_create(void)
             &(logbook_ui_page_buttons[index]),
             TIG_BUTTON_HIDDEN | TIG_BUTTON_MOMENTARY);
     }
+    intgame_button_create_ex(logbook_ui_window,
+        &logbook_ui_background_rects[0], &logbook_ui_index_button,
+        TIG_BUTTON_HIDDEN | TIG_BUTTON_MOMENTARY);
 
     // Create tab buttons and group them as a radio set so exactly one tab is
     // always selected. The buttons start hidden but all will be made visible
@@ -688,6 +758,9 @@ void logbook_ui_create(void)
  */
 void logbook_ui_destroy(void)
 {
+    ui_search_bar_close(&logbook_ui_search_window);
+    if (logbook_ui_search_focused) textedit_ui_unfocus(&logbook_ui_search_edit);
+    logbook_ui_search_focused = false;
     if (!logbook_ui_created) {
         return;
     }
@@ -697,6 +770,7 @@ void logbook_ui_destroy(void)
     logbook_ui_window = TIG_WINDOW_HANDLE_INVALID;
     gsound_play_sfx(SND_INTERFACE_BOOK_CLOSE, 1);
     logbook_ui_created = false;
+    logbook_ui_index_hovered = -1;
 
     // If quotes mode was active, restore the page counter to 1 so the next
     // open (in normal mode) starts from the beginning.
@@ -718,10 +792,42 @@ bool logbook_ui_message_filter(TigMessage* msg)
     MesFileEntry mes_file_entry;
     UiMessage ui_message;
 
+    if (logbook_ui_search_input(msg)) return true;
+
+    if (msg->type == TIG_MESSAGE_KEYBOARD || msg->type == TIG_MESSAGE_MOUSE) {
+        for (int action = 0; action < 4; action++) {
+            InputBindingNavigationEvent event = input_binding_navigation_event((InputAction)(INPUT_ACTION_LOGBOOK_PREVIOUS + action), msg);
+            if (event == INPUT_NAVIGATION_NONE) continue;
+            // Consume both edges and held-button repeats before HUD handling.
+            if (event == INPUT_NAVIGATION_CONSUME) return true;
+            TigMessage button = { 0 };
+            button.type = TIG_MESSAGE_BUTTON;
+            if (action < 2) {
+                int tab = (logbook_ui_tab + (action == 0 ? -1 : 1) + LOGBOOK_UI_TAB_COUNT) % LOGBOOK_UI_TAB_COUNT;
+                button.data.button.button_handle = logbook_ui_tab_buttons[tab].button_handle;
+                button.data.button.state = TIG_BUTTON_STATE_PRESSED;
+                tig_button_state_change(button.data.button.button_handle, TIG_BUTTON_STATE_PRESSED);
+            } else {
+                int index = action == 2 ? LOGBOOK_UI_BUTTON_TURN_PAGE_LEFT : LOGBOOK_UI_BUTTON_TURN_PAGE_RIGHT;
+                button.data.button.button_handle = logbook_ui_page_buttons[index].button_handle;
+                button.data.button.state = TIG_BUTTON_STATE_RELEASED;
+            }
+            return logbook_ui_message_filter(&button);
+        }
+    }
+
     if (msg->type == TIG_MESSAGE_MOUSE) {
+        if (logbook_ui_index_mode && logbook_ui_index_subject[0] == '\0') {
+            logbook_ui_index_hover(msg->data.mouse.x, msg->data.mouse.y);
+            if (msg->data.mouse.event == TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP
+                && logbook_ui_index_hovered >= 0) {
+                logbook_ui_index_open_quests(logbook_ui_index_hovered);
+                return true;
+            }
+        }
         // Clicking on the PC lens closes logbook UI.
         if (msg->data.mouse.event == TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP
-            && intgame_pc_lens_check_pt(msg->data.mouse.x, msg->data.mouse.y)) {
+            && intgame_panel_close_lens_check_pt(msg->data.mouse.x, msg->data.mouse.y)) {
             logbook_ui_close();
             return true;
         }
@@ -731,7 +837,7 @@ bool logbook_ui_message_filter(TigMessage* msg)
             && logbook_ui_window != TIG_WINDOW_HANDLE_INVALID) {
             TigWindowData menu_wd;
             if (tig_window_data(logbook_ui_window, &menu_wd) == TIG_OK
-                && intgame_should_dismiss_overlay_click(msg->data.mouse.x, msg->data.mouse.y, &menu_wd.rect)) {
+                && intgame_panel_should_dismiss_overlay_click(msg->data.mouse.x, msg->data.mouse.y, &menu_wd.rect)) {
                 logbook_ui_close();
                 return true;
             }
@@ -752,6 +858,14 @@ bool logbook_ui_message_filter(TigMessage* msg)
             }
             return false;
         case TIG_BUTTON_STATE_RELEASED:
+            if (logbook_ui_index_button.button_handle == msg->data.button.button_handle) {
+                if (logbook_ui_tab == LOGBOOK_UI_TAB_RUMORS_AND_NOTES) {
+                    logbook_ui_toggle_history();
+                } else {
+                    logbook_ui_toggle_index();
+                }
+                return true;
+            }
             // Page-turn buttons: navigate one spread forward or backward.
             if (logbook_ui_page_buttons[LOGBOOK_UI_BUTTON_TURN_PAGE_LEFT].button_handle == msg->data.button.button_handle) {
                 logbook_ui_turn_page_left();
@@ -763,6 +877,15 @@ bool logbook_ui_message_filter(TigMessage* msg)
             }
             return false;
         case TIG_BUTTON_STATE_MOUSE_INSIDE:
+            if (logbook_ui_index_button.button_handle == msg->data.button.button_handle) {
+                ui_message.type = UI_MSG_TYPE_FEEDBACK;
+                ui_message.str = (char*)mes_localized_get("journal_index",
+                    logbook_ui_tab == LOGBOOK_UI_TAB_RUMORS_AND_NOTES
+                        ? (logbook_ui_history_mode ? 12 : 10)
+                        : (logbook_ui_index_subject[0] != '\0' ? 6 : logbook_ui_index_mode ? 4 : 0));
+                intgame_message_window_display_msg(&ui_message);
+                return true;
+            }
             // Show the tab's tooltip in the message window while the cursor
             // hovers over it.
             for (index = 0; index < LOGBOOK_UI_TAB_COUNT; index++) {
@@ -779,6 +902,10 @@ bool logbook_ui_message_filter(TigMessage* msg)
             }
             return false;
         case TIG_BUTTON_STATE_MOUSE_OUTSIDE:
+            if (logbook_ui_index_button.button_handle == msg->data.button.button_handle) {
+                intgame_message_window_clear();
+                return true;
+            }
             // Clear the message window when the cursor leaves a tab button.
             for (index = 0; index < LOGBOOK_UI_TAB_COUNT; index++) {
                 if (logbook_ui_tab_buttons[index].button_handle == msg->data.button.button_handle) {
@@ -825,22 +952,15 @@ void logbook_ui_draw_panel(int border_art_num, bool preserve_page)
 
     logbook_ui_border_art_num = border_art_num;
 
-    // Redraw the two-page spread background to clear any previous page content.
-    src_rect.x = 0;
-    src_rect.y = 0;
-    src_rect.width = logbook_ui_background_rects[0].width;
-    src_rect.height = logbook_ui_background_rects[0].height;
+    ui_panel_background_draw(logbook_ui_window,
+        settings_get_value(&settings, LOGBOOK_TOOLBAR_KEY) ? NAME_BOOK_MAIN_XL : 260, 165, 0);
 
-    dst_rect.x = 165;
-    dst_rect.y = 0;
-    dst_rect.width = src_rect.width;
-    dst_rect.height = src_rect.height;
-
+    // The page border keeps its original size and top position.
+    src_rect = (TigRect){ 0, 0, 800, 400 };
+    dst_rect = src_rect;
     blit_info.flags = 0;
-    tig_art_interface_id_create(260, 0, 0, 0, &(blit_info.art_id));
     blit_info.src_rect = &src_rect;
     blit_info.dst_rect = &dst_rect;
-    tig_window_blit_art(logbook_ui_window, &blit_info);
 
     // Redraw the specified border around two-page spread.
     tig_art_interface_id_create(logbook_ui_border_art_num, 0, 0, 0, &(blit_info.art_id));
@@ -881,9 +1001,13 @@ void logbook_ui_draw_panel(int border_art_num, bool preserve_page)
 void logbook_ui_switch_tab(int tab, bool preserve_page)
 {
     int index;
+    logbook_ui_index_hovered = -1;
 
     if (!preserve_page) {
-        for (index = 0; index < 100; index++) {
+        logbook_ui_history_mode = false;
+        logbook_ui_index_mode = false;
+        logbook_ui_index_subject[0] = '\0';
+        for (index = 0; index < SDL_arraysize(logbook_ui_page_spread_starts); index++) {
             logbook_ui_page_spread_starts[index] = -1;
         }
         logbook_ui_page_spread_starts[0] = 0;
@@ -891,7 +1015,10 @@ void logbook_ui_switch_tab(int tab, bool preserve_page)
         logbook_ui_tab = tab;
     }
 
-    logbook_ui_load_data();
+    if (logbook_ui_history_mode) logbook_ui_load_history();
+    else if (logbook_ui_index_mode && logbook_ui_index_subject[0] != '\0') logbook_ui_load_subject_quests();
+    else if (logbook_ui_index_mode) logbook_ui_load_index();
+    else logbook_ui_load_data();
     logbook_ui_refresh();
     gsound_play_sfx(SND_INTERFACE_BOOK_PAGE_TURN, 1);
 }
@@ -906,8 +1033,9 @@ void logbook_ui_switch_tab(int tab, bool preserve_page)
 void logbook_ui_turn_page_right(void)
 {
     if (logbook_ui_last_visible_entry < logbook_ui_entry_count - 1
-        && (logbook_ui_current_page - 1) / 2 < 100) {
+        && (logbook_ui_current_page - 1) / 2 < SDL_arraysize(logbook_ui_page_spread_starts) - 1) {
         logbook_ui_current_page += 2;
+        logbook_ui_index_hovered = -1;
         logbook_ui_page_spread_starts[(logbook_ui_current_page - 1) / 2] = logbook_ui_last_visible_entry + 1;
         logbook_ui_refresh();
         gsound_play_sfx(SND_INTERFACE_BOOK_PAGE_TURN, 1);
@@ -923,6 +1051,7 @@ void logbook_ui_turn_page_left(void)
 {
     if (logbook_ui_page_spread_starts[(logbook_ui_current_page - 1) / 2] > 0) {
         logbook_ui_current_page -= 2;
+        logbook_ui_index_hovered = -1;
         logbook_ui_refresh();
         gsound_play_sfx(SND_INTERFACE_BOOK_PAGE_TURN, 1);
     }
@@ -935,34 +1064,19 @@ void logbook_ui_turn_page_left(void)
  */
 void logbook_ui_refresh(void)
 {
-    TigArtBlitInfo blit_info;
-    TigRect src_rect;
-    TigRect dst_rect;
     MesFileEntry mes_file_entry;
     int index;
     char buffer[80];
+    memset(logbook_ui_index_entry_rects, 0, sizeof(logbook_ui_index_entry_rects));
 
     // Hide navigation buttons before redrawing. They are re-shown below when
     // appropriate.
     tig_button_hide(logbook_ui_page_buttons[LOGBOOK_UI_BUTTON_TURN_PAGE_LEFT].button_handle);
     tig_button_hide(logbook_ui_page_buttons[LOGBOOK_UI_BUTTON_TURN_PAGE_RIGHT].button_handle);
+    tig_button_hide(logbook_ui_index_button.button_handle);
 
-    // Clear the page area by reblitting the blank page spread background.
-    src_rect.x = 0;
-    src_rect.y = 0;
-    src_rect.width = logbook_ui_background_rects[0].width;
-    src_rect.height = logbook_ui_background_rects[0].height;
-
-    dst_rect.x = 165;
-    dst_rect.y = 0;
-    dst_rect.width = src_rect.width;
-    dst_rect.height = src_rect.height;
-
-    blit_info.flags = 0;
-    tig_art_interface_id_create(260, 0, 0, 0, &(blit_info.art_id));
-    blit_info.src_rect = &src_rect;
-    blit_info.dst_rect = &dst_rect;
-    tig_window_blit_art(logbook_ui_window, &blit_info);
+    ui_panel_background_draw(logbook_ui_window,
+        settings_get_value(&settings, LOGBOOK_TOOLBAR_KEY) ? NAME_BOOK_MAIN_XL : 260, 165, 0);
 
     // Render entries onto the page spread.
     if (logbook_ui_entry_count != 0) {
@@ -988,6 +1102,15 @@ void logbook_ui_refresh(void)
         : logbook_ui_tab;
     mes_get_msg(logbook_ui_mes_file, &mes_file_entry);
 
+    if (logbook_ui_index_mode && logbook_ui_index_subject[0] == '\0') {
+        mes_file_entry.str = (char*)mes_localized_get("journal_index", 0);
+    }
+    if (logbook_ui_history_mode) mes_file_entry.str = (char*)mes_localized_get("journal_index", 10);
+    if (logbook_ui_tab == LOGBOOK_UI_TAB_RUMORS_AND_NOTES
+        || (!logbook_ui_history_mode && logbook_ui_tab == LOGBOOK_UI_TAB_QUESTS)) {
+        tig_button_show(logbook_ui_index_button.button_handle);
+    }
+
     tig_font_push(logbook_ui_font_header);
     for (index = 0; index < 2; index++) {
         snprintf(buffer, sizeof(buffer), "%c%s%c", '-', mes_file_entry.str, '-');
@@ -1002,6 +1125,7 @@ void logbook_ui_refresh(void)
         tig_window_text_write(logbook_ui_window, buffer, &(logbook_ui_page_footer_rects[index]));
     }
     tig_font_pop();
+    logbook_ui_draw_search_bar();
 }
 
 /**
@@ -1018,65 +1142,20 @@ void logbook_ui_refresh(void)
  *
  * 0x53F8F0
  */
+static int logbook_ui_measure_page_entry(int entry, int page, int remaining,
+    bool dry_run, bool first, void* context)
+{
+    (void)context;
+    TigRect rect = logbook_ui_page_content_rects[page];
+    rect.y += rect.height - remaining;
+    rect.height = remaining;
+    return logbook_ui_draw_entry(entry, &rect, dry_run, first);
+}
+
 int logbook_ui_draw_page_spread(int start_entry, int max_entry)
 {
-    TigRect page_rect;
-    int entry_idx;
-    bool on_right_page;
-    bool is_first_on_page;
-    int step;
-    bool dry_run;
-    int entry_height;
-
-    page_rect = logbook_ui_page_content_rects[0];
-    entry_idx = start_entry;
-    on_right_page = false;
-    is_first_on_page = true;
-    if (start_entry > max_entry) {
-        step = -1;
-        dry_run = true;
-    } else {
-        step = 1;
-        dry_run = false;
-    }
-
-    // Iterate until we reach one step past the final entry.
-    while (entry_idx != step + max_entry) {
-        entry_height = logbook_ui_draw_entry(entry_idx, &page_rect, dry_run, is_first_on_page);
-        is_first_on_page = false;
-        if (entry_height > 0 && entry_height <= page_rect.height) {
-            // Entry fits, consume vertical space and move to the next entry.
-            page_rect.y += entry_height;
-            page_rect.height -= entry_height;
-        } else {
-            if (on_right_page) {
-                // The right page is also full (or the entry is too tall even
-                // for a fresh page). If the entry was non-empty, back up so
-                // the caller records the correct last-visible index.
-                if (entry_height > 0) {
-                    entry_idx += step;
-                }
-                break;
-            }
-
-            // Switch to the right page and retry from the same entry.
-            page_rect = logbook_ui_page_content_rects[1];
-            on_right_page = true;
-            is_first_on_page = true;
-
-            // If the entry reported zero height it's "too tall for available
-            // space". Back up one step so it is retried against the fresh right
-            // page.
-            if (entry_height == 0) {
-                entry_idx -= step;
-            }
-        }
-
-        entry_idx += step;
-    }
-
-    // Return the last successfully drawn entry index.
-    return entry_idx - step;
+    int heights[] = { logbook_ui_page_content_rects[0].height, logbook_ui_page_content_rects[1].height };
+    return ui_text_paginate_spread(start_entry, max_entry, heights, logbook_ui_measure_page_entry, NULL);
 }
 
 /**
@@ -1087,6 +1166,41 @@ int logbook_ui_draw_page_spread(int start_entry, int max_entry)
 int logbook_ui_draw_entry(int index, TigRect* rect, bool dry_run, bool can_truncate)
 {
     char buffer[MAX_STRING];
+    if (logbook_ui_history_mode) {
+        SDL_strlcpy(buffer, logbook_ui_history_chunks[index], sizeof(buffer));
+        return logbook_ui_draw_search_text(buffer, logbook_ui_font_default, rect, dry_run || logbook_ui_measure_only, can_truncate, true, false);
+    }
+    if (logbook_ui_index_mode && logbook_ui_index_subject[0] != '\0') {
+        if (index == 0 || logbook_ui_entry_ids[index] == -2) {
+            snprintf(buffer, sizeof(buffer), "%s", index == 0
+                ? logbook_ui_index_subject : mes_localized_get("journal_index", 5));
+            return logbook_ui_draw_search_text(buffer, index == 0 ? logbook_ui_font_header : logbook_ui_font_default,
+                rect, dry_run, can_truncate, true, true);
+        }
+    } else if (logbook_ui_index_mode) {
+        snprintf(buffer, sizeof(buffer), "%s", logbook_ui_index_entries[index].name);
+        tig_font_handle_t font = logbook_ui_index_entries[index].heading ? logbook_ui_font_header
+            : index == logbook_ui_index_hovered ? logbook_ui_font_active : logbook_ui_font_default;
+        int height = logbook_ui_draw_search_text(buffer, font, rect, dry_run, can_truncate,
+            logbook_ui_index_entries[index].heading, logbook_ui_index_entries[index].heading);
+        if (!dry_run && height > 0 && logbook_ui_index_entries[index].hoverable) {
+            TigFont measure = { 0 };
+            measure.str = buffer;
+            measure.width = rect->width;
+            tig_font_push(font);
+            tig_font_measure(&measure);
+            tig_font_pop();
+            logbook_ui_index_entry_rects[index] = (TigRect){ rect->x, rect->y,
+                SDL_min(measure.width, rect->width), SDL_min(height, rect->height) };
+        }
+        return height;
+    }
+    bool add_line_spacing = logbook_ui_format_entry(buffer, sizeof(buffer), index);
+    return logbook_ui_draw_search_text(buffer, logbook_ui_entry_fonts[index], rect, dry_run, can_truncate, add_line_spacing, false);
+}
+
+static bool logbook_ui_format_entry(char* buffer, size_t maxlen, int index)
+{
     bool add_line_spacing;
 
     // Determine whether an extra blank-line gap should follow this entry.
@@ -1095,31 +1209,470 @@ int logbook_ui_draw_entry(int index, TigRect* rect, bool dry_run, bool can_trunc
 
     switch (logbook_ui_tab) {
     case LOGBOOK_UI_TAB_RUMORS_AND_NOTES:
-        logbook_ui_format_rumor(buffer, sizeof(buffer), index);
+        logbook_ui_format_rumor(buffer, maxlen, index);
         break;
     case LOGBOOK_UI_TAB_QUESTS:
-        logbook_ui_format_quest(buffer, sizeof(buffer), index);
+        logbook_ui_format_quest(buffer, maxlen, index);
         break;
     case LOGBOOK_UI_TAB_REPUTATIONS:
-        logbook_ui_format_reputation(buffer, sizeof(buffer), index);
+        logbook_ui_format_reputation(buffer, maxlen, index);
         break;
     case LOGBOOK_UI_TAB_BLESSINGS_AND_CURSES:
-        logbook_ui_format_blessing_or_curse(buffer, sizeof(buffer), index);
+        logbook_ui_format_blessing_or_curse(buffer, maxlen, index);
         break;
     case LOGBOOK_UI_TAB_KILLS_AND_INJURES:
-        logbook_ui_format_kill_or_injury(buffer, sizeof(buffer), index);
+        logbook_ui_format_kill_or_injury(buffer, maxlen, index);
         // "Kills & Injuries" entries are fixed-layout.
         add_line_spacing = false;
         break;
     case LOGBOOK_UI_TAB_BACKGROUND:
-        logbook_ui_format_background(buffer, sizeof(buffer), index);
+        logbook_ui_format_background(buffer, maxlen, index);
         break;
     case LOGBOOK_UI_TAB_KEYS:
-        logbook_ui_format_key(buffer, sizeof(buffer), index);
+        logbook_ui_format_key(buffer, maxlen, index);
         break;
     }
 
-    return logbook_ui_draw_text(buffer, logbook_ui_entry_fonts[index], rect, dry_run, can_truncate, add_line_spacing);
+    return add_line_spacing;
+}
+
+typedef struct JournalIndexCandidate {
+    const char* name;
+    int description;
+    bool known;
+    bool person;
+} JournalIndexCandidate;
+
+static int logbook_ui_index_compare(const void* a, const void* b)
+{
+    return journal_text_compare(((const JournalIndexEntry*)a)->name, ((const JournalIndexEntry*)b)->name);
+}
+
+static void logbook_ui_index_candidate(JournalIndexCandidate* candidates, int* count, int description)
+{
+    // Common descriptions identify generic creatures/roles, not named NPCs.
+    if (description < 30000) return;
+    const char* name = description_get(description);
+    if (name == NULL || name[0] == '\0' || *count >= 8192) return;
+    for (int i = 0; i < *count; i++) {
+        if (candidates[i].person && candidates[i].description == description) return;
+    }
+    candidates[*count].name = name;
+    candidates[*count].description = description;
+    candidates[*count].known = logbook_ui_obj == player_get_local_pc_obj() && journal_memory_knows(description);
+    candidates[*count].person = true;
+    (*count)++;
+}
+
+static void logbook_ui_clear_index_cache(void)
+{
+    for (int i = 0; i < logbook_ui_index_cache_count; i++) {
+        FREE((char*)logbook_ui_index_entries[i].name);
+    }
+    logbook_ui_index_cache_count = 0;
+    logbook_ui_index_cache_valid = false;
+}
+
+static void logbook_ui_load_index(void)
+{
+    Uint64 perf_start = tig_performance_begin();
+    JournalIndexCandidate* candidates = CALLOC(8192, sizeof(*candidates));
+    int count = 0;
+    int saved_tab = logbook_ui_tab;
+    bool saved_quotes = logbook_ui_quotes_mode;
+    int64_t obj;
+    int iter;
+    mes_file_handle_t people;
+    MesFileEntry entry;
+
+    for (int area = 1; area < area_count() && count < 8192; area++) {
+        const char* name = area_get_name(area);
+        if (name == NULL || name[0] == '\0') continue;
+        candidates[count].name = name;
+        candidates[count].known = area_is_known(logbook_ui_obj, area);
+        count++;
+    }
+
+    // Prototypes provide typed names, and instances provide names overridden
+    // by module maps. Merely loading an object never makes its name known.
+    if (obj_pool_walk_first(&obj, &iter)) {
+        do {
+            if (obj_field_int32_get(obj, OBJ_F_TYPE) != OBJ_TYPE_NPC) continue;
+            int description = obj_field_int32_get(obj, OBJ_F_DESCRIPTION);
+            if (logbook_ui_obj == player_get_local_pc_obj()
+                && !obj_is_proto(obj) && reaction_met_before(obj, logbook_ui_obj)) {
+                journal_memory_remember(description);
+            }
+            logbook_ui_index_candidate(candidates, &count, description);
+        } while (obj_pool_walk_next(&obj, &iter));
+    }
+    for (int i = 0; i < journal_memory_count(); i++) {
+        logbook_ui_index_candidate(candidates, &count, journal_memory_get(i));
+    }
+
+    // Optional module catalog identifies NPCs mentioned before their map has
+    // been loaded. It contains description IDs, never unrestricted MES text.
+    if (mes_load("mes\\journal_people.mes", &people)) {
+        if (mes_find_first(people, &entry)) {
+            do {
+                logbook_ui_index_candidate(candidates, &count, entry.num);
+            } while (mes_find_next(people, &entry));
+        }
+        mes_unload(people);
+    }
+
+    // Scan only entries actually visible to this player, across every journal
+    // section. Developer quotes and unknown quest/rumor text are excluded.
+    logbook_ui_index_mode = false;
+    for (int i = 0; i < count; i++) {
+        if (logbook_ui_obj == player_get_local_pc_obj()
+            && candidates[i].person && journal_memory_knows(candidates[i].description)) candidates[i].known = true;
+    }
+    logbook_ui_quotes_mode = false;
+    uint64_t key = UI_CACHE_KEY_INIT;
+    GameLanguage language = gamelib_current_language_get();
+    ui_cache_key_bytes(&key, &language, sizeof(language));
+    ui_cache_key_bytes(&key, &logbook_ui_obj, sizeof(logbook_ui_obj));
+    for (int i = 0; i < count; i++) {
+        ui_cache_key_string(&key, candidates[i].name);
+        ui_cache_key_bytes(&key, &candidates[i].known, sizeof(candidates[i].known));
+        ui_cache_key_bytes(&key, &candidates[i].person, sizeof(candidates[i].person));
+        ui_cache_key_bytes(&key, &candidates[i].description, sizeof(candidates[i].description));
+    }
+    for (int id = 0; id <= 3; id++) ui_cache_key_string(&key, mes_localized_get("journal_index", id));
+    // A cold opening has nothing to validate: fingerprint texts during the
+    // construction pass instead. In particular, do not paginate Background
+    // twice, since loading that tab already measures its text.
+    bool validated_texts = logbook_ui_index_cache_valid;
+    for (int tab = 0; validated_texts && tab < LOGBOOK_UI_TAB_COUNT; tab++) {
+        logbook_ui_tab = tab;
+        logbook_ui_load_data();
+        ui_cache_key_bytes(&key, &tab, sizeof(tab));
+        ui_cache_key_bytes(&key, &logbook_ui_entry_count, sizeof(logbook_ui_entry_count));
+        for (int i = 0; i < logbook_ui_entry_count; i++) {
+            char text[MAX_STRING] = { 0 };
+            logbook_ui_format_entry(text, sizeof(text), i);
+            ui_cache_key_string(&key, text);
+        }
+    }
+    if (logbook_ui_index_cache_valid && logbook_ui_index_cache_key == key) {
+        logbook_ui_tab = saved_tab;
+        logbook_ui_quotes_mode = saved_quotes;
+        logbook_ui_index_mode = true;
+        logbook_ui_entry_count = logbook_ui_index_cache_count;
+        tig_performance_count(TIG_PERF_INDEX_CACHE_HITS, 1);
+        goto index_done;
+    }
+    logbook_ui_clear_index_cache();
+    for (int tab = 0; tab < LOGBOOK_UI_TAB_COUNT; tab++) {
+        logbook_ui_tab = tab;
+        logbook_ui_load_data();
+        if (!validated_texts) {
+            ui_cache_key_bytes(&key, &tab, sizeof(tab));
+            ui_cache_key_bytes(&key, &logbook_ui_entry_count, sizeof(logbook_ui_entry_count));
+        }
+        for (int i = 0; i < logbook_ui_entry_count; i++) {
+            char text[MAX_STRING] = { 0 };
+            logbook_ui_format_entry(text, sizeof(text), i);
+            if (!validated_texts) ui_cache_key_string(&key, text);
+            for (int candidate = 0; candidate < count; candidate++) {
+                if (!candidates[candidate].known && journal_text_mentions(text, candidates[candidate].name)) {
+                    candidates[candidate].known = true;
+                }
+            }
+        }
+    }
+    logbook_ui_tab = saved_tab;
+    logbook_ui_quotes_mode = saved_quotes;
+    logbook_ui_index_mode = true;
+
+    logbook_ui_entry_count = 0;
+    for (int section = 0; section < 2; section++) {
+        int heading = logbook_ui_entry_count++;
+        logbook_ui_index_entries[heading] = (JournalIndexEntry){ mes_localized_get("journal_index", section + 1), true };
+        int start = logbook_ui_entry_count;
+        for (int i = 0; i < count && logbook_ui_entry_count < SDL_arraysize(logbook_ui_index_entries) - 3; i++) {
+            if (candidates[i].known && candidates[i].person == (section == 1)) {
+                logbook_ui_index_entries[logbook_ui_entry_count++] = (JournalIndexEntry){ candidates[i].name, false, true };
+            }
+        }
+        qsort(&logbook_ui_index_entries[start], logbook_ui_entry_count - start, sizeof(JournalIndexEntry), logbook_ui_index_compare);
+        // Multiple NPCs/prototypes may share a name: list that name only once.
+        int end = logbook_ui_entry_count;
+        logbook_ui_entry_count = start;
+        for (int i = start; i < end; i++) {
+            if (logbook_ui_entry_count == start
+                || journal_text_compare(logbook_ui_index_entries[i].name, logbook_ui_index_entries[logbook_ui_entry_count - 1].name) != 0) {
+                logbook_ui_index_entries[logbook_ui_entry_count++] = logbook_ui_index_entries[i];
+            }
+        }
+        if (start == logbook_ui_entry_count) {
+            logbook_ui_index_entries[logbook_ui_entry_count++] = (JournalIndexEntry){ mes_localized_get("journal_index", 3), false };
+        }
+    }
+    // Own cached names: object pools and module resources may change between
+    // openings. Revalidation checks their current contents before any reuse.
+    for (int i = 0; i < logbook_ui_entry_count; i++) {
+        logbook_ui_index_entries[i].name = STRDUP(logbook_ui_index_entries[i].name);
+    }
+    logbook_ui_index_cache_count = logbook_ui_entry_count;
+    logbook_ui_index_cache_key = key;
+    logbook_ui_index_cache_valid = true;
+index_done:
+    FREE(candidates);
+    while (logbook_ui_current_page > 1
+        && logbook_ui_page_spread_starts[(logbook_ui_current_page - 1) / 2] >= logbook_ui_entry_count) {
+        logbook_ui_current_page -= 2;
+    }
+    tig_performance_end(TIG_PERF_JOURNAL, perf_start);
+}
+
+static void logbook_ui_toggle_index(void)
+{
+    if (logbook_ui_history_mode || logbook_ui_tab != LOGBOOK_UI_TAB_QUESTS) return;
+    logbook_ui_index_hovered = -1;
+    if (logbook_ui_index_mode && logbook_ui_index_subject[0] != '\0') {
+        logbook_ui_index_subject[0] = '\0';
+        logbook_ui_current_page = logbook_ui_index_saved_page;
+        memcpy(logbook_ui_page_spread_starts, logbook_ui_index_saved_spreads, sizeof(logbook_ui_index_saved_spreads));
+        logbook_ui_load_index();
+    } else if (logbook_ui_index_mode) {
+        logbook_ui_index_mode = false;
+        logbook_ui_current_page = logbook_ui_saved_page;
+        memcpy(logbook_ui_page_spread_starts, logbook_ui_saved_spreads, sizeof(logbook_ui_saved_spreads));
+        logbook_ui_load_data();
+    } else {
+        logbook_ui_saved_page = logbook_ui_current_page;
+        memcpy(logbook_ui_saved_spreads, logbook_ui_page_spread_starts, sizeof(logbook_ui_saved_spreads));
+        memset(logbook_ui_page_spread_starts, -1, sizeof(logbook_ui_page_spread_starts));
+        logbook_ui_page_spread_starts[0] = 0;
+        logbook_ui_current_page = 1;
+        logbook_ui_load_index();
+    }
+    logbook_ui_refresh();
+    gsound_play_sfx(SND_INTERFACE_BOOK_PAGE_TURN, 1);
+}
+
+static void logbook_ui_load_subject_quests(void)
+{
+    // Start with the player's known quests and their original status fonts.
+    logbook_ui_load_data();
+    int count = logbook_ui_entry_count;
+    // Reserve the first entry for the selected subject. Shift once before
+    // filtering so adding that heading cannot overwrite the next quest.
+    memmove(&logbook_ui_entry_ids[1], logbook_ui_entry_ids, count * sizeof(logbook_ui_entry_ids[0]));
+    memmove(&logbook_ui_entry_datetimes[1], logbook_ui_entry_datetimes, count * sizeof(logbook_ui_entry_datetimes[0]));
+    memmove(&logbook_ui_quest_states[1], logbook_ui_quest_states, count * sizeof(logbook_ui_quest_states[0]));
+    memmove(&logbook_ui_entry_fonts[1], logbook_ui_entry_fonts, count * sizeof(logbook_ui_entry_fonts[0]));
+    int out = 1;
+    for (int i = 1; i <= count; i++) {
+        char text[MAX_STRING] = "";
+        quest_copy_description(logbook_ui_obj, logbook_ui_entry_ids[i], text, sizeof(text));
+        if (!journal_text_mentions(text, logbook_ui_index_subject)) continue;
+        logbook_ui_entry_ids[out] = logbook_ui_entry_ids[i];
+        logbook_ui_entry_datetimes[out] = logbook_ui_entry_datetimes[i];
+        logbook_ui_quest_states[out] = logbook_ui_quest_states[i];
+        logbook_ui_entry_fonts[out++] = logbook_ui_entry_fonts[i];
+    }
+    logbook_ui_entry_ids[0] = -1;
+    if (out == 1) logbook_ui_entry_ids[out++] = -2;
+    logbook_ui_entry_count = out;
+    while (logbook_ui_current_page > 1
+        && logbook_ui_page_spread_starts[(logbook_ui_current_page - 1) / 2] >= out) {
+        logbook_ui_current_page -= 2;
+    }
+}
+
+static void logbook_ui_index_open_quests(int index)
+{
+    if (index < 0 || index >= logbook_ui_entry_count || !logbook_ui_index_entries[index].hoverable) return;
+    SDL_strlcpy(logbook_ui_index_subject, logbook_ui_index_entries[index].name, sizeof(logbook_ui_index_subject));
+    logbook_ui_index_saved_page = logbook_ui_current_page;
+    memcpy(logbook_ui_index_saved_spreads, logbook_ui_page_spread_starts, sizeof(logbook_ui_index_saved_spreads));
+    memset(logbook_ui_page_spread_starts, -1, sizeof(logbook_ui_page_spread_starts));
+    logbook_ui_page_spread_starts[0] = 0;
+    logbook_ui_current_page = 1;
+    logbook_ui_index_hovered = -1;
+    logbook_ui_load_subject_quests();
+    logbook_ui_refresh();
+    gsound_play_sfx(SND_INTERFACE_BOOK_PAGE_TURN, 1);
+}
+
+static void logbook_ui_clear_history_chunks(void)
+{
+    logbook_ui_history_cache_valid = false;
+    for (int i = 0; i < logbook_ui_history_chunk_count; i++) {
+        FREE(logbook_ui_history_chunks[i]);
+        logbook_ui_history_chunks[i] = NULL;
+    }
+    logbook_ui_history_chunk_count = 0;
+}
+
+static void logbook_ui_load_history(void)
+{
+    uint64_t key = UI_CACHE_KEY_INIT;
+    uint64_t revision = conversation_history_revision();
+    GameLanguage language = gamelib_current_language_get();
+    ui_cache_key_bytes(&key, &revision, sizeof(revision));
+    ui_cache_key_bytes(&key, &language, sizeof(language));
+    bool toolbar_enabled = settings_get_value(&settings, LOGBOOK_TOOLBAR_KEY) != 0;
+    ui_cache_key_bytes(&key, &toolbar_enabled, sizeof(toolbar_enabled));
+    ui_cache_key_bytes(&key, &logbook_ui_search_filter, sizeof(logbook_ui_search_filter));
+    if (toolbar_enabled && logbook_ui_search_filter) ui_cache_key_string(&key, logbook_ui_search);
+    ui_cache_key_bytes(&key, &logbook_ui_font_default, sizeof(logbook_ui_font_default));
+    ui_cache_key_bytes(&key, &logbook_ui_page_content_rects, sizeof(logbook_ui_page_content_rects));
+    ui_cache_key_bytes(&key, &logbook_ui_line_height, sizeof(logbook_ui_line_height));
+    TigFont* body_font = (TigFont*)logbook_ui_font_default;
+    ui_cache_key_bytes(&key, &body_font->flags, sizeof(body_font->flags));
+    ui_cache_key_bytes(&key, &body_font->art_id, sizeof(body_font->art_id));
+    ui_cache_key_bytes(&key, &body_font->scale, sizeof(body_font->scale));
+    ui_cache_key_bytes(&key, &body_font->modern_font, sizeof(body_font->modern_font));
+    ui_cache_key_bytes(&key, &body_font->modern_font_size, sizeof(body_font->modern_font_size));
+    int requested_page = logbook_ui_current_page;
+    if (logbook_ui_history_cache_valid && logbook_ui_history_cache_key == key) {
+        logbook_ui_entry_count = logbook_ui_history_chunk_count;
+        memcpy(logbook_ui_page_spread_starts, logbook_ui_history_layout_spreads, sizeof(logbook_ui_history_layout_spreads));
+        logbook_ui_current_page = SDL_min(requested_page, logbook_ui_history_latest_page);
+        tig_performance_count(TIG_PERF_HISTORY_CACHE_HITS, 1);
+        return;
+    }
+    Uint64 perf_start = tig_performance_begin();
+    logbook_ui_clear_history_chunks();
+    tig_font_push(logbook_ui_font_default);
+    for (int i = 0; i < conversation_history_count() && logbook_ui_history_chunk_count < 1000; i++) {
+        const ConversationHistoryEntry* entry = conversation_history_get(i);
+        char date[80];
+        DateTime datetime = entry->date;
+        datetime_format_datetime(&datetime, date, sizeof(date));
+        char prefix[256];
+        snprintf(prefix, sizeof(prefix), "%s\n%s\n", date, entry->speaker);
+        size_t prefix_length = strlen(prefix);
+        size_t offset = 0;
+        size_t length = strlen(entry->text);
+        while (offset < length && logbook_ui_history_chunk_count < 1000) {
+            char buffer[MAX_STRING];
+            size_t low = 1;
+            size_t high = SDL_min(length - offset, sizeof(buffer) - prefix_length - 1);
+            size_t best = 0;
+            while (low <= high) {
+                size_t span = (low + high) / 2;
+                memcpy(buffer, prefix, prefix_length);
+                memcpy(buffer + prefix_length, entry->text + offset, span);
+                buffer[prefix_length + span] = '\0';
+                TigFont font = { 0 };
+                font.str = buffer;
+                font.width = logbook_ui_page_content_rects[0].width;
+                tig_font_measure(&font);
+                if (font.height + logbook_ui_line_height <= logbook_ui_page_content_rects[0].height) {
+                    best = span; low = span + 1;
+                } else high = span - 1;
+            }
+            if (best == 0) break;
+            // Prefer a word boundary when a long message continues on another
+            // page; never discard the unrendered remainder of the dialogue.
+            if (offset + best < length) {
+                size_t boundary = best;
+                while (boundary > 1 && entry->text[offset + boundary - 1] != ' '
+                    && entry->text[offset + boundary - 1] != '\n') boundary--;
+                if (boundary > 1) best = boundary;
+            }
+            memcpy(buffer, prefix, prefix_length);
+            memcpy(buffer + prefix_length, entry->text + offset, best);
+            buffer[prefix_length + best] = '\0';
+            logbook_ui_history_chunks[logbook_ui_history_chunk_count++] = STRDUP(buffer);
+            offset += best;
+        }
+    }
+    tig_font_pop();
+    if (logbook_ui_history_chunk_count == 0) {
+        logbook_ui_history_chunks[logbook_ui_history_chunk_count++] = STRDUP(mes_localized_get("journal_index", 11));
+    }
+    logbook_ui_entry_count = logbook_ui_history_chunk_count;
+    tig_performance_end(TIG_PERF_JOURNAL, perf_start);
+    // Compute the whole pagination once. The retained fragments and page
+    // starts serve reopening, returning from another tab, and latest-page entry.
+    Uint64 layout_start = tig_performance_begin();
+    memset(logbook_ui_page_spread_starts, -1, sizeof(logbook_ui_page_spread_starts));
+    logbook_ui_page_spread_starts[0] = 0;
+    logbook_ui_current_page = 1;
+    logbook_ui_measure_only = true;
+    int first = 0;
+    while ((logbook_ui_current_page - 1) / 2 < SDL_arraysize(logbook_ui_page_spread_starts) - 1) {
+        int last = logbook_ui_draw_page_spread(first, logbook_ui_entry_count - 1);
+        if (last < first || last >= logbook_ui_entry_count - 1) break;
+        first = last + 1;
+        logbook_ui_current_page += 2;
+        logbook_ui_page_spread_starts[(logbook_ui_current_page - 1) / 2] = first;
+    }
+    logbook_ui_measure_only = false;
+    logbook_ui_history_latest_page = logbook_ui_current_page;
+    memcpy(logbook_ui_history_layout_spreads, logbook_ui_page_spread_starts, sizeof(logbook_ui_history_layout_spreads));
+    logbook_ui_current_page = SDL_min(requested_page, logbook_ui_history_latest_page);
+    logbook_ui_history_cache_key = key;
+    logbook_ui_history_cache_valid = true;
+    tig_performance_end(TIG_PERF_JOURNAL_LAYOUT, layout_start);
+}
+
+bool logbook_ui_show_view(LogbookView view)
+{
+    if (!logbook_ui_created || view < LOGBOOK_VIEW_RUMORS || view > LOGBOOK_VIEW_QUEST_INDEX) return false;
+    logbook_ui_switch_tab(view == LOGBOOK_VIEW_QUEST_INDEX ? LOGBOOK_UI_TAB_QUESTS : LOGBOOK_UI_TAB_RUMORS_AND_NOTES, false);
+    if (view == LOGBOOK_VIEW_CONVERSATIONS) logbook_ui_toggle_history();
+    else if (view == LOGBOOK_VIEW_QUEST_INDEX) logbook_ui_toggle_index();
+    return true;
+}
+
+static void logbook_ui_toggle_history(void)
+{
+    logbook_ui_index_hovered = -1;
+    if (logbook_ui_history_mode) {
+        logbook_ui_history_mode = false;
+        logbook_ui_current_page = logbook_ui_history_saved_page;
+        memcpy(logbook_ui_page_spread_starts, logbook_ui_history_saved_spreads, sizeof(logbook_ui_history_saved_spreads));
+        logbook_ui_load_data();
+    } else {
+        if (logbook_ui_index_mode) {
+            logbook_ui_index_mode = false;
+            logbook_ui_index_subject[0] = '\0';
+            logbook_ui_current_page = logbook_ui_saved_page;
+            memcpy(logbook_ui_page_spread_starts, logbook_ui_saved_spreads, sizeof(logbook_ui_saved_spreads));
+        }
+        logbook_ui_history_saved_page = logbook_ui_current_page;
+        memcpy(logbook_ui_history_saved_spreads, logbook_ui_page_spread_starts, sizeof(logbook_ui_history_saved_spreads));
+        memset(logbook_ui_page_spread_starts, -1, sizeof(logbook_ui_page_spread_starts));
+        logbook_ui_page_spread_starts[0] = 0;
+        logbook_ui_current_page = 1;
+        logbook_ui_history_mode = true;
+        logbook_ui_load_history();
+        logbook_ui_current_page = logbook_ui_history_latest_page;
+    }
+    logbook_ui_refresh();
+    gsound_play_sfx(SND_INTERFACE_BOOK_PAGE_TURN, 1);
+}
+
+static void logbook_ui_index_hover(int x, int y)
+{
+    TigWindowData window;
+    int hovered = -1;
+    if (tig_window_data(logbook_ui_window, &window) == TIG_OK) {
+        x -= window.rect.x;
+        y -= window.rect.y;
+        for (int i = 0; i < logbook_ui_entry_count; i++) {
+            const TigRect* rect = &logbook_ui_index_entry_rects[i];
+            if (rect->width > 0 && rect->height > 0
+                && x >= rect->x && x < rect->x + rect->width
+                && y >= rect->y && y < rect->y + rect->height) {
+                hovered = i;
+                break;
+            }
+        }
+    }
+    if (hovered != logbook_ui_index_hovered) {
+        logbook_ui_index_hovered = hovered;
+        // Restore the page background as well as the text, so the previous
+        // hover returns to black without accumulating glyphs.
+        logbook_ui_refresh();
+    }
 }
 
 /**
@@ -1137,6 +1690,160 @@ int logbook_ui_draw_entry(int index, TigRect* rect, bool dry_run, bool can_trunc
  *
  * 0x53FAD0
  */
+tig_font_handle_t logbook_ui_toolbar_font(void)
+{
+    return logbook_ui_font_default;
+}
+
+static void logbook_ui_draw_search_bar(void)
+{
+    if (!settings_get_value(&settings, LOGBOOK_TOOLBAR_KEY)) {
+        ui_search_bar_close(&logbook_ui_search_window);
+        if (logbook_ui_search_focused) textedit_ui_unfocus(&logbook_ui_search_edit);
+        logbook_ui_search_focused = false;
+        logbook_ui_search[0] = '\0';
+        return;
+    }
+    if (!ui_search_bar_open(&logbook_ui_search_window, logbook_ui_window,
+            (TigRect){ 220, 418, 473, 22 }, logbook_ui_message_filter)) return;
+    char text[256];
+    snprintf(text, sizeof(text), "%s: %s%s", mes_localized_get("journal_index", 20),
+        logbook_ui_search, logbook_ui_search_focused ? "_" : "");
+    ui_search_bar_cell(logbook_ui_search_window, logbook_ui_search_cells[0], logbook_ui_font_default, text, false);
+    for (int i = 1; i < 3; i++) {
+        ui_search_bar_cell(logbook_ui_search_window, logbook_ui_search_cells[i], logbook_ui_font_default,
+            mes_localized_get("journal_index", 20 + i), i == 1 ? logbook_ui_search_filter : !logbook_ui_search_filter);
+    }
+}
+
+static void logbook_ui_search_changed(TextEdit* edit)
+{
+    (void)edit;
+    logbook_ui_current_page = 1;
+    logbook_ui_index_hovered = -1;
+    memset(logbook_ui_page_spread_starts, -1, sizeof(logbook_ui_page_spread_starts));
+    logbook_ui_page_spread_starts[0] = 0;
+    // Returning from a subview must not restore pagination from an older query.
+    logbook_ui_saved_page = logbook_ui_index_saved_page = logbook_ui_history_saved_page = 1;
+    memcpy(logbook_ui_saved_spreads, logbook_ui_page_spread_starts, sizeof(logbook_ui_saved_spreads));
+    memcpy(logbook_ui_index_saved_spreads, logbook_ui_page_spread_starts, sizeof(logbook_ui_index_saved_spreads));
+    memcpy(logbook_ui_history_saved_spreads, logbook_ui_page_spread_starts, sizeof(logbook_ui_history_saved_spreads));
+    if (logbook_ui_history_mode) logbook_ui_load_history();
+    logbook_ui_refresh();
+}
+
+static void logbook_ui_search_finished(TextEdit* edit)
+{
+    textedit_ui_unfocus(edit);
+    logbook_ui_search_focused = false;
+    logbook_ui_refresh();
+}
+
+void logbook_ui_search_bar_visible(bool visible)
+{
+    if (!visible && logbook_ui_search_focused) {
+        textedit_ui_unfocus(&logbook_ui_search_edit);
+        logbook_ui_search_focused = false;
+    }
+    if (logbook_ui_search_window != TIG_WINDOW_HANDLE_INVALID) {
+        if (visible && logbook_ui_created && settings_get_value(&settings, LOGBOOK_TOOLBAR_KEY)) tig_window_show(logbook_ui_search_window);
+        else tig_window_hide(logbook_ui_search_window);
+    }
+}
+
+static bool logbook_ui_search_input(TigMessage* msg)
+{
+    if (!settings_get_value(&settings, LOGBOOK_TOOLBAR_KEY)) return false;
+    if (logbook_ui_search_focused && (msg->type == TIG_MESSAGE_KEYBOARD || msg->type == TIG_MESSAGE_TEXT_INPUT)) {
+        if (msg->type == TIG_MESSAGE_KEYBOARD && msg->data.keyboard.scancode == SDL_SCANCODE_ESCAPE) {
+            if (!msg->data.keyboard.pressed) {
+                logbook_ui_search[0] = '\0';
+                textedit_ui_unfocus(&logbook_ui_search_edit);
+                logbook_ui_search_focused = false;
+                logbook_ui_search_changed(&logbook_ui_search_edit);
+            }
+            return true;
+        }
+        if (msg->type == TIG_MESSAGE_TEXT_INPUT) {
+            char text[128];
+            language_input_to_legacy(msg->data.text.text, text, sizeof(text), gamelib_current_language_get());
+            TigMessage converted = *msg;
+            converted.data.text.text = text;
+            textedit_ui_process_message(&converted);
+        } else textedit_ui_process_message(msg);
+        return true;
+    }
+    if (msg->type == TIG_MESSAGE_KEYBOARD && msg->data.keyboard.scancode == SDL_SCANCODE_F
+        && (SDL_GetModState() & SDL_KMOD_CTRL) != 0) {
+        if (!msg->data.keyboard.pressed) {
+            logbook_ui_search_focused = true;
+            textedit_ui_focus(&logbook_ui_search_edit);
+            logbook_ui_refresh();
+        }
+        return true;
+    }
+    if (msg->type == TIG_MESSAGE_MOUSE) {
+        TigWindowData data;
+        if (logbook_ui_search_window != TIG_WINDOW_HANDLE_INVALID
+            && tig_window_data(logbook_ui_search_window, &data) == TIG_OK) {
+            int x = msg->data.mouse.x - data.rect.x;
+            int y = msg->data.mouse.y - data.rect.y;
+            TigRect bounds = { 0, 0, 473, 22 };
+            if (ui_search_bar_contains(&bounds, x, y)) {
+                if (msg->data.mouse.event == TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP) {
+                    if (ui_search_bar_contains(&logbook_ui_search_cells[0], x, y)) {
+                        logbook_ui_search_focused = true;
+                        textedit_ui_focus(&logbook_ui_search_edit);
+                        logbook_ui_refresh();
+                    } else {
+                        for (int i = 1; i < 3; i++) {
+                            if (ui_search_bar_contains(&logbook_ui_search_cells[i], x, y)) {
+                                textedit_ui_unfocus(&logbook_ui_search_edit);
+                                logbook_ui_search_focused = false;
+                                logbook_ui_search_filter = i == 1;
+                                logbook_ui_search_changed(&logbook_ui_search_edit);
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+        }
+        if (msg->data.mouse.event == TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP && logbook_ui_search_focused) {
+            logbook_ui_search_finished(&logbook_ui_search_edit);
+        }
+    }
+    return false;
+}
+
+static int logbook_ui_draw_search_text(char* text, tig_font_handle_t font, TigRect* rect,
+    bool dry_run, bool can_truncate, bool spacing, bool heading)
+{
+    if (!settings_get_value(&settings, LOGBOOK_TOOLBAR_KEY)) {
+        return logbook_ui_draw_text(text, font, rect, dry_run, can_truncate, spacing);
+    }
+    if (!heading && logbook_ui_search_filter && logbook_ui_search[0] != '\0'
+        && !language_text_contains(text, logbook_ui_search, gamelib_current_language_get())) return -1;
+    int height = logbook_ui_draw_text(text, font, rect, dry_run, can_truncate, spacing);
+    if (height > 0 && !dry_run && !logbook_ui_search_filter && logbook_ui_search[0] != '\0') {
+        TigTextRange ranges[MAX_STRING / 2];
+        int count = 0;
+        int length = (int)strlen(logbook_ui_search);
+        const char* cursor = text;
+        while (count < SDL_arraysize(ranges)
+            && (cursor = language_text_find(cursor, logbook_ui_search, gamelib_current_language_get())) != NULL) {
+            ranges[count++] = (TigTextRange){ (int)(cursor - text), length };
+            cursor += length;
+        }
+        if (count > 0) {
+            tig_font_push(font);
+            tig_window_text_underline(logbook_ui_window, text, rect, ranges, count);
+            tig_font_pop();
+        }
+    }
+    return height;
+}
+
 int logbook_ui_draw_text(char* buffer, tig_font_handle_t font, TigRect* rect, bool dry_run, bool can_truncate, bool add_line_spacing)
 {
     TigFont font_info;
@@ -1280,8 +1987,8 @@ void logbook_ui_load_data(void)
     }
 
     if (logbook_ui_tab == LOGBOOK_UI_TAB_BLESSINGS_AND_CURSES) {
-        CurseLogbookEntry curses[100];
-        BlessLogbookEntry blessings[100];
+        CurseLogbookEntry curses[512];
+        BlessLogbookEntry blessings[512];
         int num_blessings;
         int num_curses;
         int bless_idx;

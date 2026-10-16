@@ -1814,7 +1814,7 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_up(int x, int y,
     // just-opened barter screen.
     bool inven_saw_down = (dword_68346C != 0);
     dword_68346C = 0;
-    if (intgame_pc_lens_check_pt_unscale(x, y)) {
+    if (intgame_panel_close_lens_check_pt_unscale(x, y)) {
         if (!mainmenu_ui_is_active()) {
             if (inven_ui_drag_item_obj != OBJ_HANDLE_NULL) {
                 if (inven_ui_mode == INVEN_UI_MODE_INVENTORY) {
@@ -1852,7 +1852,7 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_up(int x, int y,
         int screen_x = x + (hrp_iso_window_width_get() - 800) / 2;
         int screen_y = y + (hrp_iso_window_height_get() - 600) / 2;
         if (tig_window_data(inven_ui_window_handle, &menu_wd) == TIG_OK
-            && intgame_should_dismiss_overlay_click(screen_x, screen_y, &menu_wd.rect)) {
+            && intgame_panel_should_dismiss_overlay_click(screen_x, screen_y, &menu_wd.rect)) {
             *v45 = true;
             return false;
         }

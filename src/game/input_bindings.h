@@ -49,13 +49,29 @@ typedef enum InputAction {
     INPUT_ACTION_ZOOM_OUT,
     INPUT_ACTION_ZOOM_RESET,
     INPUT_ACTION_CYCLE_HUD,
+    INPUT_ACTION_LOGBOOK_PREVIOUS,
+    INPUT_ACTION_LOGBOOK_NEXT,
+    INPUT_ACTION_LOGBOOK_PAGE_PREVIOUS,
+    INPUT_ACTION_LOGBOOK_PAGE_NEXT,
+    INPUT_ACTION_SCHEMATICS_PREVIOUS,
+    INPUT_ACTION_SCHEMATICS_NEXT,
+    INPUT_ACTION_SCHEMATICS_PAGE_PREVIOUS,
+    INPUT_ACTION_SCHEMATICS_PAGE_NEXT,
     INPUT_ACTION_COUNT,
 } InputAction;
 
+typedef enum InputBindingNavigationEvent {
+    INPUT_NAVIGATION_NONE,
+    INPUT_NAVIGATION_CONSUME,
+    INPUT_NAVIGATION_ACTIVATE,
+} InputBindingNavigationEvent;
+
 void input_bindings_init(void);
+SDL_Scancode input_binding_named_scancode(const char* name);
 void input_bindings_handle_message(const TigMessage* msg);
 bool input_binding_matches_keyboard(InputAction action, const TigMessage* msg);
 bool input_binding_matches_mouse(InputAction action, const TigMessage* msg);
+InputBindingNavigationEvent input_binding_navigation_event(InputAction action, const TigMessage* msg);
 bool input_binding_is_pressed(InputAction action);
 SDL_Scancode input_binding_primary_scancode(InputAction action, SDL_Scancode fallback);
 int input_binding_hotkey_index(const TigMessage* msg);

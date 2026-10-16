@@ -17,6 +17,8 @@ static const char* const modern_font_fallback_paths[] = {
     "C:\\Windows\\Fonts\\GARA.TTF",
     "C:\\Windows\\Fonts\\georgia.ttf",
     "C:\\Windows\\Fonts\\times.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
     NULL,
 };
 

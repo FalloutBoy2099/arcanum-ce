@@ -1,5 +1,7 @@
 #include "game/broadcast.h"
 
+#include <stdio.h>
+
 #include "game/ai.h"
 #include "game/anim.h"
 #include "game/critter.h"
@@ -11,29 +13,13 @@
 #include "game/text_filter.h"
 #include "game/ui.h"
 
-typedef enum BroadcastCommandType {
-    BROADCAST_CMD_TYPE_NONE,
-    BROADCAST_CMD_TYPE_LEAVE,
-    BROADCAST_CMD_TYPE_WAIT,
-    BROADCAST_CMD_TYPE_FOLLOW,
-    BROADCAST_CMD_TYPE_MOVE,
-    BROADCAST_CMD_TYPE_STAY_CLOSE,
-    BROADCAST_CMD_TYPE_SPREAD_OUT,
-    BROADCAST_CMD_TYPE_CURSE,
-    BROADCAST_CMD_TYPE_JOIN,
-    BROADCAST_CMD_TYPE_DISBAND,
-    BROADCAST_CMD_TYPE_ATTACK,
-    BROADCAST_CMD_TYPE_WALK_HERE,
-    BROADCAST_CMD_TYPE_BACK_OFF,
-    BROADCAST_CMD_TYPE_FOLLOW_OTHER,
-    BROADCAST_CMD_TYPE_COUNT,
-} BroadcastCommandType;
-
 typedef struct BroadcastCommand {
     char* str;
     int type;
 } BroadcastCommand;
 
+static bool broadcast_execute_follower_order(int64_t pc_obj, int64_t candidate_obj,
+    BroadcastCommandType cmd, int64_t loc, int64_t target_obj);
 static int broadcast_match_str_to_base_type(const char* str);
 static int broadcast_match_str_to_cmd_type(const char* str);
 static void sub_4C3B90(void);
@@ -51,7 +37,7 @@ static BroadcastFloatLineFunc broadcast_float_line_func;
 static mes_file_handle_t broadcast_multiplayer_mes_file;
 
 // 0x5FDC90
-static char byte_5FDC90[6][1000];
+static const char* follower_shortcut_labels[6];
 
 // 0x5FF400
 static bool broadcast_initialized;
@@ -181,6 +167,104 @@ void broadcast_msg(int64_t obj, Broadcast* bcast)
     broadcast_msg_client(obj, bcast);
 }
 
+/**
+ * Execute a resolved order without parsing its translated display label.
+ * Used by both text broadcasts and the follower portrait menu.
+ */
+static bool broadcast_execute_follower_order(int64_t pc_obj, int64_t candidate_obj,
+    BroadcastCommandType cmd, int64_t loc, int64_t target_obj)
+{
+    char str[MAX_STRING];
+    int speech_id;
+    unsigned int spell_flags = obj_field_int32_get(candidate_obj, OBJ_F_SPELL_FLAGS);
+
+    if ((cmd == BROADCAST_CMD_TYPE_WAIT && (spell_flags & OSF_MIND_CONTROLLED) != 0)
+        || (cmd == BROADCAST_CMD_TYPE_WALK_HERE && loc == 0)
+        || (cmd == BROADCAST_CMD_TYPE_ATTACK
+            && (target_obj == OBJ_HANDLE_NULL
+                || (!combat_critter_is_combat_mode_active(pc_obj)
+                    && critter_pc_leader_get(target_obj) == candidate_obj)))) {
+        return false;
+    }
+
+    switch (cmd) {
+    case BROADCAST_CMD_TYPE_WAIT:
+    case BROADCAST_CMD_TYPE_STAY_CLOSE:
+    case BROADCAST_CMD_TYPE_SPREAD_OUT:
+    case BROADCAST_CMD_TYPE_BACK_OFF:
+    case BROADCAST_CMD_TYPE_WALK_HERE:
+        break;
+    case BROADCAST_CMD_TYPE_MOVE: {
+        bool moved = anim_goal_please_move(pc_obj, candidate_obj);
+        if (broadcast_float_line_func != NULL) {
+            if (moved) {
+                dialog_copy_npc_order_ok_msg(candidate_obj, pc_obj, str, &speech_id);
+            } else {
+                dialog_copy_npc_order_no_msg(candidate_obj, pc_obj, str, &speech_id);
+            }
+            broadcast_float_line_func(candidate_obj, pc_obj, str, speech_id);
+        }
+        return moved;
+    }
+    case BROADCAST_CMD_TYPE_ATTACK:
+        sub_4AA580(candidate_obj);
+        ai_attack(candidate_obj, target_obj, LOUDNESS_LOUD, 0x4);
+        return true;
+    default:
+        return false;
+    }
+
+    if (broadcast_float_line_func != NULL) {
+        dialog_copy_npc_order_ok_msg(candidate_obj, pc_obj, str, &speech_id);
+        broadcast_float_line_func(candidate_obj, pc_obj, str, speech_id);
+    }
+    switch (cmd) {
+    case BROADCAST_CMD_TYPE_WAIT:
+        sub_424070(candidate_obj, PRIORITY_3, false, true);
+        ai_npc_wait(candidate_obj);
+        break;
+    case BROADCAST_CMD_TYPE_STAY_CLOSE:
+        critter_stay_close(candidate_obj);
+        break;
+    case BROADCAST_CMD_TYPE_SPREAD_OUT:
+        critter_spread_out(candidate_obj);
+        break;
+    case BROADCAST_CMD_TYPE_BACK_OFF:
+        ai_stop_attacking(candidate_obj);
+        break;
+    case BROADCAST_CMD_TYPE_WALK_HERE:
+        return anim_goal_run_to_tile(candidate_obj, loc);
+    default:
+        return false;
+    }
+    return true;
+}
+
+bool broadcast_order_follower(int64_t pc_obj, int64_t follower_obj,
+    BroadcastCommandType command, int64_t loc, int64_t target_obj, const char* label)
+{
+    if (pc_obj == OBJ_HANDLE_NULL || follower_obj == OBJ_HANDLE_NULL
+        || critter_is_dead(pc_obj) || critter_is_unconscious(pc_obj)
+        || critter_is_dead(follower_obj) || critter_is_unconscious(follower_obj)
+        || critter_pc_leader_get(follower_obj) != pc_obj
+        || location_dist(obj_field_int64_get(pc_obj, OBJ_F_LOCATION),
+               obj_field_int64_get(follower_obj, OBJ_F_LOCATION)) > highres_config_get()->broadcast_limit) {
+        return false;
+    }
+
+    if (broadcast_float_line_func != NULL && label != NULL) {
+        char name[MAX_STRING];
+        char message[MAX_STRING];
+        object_examine(follower_obj, pc_obj, name);
+        snprintf(message, sizeof(message), "%s %s", name, label);
+        broadcast_float_line_func(pc_obj, OBJ_HANDLE_NULL, message, -1);
+    }
+
+    bool accepted = broadcast_execute_follower_order(pc_obj, follower_obj, command, loc, target_obj);
+    ai_process(follower_obj);
+    return accepted;
+}
+
 // 0x4C31A0
 void broadcast_msg_client(int64_t pc_obj, Broadcast* bcast)
 {
@@ -271,14 +355,9 @@ void broadcast_msg_client(int64_t pc_obj, Broadcast* bcast)
                     }
                     break;
                 case BROADCAST_CMD_TYPE_WAIT:
-                    if ((spell_flags & OSF_MIND_CONTROLLED) == 0) {
-                        if (broadcast_float_line_func != NULL) {
-                            dialog_copy_npc_order_ok_msg(candidate_obj, pc_obj, str, &speech_id);
-                            broadcast_float_line_func(candidate_obj, pc_obj, str, speech_id);
-                        }
-                        sub_424070(candidate_obj, PRIORITY_3, false, true);
-                        ai_npc_wait(candidate_obj);
-                    }
+                    broadcast_execute_follower_order(pc_obj, candidate_obj, cmd,
+                        cmd == BROADCAST_CMD_TYPE_WALK_HERE ? bcast->loc : 0,
+                        cmd == BROADCAST_CMD_TYPE_ATTACK ? object_hover_obj_get() : OBJ_HANDLE_NULL);
                     break;
                 case BROADCAST_CMD_TYPE_FOLLOW: {
                     bool force = (obj_field_int32_get(candidate_obj, OBJ_F_NPC_FLAGS) & ONF_FORCED_FOLLOWER) != 0;
@@ -310,18 +389,14 @@ void broadcast_msg_client(int64_t pc_obj, Broadcast* bcast)
                     }
                     break;
                 case BROADCAST_CMD_TYPE_STAY_CLOSE:
-                    if (broadcast_float_line_func != NULL) {
-                        dialog_copy_npc_order_ok_msg(candidate_obj, pc_obj, str, &speech_id);
-                        broadcast_float_line_func(candidate_obj, pc_obj, str, speech_id);
-                    }
-                    critter_stay_close(candidate_obj);
+                    broadcast_execute_follower_order(pc_obj, candidate_obj, cmd,
+                        cmd == BROADCAST_CMD_TYPE_WALK_HERE ? bcast->loc : 0,
+                        cmd == BROADCAST_CMD_TYPE_ATTACK ? object_hover_obj_get() : OBJ_HANDLE_NULL);
                     break;
                 case BROADCAST_CMD_TYPE_SPREAD_OUT:
-                    if (broadcast_float_line_func != NULL) {
-                        dialog_copy_npc_order_ok_msg(candidate_obj, pc_obj, str, &speech_id);
-                        broadcast_float_line_func(candidate_obj, pc_obj, str, speech_id);
-                    }
-                    critter_spread_out(candidate_obj);
+                    broadcast_execute_follower_order(pc_obj, candidate_obj, cmd,
+                        cmd == BROADCAST_CMD_TYPE_WALK_HERE ? bcast->loc : 0,
+                        cmd == BROADCAST_CMD_TYPE_ATTACK ? object_hover_obj_get() : OBJ_HANDLE_NULL);
                     break;
                 case BROADCAST_CMD_TYPE_CURSE:
                     if ((spell_flags & OSF_MIND_CONTROLLED) == 0) {
@@ -339,29 +414,19 @@ void broadcast_msg_client(int64_t pc_obj, Broadcast* bcast)
                     found = false;
                     break;
                 case BROADCAST_CMD_TYPE_ATTACK:
-                    target_obj = object_hover_obj_get();
-                    if (target_obj != OBJ_HANDLE_NULL
-                        && (combat_critter_is_combat_mode_active(pc_obj)
-                            || critter_pc_leader_get(target_obj) != candidate_obj)) {
-                        sub_4AA580(candidate_obj);
-                        ai_attack(candidate_obj, target_obj, LOUDNESS_LOUD, 0x4);
-                    }
+                    broadcast_execute_follower_order(pc_obj, candidate_obj, cmd,
+                        cmd == BROADCAST_CMD_TYPE_WALK_HERE ? bcast->loc : 0,
+                        cmd == BROADCAST_CMD_TYPE_ATTACK ? object_hover_obj_get() : OBJ_HANDLE_NULL);
                     break;
                 case BROADCAST_CMD_TYPE_WALK_HERE:
-                    if (bcast->loc != 0) {
-                        if (broadcast_float_line_func != NULL) {
-                            dialog_copy_npc_order_ok_msg(candidate_obj, pc_obj, str, &speech_id);
-                            broadcast_float_line_func(candidate_obj, pc_obj, str, speech_id);
-                        }
-                        anim_goal_run_to_tile(candidate_obj, bcast->loc);
-                    }
+                    broadcast_execute_follower_order(pc_obj, candidate_obj, cmd,
+                        cmd == BROADCAST_CMD_TYPE_WALK_HERE ? bcast->loc : 0,
+                        cmd == BROADCAST_CMD_TYPE_ATTACK ? object_hover_obj_get() : OBJ_HANDLE_NULL);
                     break;
                 case BROADCAST_CMD_TYPE_BACK_OFF:
-                    if (broadcast_float_line_func != NULL) {
-                        dialog_copy_npc_order_ok_msg(candidate_obj, pc_obj, str, &speech_id);
-                        broadcast_float_line_func(candidate_obj, pc_obj, str, speech_id);
-                    }
-                    ai_stop_attacking(candidate_obj);
+                    broadcast_execute_follower_order(pc_obj, candidate_obj, cmd,
+                        cmd == BROADCAST_CMD_TYPE_WALK_HERE ? bcast->loc : 0,
+                        cmd == BROADCAST_CMD_TYPE_ATTACK ? object_hover_obj_get() : OBJ_HANDLE_NULL);
                     break;
                 default:
                     tig_debug_printf("broadcast_msg_client: ERROR: type out of range!\n");
@@ -492,18 +557,30 @@ void sub_4C3B90(void)
     for (index = 0; index < 6; index++) {
         mes_file_entry.num = 500 + index;
         mes_get_msg(broadcast_mes_file, &mes_file_entry);
-        strncpy(byte_5FDC90[index], mes_file_entry.str, 1000);
+        follower_shortcut_labels[index] = mes_file_entry.str;
     }
 }
 
 // 0x4C3BE0
 void sub_4C3BE0(unsigned int a1, int64_t loc)
 {
-    Broadcast bcast;
+    BroadcastCommandType command = broadcast_follower_shortcut_command(a1);
+    int64_t pc_obj = player_get_local_pc_obj();
+    int64_t target_obj = object_hover_obj_get();
+    ObjectList followers;
+    ObjectNode* node;
 
-    if (a1 < 6) {
-        bcast.loc = loc;
-        strcpy(bcast.str, byte_5FDC90[a1]);
-        broadcast_msg(player_get_local_pc_obj(), &bcast);
+    if (command == BROADCAST_CMD_TYPE_NONE || pc_obj == OBJ_HANDLE_NULL) {
+        return;
     }
+
+    // These strings are feedback only. Never parse translated shortcut labels.
+    if (broadcast_float_line_func != NULL) {
+        broadcast_float_line_func(pc_obj, OBJ_HANDLE_NULL, follower_shortcut_labels[a1], -1);
+    }
+    object_list_followers(pc_obj, &followers);
+    for (node = followers.head; node != NULL; node = node->next) {
+        broadcast_order_follower(pc_obj, node->obj, command, loc, target_obj, NULL);
+    }
+    object_list_destroy(&followers);
 }

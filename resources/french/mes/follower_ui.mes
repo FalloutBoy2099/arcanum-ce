@@ -1,0 +1,16 @@
+// ---- Arcanum ---
+// version française
+// follower_ui.mes
+//
+{0}{Allez ici...}
+{1}{Attaquez ça...}
+{2}{Restez près de moi.}
+{3}{Déployez-vous.}
+{4}{Repliez-vous.}
+{5}{Attendez-moi ici.}
+{6}{Inventaire}
+{7}{Feuille de personnage}
+{8}{Schémas}
+{9}{Réparation}
+
+{100}{Écartez-vous}

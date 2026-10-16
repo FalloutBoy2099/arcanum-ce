@@ -2274,14 +2274,13 @@ int script_execute_action(ScriptAction* action, int line, ScriptState* state)
         return NEXT;
     }
     case SAT_FLOAT_NEWSPAPER_HEADLINE: {
-        // FIXME: Probably wrong, takes obj from param 2 (at index 1), but this
-        // opcode accepts just 1 param. Check.
-        int64_t npc_obj = script_get_obj(action->op_type[1], action->op_value[1], state);
+        // semes/action.mes entry 86 defines one operand: the target object.
+        int64_t npc_obj = script_get_obj(action->op_type[0], action->op_value[0], state);
         char str[MAX_STRING];
         ui_written_newspaper_headline(newspaper_get(NEWSPAPER_CURRENT), str);
         size_t len = strlen(str);
         if (len > 0) {
-            if (str[len] != '.' && str[len] != '?' && str[len] != '!') {
+            if (str[len - 1] != '.' && str[len - 1] != '?' && str[len - 1] != '!') {
                 str[len++] = '.';
             }
             str[len++] = ' ';
@@ -3066,12 +3065,12 @@ int script_resolve_focus_obj(ScriptFocusObject type, int index, ScriptState* sta
         object_list_followers(state->invocation->triggerer_obj, l);
 
         node = l->head;
-        while (node != NULL && cnt < 100) {
+        while (node != NULL && cnt < 99) {
             objs[cnt++] = node->obj;
             node = node->next;
         }
 
-        // FIXME: Possible overflow when cnt == 100.
+        // Reserve the final entry for the group leader.
         objs[cnt++] = state->invocation->triggerer_obj;
         break;
     case SFO_EVERY_SCENERY_IN_VICINITY:

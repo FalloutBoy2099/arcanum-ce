@@ -2,10 +2,12 @@
 #define ARCANUM_GAME_GAMELIB_H_
 
 #include "game/context.h"
+#include "game/language.h"
 #include "game/settings.h"
 #include "game/timeevent.h"
 
 #define DIFFICULTY_KEY "difficulty"
+#define PERFORMANCE_LOGGING_KEY "performance_logging"
 #define VSYNC_MODE_KEY "vsync_mode"
 #define ZOOM_FILTER_KEY "zoom_filter"
 #define SCROLL_USING_BORDERS_KEY "scroll_using_borders"
@@ -16,6 +18,10 @@
 #define DIALOGUE_EMOTE_DIM_PERCENT_KEY "dialogue_emote_dim_percent"
 #define AUTOSAVE_TRAVEL_KEY "autosave_travel"
 #define AUTOSAVE_SLEEP_KEY "autosave_sleep"
+#define ACTION_TOOLTIPS_KEY "action_tooltips"
+#define WINDOW_CLOSE_MODE_KEY "window_close_mode"
+#define RANDOM_ENCOUNTERS_KEY "random_encounters"
+#define LIGHTING_KEY "lighting"
 #define HUD_STAGE_KEY "hud_stage"
 #define VIOLENCE_FILTER_KEY "violence_filter"
 #define TURN_BASED_KEY "turn_based"
@@ -149,11 +155,13 @@ void gamelib_renderlock_acquire(void);
 void gamelib_renderlock_release(void);
 void gamelib_clear_screen(void);
 const char* gamelib_current_module_name_get(void);
+GameLanguage gamelib_current_language_get(void);
 void gamelib_current_mode_name_set(const char* name);
 bool gamelib_save(const char* name, const char* description);
 bool gamelib_load(const char* name);
 bool gamelib_delete(const char* name);
 const char* gamelib_last_save_name(void);
+const char* gamelib_loaded_save_name(void);
 bool gamelib_in_save(void);
 bool gamelib_in_load(void);
 void gamelib_set_extra_save_func(GameExtraSaveFunc func);

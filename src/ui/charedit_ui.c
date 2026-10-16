@@ -1589,7 +1589,7 @@ bool charedit_window_message_filter(TigMessage* msg)
         case TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP:
             if (charedit_mode != CHAREDIT_MODE_CREATE
                 && charedit_mode != CHAREDIT_MODE_3
-                && intgame_pc_lens_check_pt(msg->data.mouse.x, msg->data.mouse.y)) {
+                && intgame_panel_close_lens_check_pt(msg->data.mouse.x, msg->data.mouse.y)) {
                 charedit_close();
                 return true;
             }
@@ -1601,7 +1601,7 @@ bool charedit_window_message_filter(TigMessage* msg)
                 && charedit_window_handle != TIG_WINDOW_HANDLE_INVALID) {
                 TigWindowData menu_wd;
                 if (tig_window_data(charedit_window_handle, &menu_wd) == TIG_OK
-                    && intgame_should_dismiss_overlay_click(msg->data.mouse.x, msg->data.mouse.y, &menu_wd.rect)) {
+                    && intgame_panel_should_dismiss_overlay_click(msg->data.mouse.x, msg->data.mouse.y, &menu_wd.rect)) {
                     charedit_close();
                     return true;
                 }

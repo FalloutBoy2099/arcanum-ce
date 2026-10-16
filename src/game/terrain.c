@@ -5,6 +5,7 @@
 #include "game/mes.h"
 #include "game/random.h"
 #include "game/tile.h"
+#include "game/terrain_encoding.h"
 
 #define FIRST_TERRAIN_COLOR_ID 100
 #define FIRST_TERRAIN_TRANSITION_ID 200
@@ -586,19 +587,29 @@ void terrain_color(int terrain_type, int* red, int* green, int* blue)
 // 0x4E8CE0
 void sub_4E8CE0(int a1, int a2, int a3, int a4, uint16_t* value)
 {
-    a1 = SDL_clamp(a1, 0, 31);
-    a2 = SDL_clamp(a2, 0, 31);
-    a3 = SDL_clamp(a3, 0, 15);
-    a4 = SDL_clamp(a4, 0, 3);
-
-    // TODO: Check.
-    *value = (uint16_t)(a4 | (a3 << 2) | (a2 << 4) | (a1 << 11));
+    *value = terrain_encode(a1, a2, a3, a4);
 }
 
 // 0x4E8D60
 int sub_4E8D60(int a1, int a2, int a3)
 {
-    // TODO: Incomplete.
+    uint16_t value;
+    int variant = 0;
+
+    // A full or empty transition mask selects a single terrain type.
+    if (a3 == 0) {
+        a1 = a2;
+    } else if (a3 == 15) {
+        a2 = a1;
+    }
+    if (a1 == a2) {
+        a3 = 0;
+        if (a1 >= 0 && a1 < TERRAIN_TYPE_MAX && dword_603748[a1] > 1) {
+            variant = random_between(0, dword_603748[a1] - 1);
+        }
+    }
+    sub_4E8CE0(a1, a2, a3, variant, &value);
+    return value;
 }
 
 // 0x4E8DC0
@@ -788,12 +799,10 @@ bool terrain_parse_transition(char* str, int* from_terrain_type, int* to_terrain
     *pch = '\0';
 
     from = terrain_match_base_name(str);
+    *pch = ' ';
     if (from == -1) {
-        // FIXME: `str` not restored to previous state.
         return false;
     }
-
-    *pch = ' ';
 
     to = terrain_match_base_name(pch + 4);
     if (to == -1) {

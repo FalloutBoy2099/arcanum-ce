@@ -168,9 +168,13 @@ bool hotkey_ui_start(tig_window_handle_t primary_window_handle, TigRect* rect, t
     if (hotkey_secondary_window_handle != TIG_WINDOW_HANDLE_INVALID) {
         for (index = 0; index < 2; index++) {
             hotkey = &(stru_683518[index]);
-            intgame_recent_action_button_get(index)->art_num = hotkey->type == 2 || hotkey->type != 3
-                ? sub_579F70(hotkey->data)
-                : spell_icon(hotkey->data);
+            if (hotkey->type == HOTKEY_ITEM && hotkey->item_obj.obj != OBJ_HANDLE_NULL) {
+                intgame_recent_action_button_get(index)->art_num = tig_art_num_get(sub_554BE0(hotkey->item_obj.obj));
+            } else if (hotkey->type == HOTKEY_SPELL || hotkey->type == HOTKEY_ITEM_SPELL) {
+                intgame_recent_action_button_get(index)->art_num = spell_icon(hotkey->data);
+            } else {
+                intgame_recent_action_button_get(index)->art_num = sub_579F70(hotkey->data);
+            }
             intgame_button_create_ex(hotkey_secondary_window_handle, &stru_6835C8, intgame_recent_action_button_get(index), 0x1);
         }
     }
@@ -1102,8 +1106,7 @@ void sub_57EFA0(int type, int data, int64_t item_obj)
             && stru_683518[0].item_obj.obj == item_obj) {
             return;
         }
-        // FIXME: `new_art_id` is never set in this code path.
-        new_art_id = TIG_ART_ID_INVALID;
+        new_art_id = sub_554BE0(item_obj);
         break;
     case HOTKEY_SKILL:
         if (stru_683518[0].type == HOTKEY_SKILL
@@ -1143,7 +1146,7 @@ void sub_57EFA0(int type, int data, int64_t item_obj)
 
     stru_683518[0].type = type;
     stru_683518[0].data = data;
-    sub_4440E0(item_obj, &stru_683518[1].item_obj); // FIXME: Probably wrong, should be [0].
+    sub_4440E0(item_obj, &stru_683518[0].item_obj);
     intgame_recent_action_button_get(0)->art_num = tig_art_num_get(new_art_id);
     button_handle = intgame_recent_action_button_get(0)->button_handle;
     if (button_handle != TIG_BUTTON_HANDLE_INVALID) {

@@ -1,4 +1,5 @@
 #include "tig/window.h"
+#include "tig/performance.h"
 
 #include <ctype.h>
 
@@ -412,7 +413,17 @@ int tig_window_data(tig_window_handle_t window_handle, TigWindowData* window_dat
 }
 
 // 0x51CF40
+static int tig_window_display_impl(void);
+
 int tig_window_display(void)
+{
+    Uint64 start = tig_performance_begin();
+    int result = tig_window_display_impl();
+    tig_performance_end(TIG_PERF_PRESENT, start);
+    return result;
+}
+
+static int tig_window_display_impl(void)
 {
     int rc;
     TigRectListNode* node;
@@ -1207,6 +1218,24 @@ int tig_window_tint(tig_window_handle_t window_handle, TigRect* rect, int a3, in
 }
 
 // 0x51E190
+int tig_window_text_underline(tig_window_handle_t window_handle, const char* str, TigRect* rect,
+    const TigTextRange* ranges, int count)
+{
+    if (window_handle == TIG_WINDOW_HANDLE_INVALID || rect == NULL) return TIG_ERR_INVALID_PARAM;
+    TigWindow* win = &windows[tig_window_handle_to_index(window_handle)];
+    if (rect->x < win->bounds.x || rect->y < win->bounds.y
+        || rect->x + rect->width > win->bounds.x + win->bounds.width
+        || rect->y + rect->height > win->bounds.y + win->bounds.height) return TIG_ERR_INVALID_PARAM;
+    int rc = tig_font_underline_ranges(win->video_buffer, str, rect, ranges, count);
+    if (rc == TIG_OK && (win->flags & TIG_WINDOW_HIDDEN) == 0) {
+        TigRect dirty = *rect;
+        dirty.x += win->frame.x; dirty.y += win->frame.y;
+        tig_window_invalidate_rect(&dirty);
+        tig_button_refresh_rect(window_handle, &dirty);
+    }
+    return rc;
+}
+
 int tig_window_text_write(tig_window_handle_t window_handle, const char* str, TigRect* rect)
 {
     int window_index;
@@ -1627,6 +1656,29 @@ bool tig_window_is_hidden(tig_window_handle_t window_handle)
 {
     int window_index = tig_window_handle_to_index(window_handle);
     return (windows[window_index].flags & TIG_WINDOW_HIDDEN) != 0;
+}
+
+bool tig_window_translucent_underlay_rect(tig_window_handle_t window_handle,
+    tig_window_handle_t underlay_handle, TigRect* rect)
+{
+    if (rect == NULL) return false;
+    *rect = (TigRect){ 0 };
+    if (!tig_window_initialized || window_handle >= TIG_WINDOW_MAX
+        || underlay_handle >= TIG_WINDOW_MAX) return false;
+    const TigWindow* win = &windows[window_handle];
+    const TigWindow* underlay = &windows[underlay_handle];
+    if ((win->usage & TIG_WINDOW_USAGE_FREE) != 0
+        || (underlay->usage & TIG_WINDOW_USAGE_FREE) != 0
+        || (win->flags & TIG_WINDOW_HIDDEN) != 0
+        || !win->near_black_alpha_enabled || win->near_black_opacity == 255
+        || win->near_black_underlay != underlay_handle) return false;
+    TigRect visible = win->frame;
+    if (win->has_clip
+        && tig_rect_intersection(&visible, &win->clip_rect, &visible) != TIG_OK) return false;
+    if (tig_rect_intersection(&visible, &tig_window_screen_rect, &visible) != TIG_OK
+        || tig_rect_intersection(&visible, &underlay->frame, &visible) != TIG_OK) return false;
+    *rect = visible;
+    return true;
 }
 
 // CE: Set/clear an optional composite clip rect on a window.

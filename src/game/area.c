@@ -384,9 +384,8 @@ int64_t area_get_location(int area)
  */
 void area_get_wm_offset(int area, int* x, int* y)
 {
-    // FIXME: No bound checking guard seen in previous functions.
-    *x = area_wm_x_offsets[area];
-    *y = area_wm_y_offsets[area];
+    *x = area >= 0 && area < num_areas ? area_wm_x_offsets[area] : 0;
+    *y = area >= 0 && area < num_areas ? area_wm_y_offsets[area] : 0;
 }
 
 /**
@@ -397,7 +396,8 @@ void area_get_wm_offset(int area, int* x, int* y)
 bool area_is_known(int64_t pc_obj, int area)
 {
     // Validate the object and ensure it's a player character.
-    if (pc_obj == OBJ_HANDLE_NULL
+    if (area < 0 || area >= num_areas
+        || pc_obj == OBJ_HANDLE_NULL
         || obj_field_int32_get(pc_obj, OBJ_F_TYPE) != OBJ_TYPE_PC) {
         return false;
     }
@@ -422,7 +422,8 @@ bool area_set_known(int64_t pc_obj, int area)
     }
 
     // Validate the object and ensure it's a player character.
-    if (pc_obj == OBJ_HANDLE_NULL
+    if (area < 0 || area >= num_areas
+        || pc_obj == OBJ_HANDLE_NULL
         || obj_field_int32_get(pc_obj, OBJ_F_TYPE) != OBJ_TYPE_PC) {
         return false;
     }

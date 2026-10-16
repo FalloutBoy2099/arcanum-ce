@@ -1,4 +1,6 @@
 #include "game/tb.h"
+#include "game/conversation_history.h"
+#include "game/player.h"
 
 #include <string.h>
 
@@ -7,6 +9,7 @@
 #include "game/highres_config.h"
 #include "game/modern_font.h"
 #include "game/tc.h"
+#include "game/text_bubble_layout.h"
 #include "ui/follower_ui.h"
 #include "game/iso_zoom.h"
 #include "game/object.h"
@@ -15,16 +18,6 @@
  * The maximum number of text bubbles that can be active simultaneously.
  */
 #define MAX_TEXT_BUBBLES 8
-
-/**
- * The maximum width of the text bubble rectangle.
- */
-#define TEXT_BUBBLE_WIDTH 200
-
-/**
- * The maximum height of the text bubble rectangle.
- */
-#define TEXT_BUBBLE_HEIGHT 200
 
 /**
  * Maximum text length stored per bubble for re-rendering with correct
@@ -157,7 +150,9 @@ static uint8_t tb_colors[TB_TYPE_COUNT][3] = {
  *
  * 0x5B8EB0
  */
-static TigRect tb_content_rect = { 0, 0, TEXT_BUBBLE_WIDTH, TEXT_BUBBLE_HEIGHT };
+static TigRect tb_content_rect;
+static float tb_font_scale = 1.0f;
+static bool tb_update_buffer_size(void);
 
 /**
  * Table defining preferred text bubble positions for nine screen cells. Each
@@ -269,7 +264,6 @@ static tig_font_handle_t tb_fonts_right[TB_TYPE_COUNT];
 bool tb_init(GameInitInfo* init_info)
 {
     TigWindowData window_data;
-    TigVideoBufferCreateInfo vb_create_info;
     int idx;
     TigFont font = { 0 };
     const char* modern_path;
@@ -292,27 +286,7 @@ bool tb_init(GameInitInfo* init_info)
     tb_enabled = true;
     tb_background_color = tig_color_make(0, 0, 255);
 
-    // Set up video buffer creation parameters.
-    vb_create_info.flags = TIG_VIDEO_BUFFER_CREATE_SYSTEM_MEMORY | TIG_VIDEO_BUFFER_CREATE_COLOR_KEY;
-    vb_create_info.width = TEXT_BUBBLE_WIDTH;
-    vb_create_info.height = TEXT_BUBBLE_HEIGHT;
-    vb_create_info.background_color = tb_background_color;
-    vb_create_info.color_key = tb_background_color;
-
     dword_602AC0 = tig_color_make(0, 0, 0);
-
-    // Create video buffers for each text bubble.
-    for (idx = 0; idx < MAX_TEXT_BUBBLES; idx++) {
-        if (tig_video_buffer_create(&vb_create_info, &(tb_text_bubbles[idx].video_buffer)) != TIG_OK) {
-            // Clean up previously allocated buffers.
-            while (--idx >= 0) {
-                tig_video_buffer_destroy(tb_text_bubbles[idx].video_buffer);
-            }
-
-            // Something went wrong.
-            return false;
-        }
-    }
 
     // Set up font creation parameters.
     tig_art_interface_id_create(229, 0, 0, 0, &(font.art_id));
@@ -367,6 +341,20 @@ bool tb_init(GameInitInfo* init_info)
         tig_font_create(&font, &(tb_fonts_right[idx]));
     }
 
+    // Use the font that actually opened, including bitmap fallback/scaling.
+    TigFont* active_font = (TigFont*)tb_fonts[0];
+    tb_font_scale = (active_font->flags & TIG_FONT_MODERN) != 0
+        ? active_font->modern_font_size / 12.0f
+        : ((active_font->flags & TIG_FONT_SCALE) != 0 ? active_font->scale : 1.0f);
+    if (!tb_update_buffer_size()) {
+        for (idx = 0; idx < TB_TYPE_COUNT; idx++) {
+            tig_font_destroy(tb_fonts[idx]);
+            tig_font_destroy(tb_fonts_left[idx]);
+            tig_font_destroy(tb_fonts_right[idx]);
+        }
+        return false;
+    }
+
     // Register `text duration` setting and initialize it.
     settings_register(&settings, TEXT_DURATION_KEY, "6", tb_text_duration_changed);
     tb_text_duration_changed();
@@ -406,10 +394,13 @@ void tb_exit(void)
     // Destroy video buffers for each text bubble.
     for (idx = 0; idx < MAX_TEXT_BUBBLES; idx++) {
         tig_video_buffer_destroy(tb_text_bubbles[idx].video_buffer);
+        tb_text_bubbles[idx].video_buffer = NULL;
     }
 
     tb_iso_window_handle = TIG_WINDOW_HANDLE_INVALID;
     tb_iso_window_invalidate_rect = NULL;
+    tb_content_rect.width = 0;
+    tb_content_rect.height = 0;
 }
 
 /**
@@ -421,6 +412,48 @@ void tb_resize(GameResizeInfo* resize_info)
 {
     tb_iso_content_rect = resize_info->content_rect;
     tb_iso_window_handle = resize_info->window_handle;
+    tb_update_buffer_size();
+}
+
+// Allocate all replacement buffers before releasing any current ones. A
+// failed resize keeps the existing bubbles and their buffers usable.
+static bool tb_update_buffer_size(void)
+{
+    int width;
+    int height;
+    TigVideoBuffer* buffers[MAX_TEXT_BUBBLES] = { 0 };
+    TigVideoBufferCreateInfo info = { 0 };
+    text_bubble_dimensions(tb_font_scale, tb_iso_content_rect.width,
+        tb_iso_content_rect.height, &width, &height);
+    if (tb_content_rect.width == width && tb_content_rect.height == height) {
+        return true;
+    }
+    info.flags = TIG_VIDEO_BUFFER_CREATE_SYSTEM_MEMORY | TIG_VIDEO_BUFFER_CREATE_COLOR_KEY;
+    info.width = width;
+    info.height = height;
+    info.background_color = tb_background_color;
+    info.color_key = tb_background_color;
+    for (int i = 0; i < MAX_TEXT_BUBBLES; i++) {
+        if (tig_video_buffer_create(&info, &buffers[i]) != TIG_OK) {
+            for (int j = 0; j < i; j++) tig_video_buffer_destroy(buffers[j]);
+            return false;
+        }
+    }
+    tb_content_rect.width = width;
+    tb_content_rect.height = height;
+    for (int i = 0; i < MAX_TEXT_BUBBLES; i++) {
+        TextBubble* bubble = &tb_text_bubbles[i];
+        if (bubble->video_buffer != NULL) tig_video_buffer_destroy(bubble->video_buffer);
+        bubble->video_buffer = buffers[i];
+        if ((bubble->flags & TEXT_BUBBLE_IN_USE) != 0) {
+            tig_font_push(tb_fonts[bubble->type]);
+            tig_font_write(bubble->video_buffer, bubble->str, &tb_content_rect, &bubble->rect);
+            tig_font_pop();
+            bubble->rendered_align = TB_ALIGN_INVALID;
+        }
+    }
+    tb_invalidate_resolved_changes();
+    return true;
 }
 
 /**
@@ -617,6 +650,17 @@ void tb_add(int64_t obj, int type, const char* str)
     tb_get_rect(tb, &dirty_rect);
     tb_iso_window_invalidate_rect(&dirty_rect);
     tb_invalidate_resolved_changes();
+
+    // Record displayed speech only, avoiding unseen/off-screen scripted lines.
+    TigRect visible;
+    int64_t pc = player_get_local_pc_obj();
+    if (pc != OBJ_HANDLE_NULL && obj_type_is_critter(obj_field_int32_get(obj, OBJ_F_TYPE))
+        && (obj_field_int32_get(obj, OBJ_F_FLAGS) & (OF_OFF | OF_DONTDRAW | OF_INVISIBLE)) == 0
+        && tig_rect_intersection(&dirty_rect, &tb_iso_content_rect, &visible) == TIG_OK) {
+        char speaker[MAX_STRING] = "";
+        object_examine(obj, pc, speaker);
+        conversation_history_add(speaker, str, sub_45A7C0());
+    }
 }
 
 /**

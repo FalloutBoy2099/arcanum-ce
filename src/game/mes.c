@@ -93,6 +93,71 @@ static int mes_files_capacity;
  */
 static MesFile* mes_files;
 
+typedef struct LocalizedCatalog {
+    const char* name;
+    mes_file_handle_t primary;
+    mes_file_handle_t fallback;
+    bool loaded;
+} LocalizedCatalog;
+
+static LocalizedCatalog localized_catalogs[] = {
+    { "map_markers", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
+    { "crafting_ui", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
+    { "journal_index", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
+    { "options_ui", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
+    { "combat_info", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
+    { "savegame", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
+    { "language_names", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
+    { "worldmap", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
+    { "follower_ui", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
+};
+
+static const char* mes_localized_lookup(const char* name, int id, bool fallback_only)
+{
+    for (int i = 0; i < SDL_arraysize(localized_catalogs); i++) {
+        LocalizedCatalog* catalog = &localized_catalogs[i];
+        if (strcmp(catalog->name, name) != 0) continue;
+        if (!catalog->loaded) {
+            char path[TIG_MAX_PATH];
+            snprintf(path, sizeof(path), "mes\\%s.mes", name);
+            mes_load(path, &catalog->primary);
+            snprintf(path, sizeof(path), "mes\\ce_fallback\\%s.mes", name);
+            mes_load(path, &catalog->fallback);
+            catalog->loaded = true;
+        }
+        MesFileEntry entry = { id, NULL };
+        if (!fallback_only && catalog->primary != MES_FILE_HANDLE_INVALID
+            && mes_search(catalog->primary, &entry)) return entry.str;
+        if (catalog->fallback != MES_FILE_HANDLE_INVALID
+            && mes_search(catalog->fallback, &entry)) return entry.str;
+        break;
+    }
+    // A neutral marker if both resource catalogs are missing.
+    return "?";
+}
+
+const char* mes_localized_get(const char* catalog, int id)
+{
+    return mes_localized_lookup(catalog, id, false);
+}
+
+const char* mes_fallback_get(const char* catalog, int id)
+{
+    return mes_localized_lookup(catalog, id, true);
+}
+
+void mes_localized_exit(void)
+{
+    for (int i = 0; i < SDL_arraysize(localized_catalogs); i++) {
+        LocalizedCatalog* catalog = &localized_catalogs[i];
+        if (catalog->primary != MES_FILE_HANDLE_INVALID) mes_unload(catalog->primary);
+        if (catalog->fallback != MES_FILE_HANDLE_INVALID) mes_unload(catalog->fallback);
+        catalog->primary = MES_FILE_HANDLE_INVALID;
+        catalog->fallback = MES_FILE_HANDLE_INVALID;
+        catalog->loaded = false;
+    }
+}
+
 /**
  * Loads a message file and assigns a handle for accessing it.
  *
@@ -703,21 +768,17 @@ void copy_mes_file_entry(MesFileEntry* dst, MesFileEntry* src, char* str)
  */
 void check_duplicates(MesFile* mes_file)
 {
-    int index1;
-    int index2;
-
-    // NOTE: It seems the Troika developers were in a hurry when writing this
-    // check. This is a quick-and-dirty O(n^2) algorithm, which may be slow for
-    // large files. Since the entries are guaranteed to be sorted, duplicates
-    // should be adjacent, which is O(n).
-    for (index1 = 0; index1 < mes_file->num_entries; index1++) {
-        for (index2 = 0; index2 < index1; index2++) {
-            if (mes_file->entries[index1].num == mes_file->entries[index2].num) {
-                tig_debug_printf("%s: two lines numbered %d\n",
-                    mes_file->path,
-                    mes_file->entries[index1].num);
-            }
+    // Loading and merging sort entries before this check. Report each group
+    // once without changing entries or the existing binary-search selection.
+    for (int first = 0; first < mes_file->num_entries;) {
+        int end = first + 1;
+        while (end < mes_file->num_entries
+            && mes_file->entries[end].num == mes_file->entries[first].num) end++;
+        if (end - first > 1) {
+            tig_debug_printf("%s: %d lines numbered %d\n", mes_file->path,
+                end - first, mes_file->entries[first].num);
         }
+        first = end;
     }
 }
 

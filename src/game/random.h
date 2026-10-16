@@ -6,6 +6,7 @@
 bool random_init(GameInitInfo* init_info);
 void random_exit(void);
 void random_seed(unsigned int value);
+unsigned int random_state(void);
 unsigned int random_seed_generate(void);
 int random_between(int lower, int upper);
 int random_rand(void);

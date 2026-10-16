@@ -5,6 +5,7 @@
 #include "game/ai.h"
 #include "game/animfx.h"
 #include "game/critter.h"
+#include "game/companion_movement.h"
 #include "game/descriptions.h"
 #include "game/gamelib.h"
 #include "game/gsound.h"
@@ -48,6 +49,7 @@ static void sub_423D10(AnimRunInfo* run_info, unsigned int* flags_ptr, AnimGoalN
 static int anim_goal_pending_active_goals_count(void);
 static bool sub_436220(int64_t obj, int64_t target_obj, int64_t item_obj);
 static bool sub_436720(int64_t* source_obj_ptr, int64_t* block_obj_ptr);
+static void anim_request_companion_passage(int64_t obj, int64_t loc, int rotation);
 static void sub_436CB0(AnimID anim_id);
 static void notify_speed_recalc(AnimID* anim_id);
 static void sub_437460(AGModifyData* modify_data);
@@ -4429,75 +4431,80 @@ bool sub_424D90(AnimRunInfo* run_info)
 // 0x424E00
 bool sub_424E00(AnimRunInfo* run_info)
 {
-    int64_t source_obj;
-    int64_t source_loc;
-    int64_t target_loc;
-    int rot;
-    int64_t adjacent_locs[8];
-    int64_t adjacent_objs[8];
-    int idx;
+    int64_t source_obj = run_info->params[0].obj;
+    int64_t requester = run_info->cur_stack_data->params[AGDATA_TARGET_OBJ].obj;
+    int64_t adjacent_locs[8] = { 0 };
+    int64_t adjacent_objs[8] = { 0 };
+    unsigned int flags = 0;
 
-    source_obj = run_info->params[0].obj;
-
-    ASSERT(source_obj != OBJ_HANDLE_NULL); // 3344, "sourceObj != OBJ_HANDLE_NULL"
-
-    // TODO: Unclear if it checks loc or obj.
+    if (source_obj == OBJ_HANDLE_NULL) return false;
     if (run_info->params[1].loc != 0) {
         dword_5DE6CC = 0;
         return true;
     }
+    int64_t from = obj_field_int64_get(source_obj, OBJ_F_LOCATION);
+    int64_t requester_loc = requester != OBJ_HANDLE_NULL ? obj_field_int64_get(requester, OBJ_F_LOCATION) : 0;
+    sub_4257E0(source_obj, &flags);
 
-    source_loc = obj_field_int64_get(source_obj, OBJ_F_LOCATION);
-
-    if (run_info->cur_stack_data->params[AGDATA_TARGET_OBJ].obj != OBJ_HANDLE_NULL) {
-        target_loc = obj_field_int64_get(run_info->cur_stack_data->params[AGDATA_TARGET_OBJ].obj, OBJ_F_LOCATION);
-    } else {
-        target_loc = 0;
+    int64_t destination;
+    if (companion_movement_escape(source_obj, requester, &destination)) {
+        run_info->cur_stack_data->params[AGDATA_TARGET_TILE].loc = destination;
+        return true;
     }
 
-    rot = random_between(0, 8);
-
-    for (idx = rot; idx < 8; idx++) {
-        if (location_in_dir(source_loc, idx, &(adjacent_locs[idx]))) {
-            adjacent_objs[idx] = OBJ_HANDLE_NULL;
-            if (!sub_425760(source_obj, source_loc, adjacent_locs[idx], rot)) {
-                run_info->cur_stack_data->params[AGDATA_TARGET_TILE].loc = adjacent_locs[idx];
-                return true;
-            }
+    int start = random_between(0, 7);
+    for (int n = 0; n < 8; n++) {
+        int dir = (start + n) % 8;
+        if (!location_in_dir(from, dir, &adjacent_locs[dir])) continue;
+        if (!sub_425760(source_obj, from, adjacent_locs[dir], dir)) {
+            if (adjacent_locs[dir] == requester_loc) continue;
+            run_info->cur_stack_data->params[AGDATA_TARGET_TILE].loc = adjacent_locs[dir];
+            return true;
+        }
+        int block_type;
+        object_calc_traversal_cost(source_obj, from, dir, flags, &adjacent_objs[dir], &block_type, NULL);
+    }
+    for (int n = 0; n < 8; n++) {
+        int dir = (start + n) % 8;
+        int64_t blocker = adjacent_objs[dir];
+        if (adjacent_locs[dir] == 0 || adjacent_locs[dir] == requester_loc
+            || blocker == OBJ_HANDLE_NULL || blocker == requester || blocker == source_obj
+            || obj_field_int32_get(blocker, OBJ_F_TYPE) != OBJ_TYPE_NPC
+            || critter_is_dead(blocker) || combat_critter_is_combat_mode_active(blocker)) continue;
+        if (anim_goal_please_move(source_obj, blocker)) {
+            dword_5DE6CC = 1000;
+            run_info->cur_stack_data->params[AGDATA_TARGET_TILE].loc = adjacent_locs[dir];
+            return true;
         }
     }
-
-    for (idx = 0; idx < rot; idx++) {
-        if (location_in_dir(source_loc, idx, &(adjacent_locs[idx]))) {
-            adjacent_objs[idx] = OBJ_HANDLE_NULL;
-            if (!sub_425760(source_obj, source_loc, adjacent_locs[idx], idx)) {
-                run_info->cur_stack_data->params[AGDATA_TARGET_TILE].loc = adjacent_locs[idx];
-                return true;
-            }
-        }
-    }
-
-    for (idx = rot; idx < 8; idx++) {
-        if (adjacent_locs[idx] != target_loc) {
-            if (anim_goal_please_move(source_obj, adjacent_objs[idx])) {
-                dword_5DE6CC = 1000;
-                run_info->cur_stack_data->params[AGDATA_TARGET_TILE].loc = adjacent_locs[idx];
-                return true;
-            }
-        }
-    }
-
-    for (idx = 0; idx < rot; idx++) {
-        if (adjacent_locs[idx] != target_loc) {
-            if (anim_goal_please_move(source_obj, adjacent_objs[idx])) {
-                dword_5DE6CC = 1000;
-                run_info->cur_stack_data->params[AGDATA_TARGET_TILE].loc = adjacent_locs[idx];
-                return true;
-            }
-        }
-    }
-
     return false;
+}
+
+// Ask an idle companion to clear the next step before overlapping it.
+static void anim_request_companion_passage(int64_t obj, int64_t loc, int rotation)
+{
+    static int64_t last_blockers[32];
+    static tig_timestamp_t last_requests[32];
+    static int next_slot;
+    int64_t pc = player_get_local_pc_obj();
+    if (pc == OBJ_HANDLE_NULL || (obj != pc && critter_pc_leader_get(obj) != pc)
+        || combat_critter_is_combat_mode_active(obj)) return;
+    int64_t blocker;
+    int blocker_type;
+    unsigned int flags = 0;
+    sub_4257E0(obj, &flags);
+    object_calc_traversal_cost(obj, loc, rotation, flags, &blocker, &blocker_type, NULL);
+    if (blocker == OBJ_HANDLE_NULL || blocker == obj || obj_field_int32_get(blocker, OBJ_F_TYPE) != OBJ_TYPE_NPC
+        || critter_pc_leader_get(blocker) != pc || critter_is_dead(blocker)
+        || critter_is_unconscious(blocker) || combat_critter_is_combat_mode_active(blocker)) return;
+    for (int i = 0; i < 32; i++) {
+        if (last_blockers[i] == blocker && tig_timer_between(last_requests[i], gamelib_ping_time) < 750) return;
+    }
+    if (anim_goal_please_move(obj, blocker)) {
+        last_blockers[next_slot] = blocker;
+        last_requests[next_slot] = gamelib_ping_time;
+        next_slot = (next_slot + 1) % 32;
+    }
 }
 
 // 0x425130
@@ -5632,6 +5639,7 @@ bool sub_427110(AnimRunInfo* run_info, int64_t obj, int64_t loc)
     if (!location_in_dir(loc, rot, &adjacent_loc)) {
         return false;
     }
+    anim_request_companion_passage(obj, loc, rot);
 
     if (run_info->path.curr > run_info->path.max - 2) {
         object_list_location(adjacent_loc, OBJ_TM_CRITTER, &objects);
@@ -10463,6 +10471,7 @@ bool sub_42E9B0(AnimRunInfo* run_info)
         return false;
     }
 
+    anim_request_companion_passage(obj, loc, run_info->path.rotations[0]);
     if ((run_info->path.rotations[0] & 1) != 0) {
         run_info->extra_target_tile = 0;
     } else {
@@ -13524,10 +13533,7 @@ bool anim_goal_run_to_tile(int64_t obj, int64_t loc)
     }
 
     run_info = &(anim_run_info[stru_5A1908.slot_num]);
-    run_info->flags |= 0x40;
-
-    // TODO: Looks wrong, checking for 0 immediately after OR'ing 0x40.
-    if (run_info->flags == 0
+    if ((run_info->flags & 0x40) == 0
         && critter_encumbrance_level_get(run_info->anim_obj) < ENCUMBRANCE_LEVEL_SIGNIFICANT) {
         run_info->flags |= 0x40;
     }
@@ -13546,9 +13552,7 @@ bool anim_goal_run_to_tile(int64_t obj, int64_t loc)
 
         if (tig_net_is_host()) {
             run_info->goals[0].params[AGDATA_TARGET_TILE].loc = loc;
-            run_info->flags |= 0x40;
-
-            if (run_info->flags == 0
+            if ((run_info->flags & 0x40) == 0
                 && critter_encumbrance_level_get(run_info->anim_obj) < ENCUMBRANCE_LEVEL_SIGNIFICANT) {
                 run_info->flags |= 0x40;
             }
@@ -13582,7 +13586,7 @@ bool anim_goal_run_to_tile(int64_t obj, int64_t loc)
     run_info->path.flags |= 0x04;
     run_info->goals[0].params[AGDATA_TARGET_TILE].loc = loc;
 
-    if (run_info->flags == 0
+    if ((run_info->flags & 0x40) == 0
         && critter_encumbrance_level_get(run_info->anim_obj) < ENCUMBRANCE_LEVEL_SIGNIFICANT) {
         run_info->flags |= 0x40;
     }
@@ -13988,7 +13992,7 @@ bool anim_goal_attack_ex(int64_t attacker_obj, int64_t target_obj, int sound_id)
 
     source_obj = attacker_obj;
     if (sub_436720(&source_obj, &block_obj)) {
-        anim_goal_please_move(block_obj, source_obj);
+        anim_goal_please_move(source_obj, block_obj);
         return false;
     }
 
@@ -14647,7 +14651,7 @@ bool anim_goal_wander(int64_t obj, int64_t tether_loc, int radius)
         && !sub_423300(obj, NULL)) {
         source_obj = obj;
         if (sub_436720(&source_obj, &block_obj)) {
-            anim_goal_please_move(block_obj, source_obj);
+            anim_goal_please_move(source_obj, block_obj);
         } else if (sub_44D4E0(&goal_data, obj, AG_WANDER)) {
             goal_data.params[AGDATA_RANGE_DATA].data = radius;
             goal_data.params[AGDATA_SCRATCH_VAL1].data = (int)LOCATION_GET_X(tether_loc);
@@ -14687,7 +14691,7 @@ bool anim_goal_wander_seek_darkness(int64_t obj, int64_t tether_loc, int radius)
         && !sub_423300(obj, NULL)) {
         source_obj = obj;
         if (sub_436720(&source_obj, &block_obj)) {
-            anim_goal_please_move(block_obj, source_obj);
+            anim_goal_please_move(source_obj, block_obj);
         } else if (sub_44D4E0(&goal_data, obj, AG_WANDER_SEEK_DARKNESS)) {
             goal_data.params[AGDATA_RANGE_DATA].data = radius;
             goal_data.params[AGDATA_SCRATCH_VAL1].data = (int)LOCATION_GET_X(tether_loc);

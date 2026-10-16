@@ -15,6 +15,7 @@
 #include "tig/mouse.h"
 #include "tig/movie.h"
 #include "tig/palette.h"
+#include "tig/performance.h"
 #include "tig/rect.h"
 #include "tig/sound.h"
 #include "tig/str_parse.h"
@@ -157,6 +158,7 @@ void tig_exit(void)
 
     if (!in_tig_exit) {
         in_tig_exit = true;
+        tig_performance_set_enabled(false, NULL);
 
         index = SDL_arraysize(modules);
         while (index > 0) {

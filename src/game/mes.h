@@ -25,5 +25,8 @@ bool mes_unload(mes_file_handle_t mes_file_handle);
 int mes_num_entries(mes_file_handle_t mes_file_handle);
 void mes_merge(mes_file_handle_t dst, mes_file_handle_t src);
 void mes_stats(void);
+const char* mes_localized_get(const char* catalog, int id);
+const char* mes_fallback_get(const char* catalog, int id);
+void mes_localized_exit(void);
 
 #endif /* ARCANUM_GAME_MES_H_ */

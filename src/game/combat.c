@@ -68,7 +68,6 @@ static bool sub_4B7580(ObjectNode* object_node);
 static void combat_turn_based_subturn_start(void);
 static void combat_turn_based_subturn_end(void);
 static void combat_turn_based_end_turn(void);
-static int combat_move_cost(int64_t source_obj, int64_t target_loc, bool adjacent);
 static bool sub_4B7DC0(int64_t obj);
 static void sort_combat_list(void);
 static void pc_switch_weapon(int64_t pc_obj, int64_t target_obj);
@@ -3533,6 +3532,35 @@ int combat_attack_cost(int64_t obj)
     }
 
     return action_points;
+}
+
+// Read-only attack estimate for the optional world hover hints.
+int combat_hit_chance_preview(int64_t source_obj, int64_t target_obj, int hit_loc)
+{
+    CombatContext combat;
+    SkillInvocation invocation;
+    int effectiveness;
+    int chance;
+
+    // Build the same skill inputs as an attack, without rolling dice,
+    // consuming ammunition or executing attack scripts.
+    sub_4B2210(source_obj, target_obj, &combat);
+    skill_invocation_init(&invocation);
+    sub_4440E0(source_obj, &invocation.source);
+    sub_4440E0(target_obj, &invocation.target);
+    sub_4440E0(combat.weapon_obj, &invocation.item);
+    invocation.skill = combat.skill;
+    invocation.target_loc = combat.target_loc;
+    invocation.hit_loc = hit_loc;
+    if (hit_loc != HIT_LOC_TORSO) invocation.flags |= SKILL_INVOCATION_AIM;
+    if ((combat.flags & 0x8000) != 0) invocation.flags |= SKILL_INVOCATION_BACKSTAB;
+    effectiveness = IS_TECH_SKILL(combat.skill)
+        ? tech_skill_effectiveness(source_obj, GET_TECH_SKILL(combat.skill), target_obj)
+        : basic_skill_effectiveness(source_obj, GET_BASIC_SKILL(combat.skill), target_obj);
+    chance = effectiveness - skill_invocation_difficulty(&invocation);
+    if (chance < 0) chance = 0;
+    if (chance > 100) chance = 100;
+    return chance;
 }
 
 // 0x4B7C90

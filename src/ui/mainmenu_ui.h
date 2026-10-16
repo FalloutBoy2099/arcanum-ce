@@ -5,6 +5,7 @@
 #include "game/mes.h"
 #include "game/timeevent.h"
 #include "ui/types.h"
+#include "ui/mainmenu_history.h"
 
 void mainmenu_ui_refresh_background(void);
 
@@ -38,28 +39,6 @@ typedef enum MainMenuType {
     MM_TYPE_OPTIONS,
     MM_TYPE_5,
 } MainMenuType;
-
-typedef enum MainMenuWindowType {
-    MM_WINDOW_0,
-    MM_WINDOW_1,
-    MM_WINDOW_MAINMENU,
-    MM_WINDOW_MAINMENU_IN_PLAY,
-    MM_WINDOW_MAINMENU_IN_PLAY_LOCKED,
-    MM_WINDOW_SINGLE_PLAYER,
-    MM_WINDOW_OPTIONS,
-    MM_WINDOW_LOAD_GAME,
-    MM_WINDOW_SAVE_GAME,
-    MM_WINDOW_LAST_SAVE_GAME,
-    MM_WINDOW_INTRO,
-    MM_WINDOW_PICK_NEW_OR_PREGEN,
-    MM_WINDOW_NEW_CHAR,
-    MM_WINDOW_PREGEN_CHAR,
-    MM_WINDOW_CHAREDIT,
-    MM_WINDOW_SHOP,
-    MM_WINDOW_CREDITS,
-    MM_WINDOW_26,
-    MM_WINDOW_COUNT,
-} MainMenuWindowType;
 
 extern int dword_5C3618;
 extern int dword_64C420;

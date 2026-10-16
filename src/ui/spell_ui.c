@@ -288,6 +288,20 @@ void spell_ui_aggressive_mode_on(void)
 }
 
 // 0x57C110
+bool spell_ui_cast_preview(int* fatigue, int* range)
+{
+    if (intgame_mode_get() != INTGAME_MODE_SPELL
+        || dword_5CB3A0 < 0 || dword_5CB3A0 >= SPELL_COUNT
+        || qword_6834F8 == OBJ_HANDLE_NULL || qword_683500 == OBJ_HANDLE_NULL) {
+        return false;
+    }
+    // Item casting spends item charges/mana rather than the caster's fatigue.
+    *fatigue = obj_type_is_critter(obj_field_int32_get(qword_6834F8, OBJ_F_TYPE))
+        ? spell_cast_cost(dword_5CB3A0, qword_683500) : -1;
+    *range = magictech_get_range(dword_5CB3A0);
+    return true;
+}
+
 void spell_ui_apply(TargetDescriptor* td)
 {
     MesFileEntry mes_file_entry;

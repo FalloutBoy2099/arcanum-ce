@@ -9,6 +9,13 @@ extern "C" {
 #endif
 
 typedef int (*TigMessageKeyboardCallback)(int);
+// Optional diagnostic input isolation, applied before window/button handling.
+// Return false to consume an SDL event. NULL restores normal input.
+typedef bool (*TigMessageEventFilter)(const SDL_Event*);
+void tig_message_event_filter_set(TigMessageEventFilter filter);
+// Discard queued and generated user input before window/button dispatch.
+// System messages (redraw, quit, ping) continue normally.
+void tig_message_input_block_set(bool blocked);
 
 typedef enum TigMessageType {
     TIG_MESSAGE_MOUSE,

@@ -392,3 +392,8 @@ FodyWeavers.xsd
 /out
 /build
 CMakeUserPresets.json
+performance.csv
+benchmark-performance.csv
+benchmark-phases.csv
+benchmark-runs.txt
+benchmark-status.txt

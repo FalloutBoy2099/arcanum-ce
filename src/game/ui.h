@@ -1,6 +1,10 @@
 #ifndef ARCANUM_GAME_UI_H_
 #define ARCANUM_GAME_UI_H_
 
+#define SCHEMATIC_TOOLBAR_KEY "schematic_toolbar"
+#define LOGBOOK_TOOLBAR_KEY "logbook_toolbar"
+#define WORLDMAP_TOOLBAR_KEY "worldmap_toolbar"
+
 #include "game/context.h"
 #include "game/schematic.h"
 #include "game/timeevent.h"

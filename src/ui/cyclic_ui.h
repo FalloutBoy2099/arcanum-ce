@@ -24,6 +24,8 @@ typedef struct CyclicUiControlInfo {
     /* 0024 */ CyclicUiControlValueChanged value_changed_callback;
     /* 0028 */ bool visible;
     /* 0029 */ bool enabled;
+    tig_font_handle_t value_font;
+    int value_font_index;
 } CyclicUiControlInfo;
 
 bool cyclic_ui_init(GameInitInfo* init_info);

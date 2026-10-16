@@ -16,8 +16,10 @@ the current names below.
 
 | Setting | Default | Values and purpose |
 | --- | --- | --- |
-| `language` | No engine default | Legacy text value such as `english`, retained when saving. Does not select a translation in the current engine; localization comes from installed resources, including `mes/language.mes`. |
+| `language` | `english` | Select translation archives. Values: `english`, `french`, `spanish`, `italian`, `russian`; ISO aliases `en`, `fr`, `es`, `it`, `ru` are also accepted, case-insensitively. Unknown values use English. Requires restarting the game. |
 | `show_version` | `0` | Boolean. Display the version in the main menu. |
+| `performance_logging` | `0` | Boolean. Record performance timings and workload counters to `performance.csv` in the game directory. Requires restarting. See `docs/performance_baseline.md` for comparison scenarios and measurement limits. |
+| `benchmark_autorun` | `0` | Boolean. After loading a save, automatically run the fixed performance scenario once per process. It controls movement, HUD, zoom and journal/schematic navigation. Output: `benchmark-performance.csv`, `benchmark-phases.csv`, `benchmark-runs.txt`, `benchmark-status.txt`. Escape cancels. See `docs/automatic_benchmark.md`. |
 
 ## [game]
 
@@ -34,6 +36,43 @@ the current names below.
 | `followers_manually_level_up` | `0` | Boolean. Enable manual follower leveling instead of automatic leveling schemes. |
 | `autosave_travel` | `1` | Boolean. Save after successful player transitions between maps, using `slotAUTO` / `Autosave - Travel`. Replaces the previous autosave in this slot. |
 | `autosave_sleep` | `1` | Boolean. Save on waking up, using `slotNAPS` / `Autosave - Sleep`. Replaces the previous autosave in this slot. |
+| `action_tooltips` | `0` | Boolean. Enable experimental combat information in two fixed frames above the HUD (real-time or turn-based): movement AP from the current path, estimated attack hit chance, attack AP, distance and weapon range, and the selected spell's fatigue cost and range. One switch controls all hints. |
+| `window_close_mode` | `1` | `0` = Group: mouse closure through the circular portrait only. `1` = Modal: also allow clicking outside the panel, excluding HUD strips. Applies immediately to Inventory (including its trade/loot/service variants), Character Sheet outside character creation, World Map, Schematics and Journal. Keyboard close shortcuts remain available in either mode. |
+| `random_encounters` | `0` | `0` = Normal (original behavior), `1` = Interesting (skip trivial ordinary fights), `2` = Less frequent (divide the original encounter probability by 2.7). Applies immediately to the random encounter system during travel and resting. Unknown values use Normal. |
+| `lighting` | `0` | `0` = Normal, `25` = 25% less ambient darkness, `50` = 50% less ambient darkness. Applies indoors and outdoors. Each RGB channel moves toward full light by the selected fraction; full light is unchanged. Changes in Game options apply immediately. Other values use Normal. |
+| `crafting_party_components` | `0` | Boolean. Allow crafting to consume unequipped components carried by nearby conscious companions. Expertise always belongs to the selected crafter. Also available at the end of Game options and in the schematic toolbar. |
+
+Interesting mode leaves the original encounter roll and selection intact, then
+skips a trivial selected fight without replacing it or consuming its trigger
+count. Starting at player level 6, a plain hostile group is considered trivial
+if every enemy is at most half the player's level and the sum of enemy levels
+is at most half the combined levels of the player and active followers. Actual
+rolled enemy counts are used. Scripted actors, non-hostile actors, special
+tables, story-gated entries and limited-use entries are kept. This is a
+level-based estimate, not a simulation of equipment, skills or combat outcomes.
+
+Less frequent uses a roll of 1–270 instead of 1–100 with the same capped
+threshold. This gives exactly 1/2.7 of the original probability per check,
+including the original increased chance while resting. Actual encounter counts
+over a journey vary randomly; selected enemy groups are unchanged.
+
+Action Tooltips is near the end of the Game tab and applies immediately. Two
+fixed black frames with gold borders sit above the left and right sides of the
+HUD, leaving the central action-point bar clear. Each frame is 210x24 pixels.
+The left frame shows movement/attack AP or spell fatigue, plus distance. The
+right frame shows estimated hit chance and range where applicable. Frames
+appear only in combat mode and disappear on leaving combat or opening a panel.
+Unavailable information is cleared. Positions adapt to the viewport and HUD
+stage. Information is refreshed five times per second. Distances and ranges
+use engine tile units. Movement AP respects the
+Always Run setting; unreachable paths are reported explicitly. AP values are
+turn-based equivalents when viewing them outside turn-based combat. Hit chance
+is an estimate from the current position and selected called shot; it does not
+predict a subsequent approach, projectile interception, aptitude failures or
+special scripted effects. No attack is performed and no random roll is made.
+Spell fatigue includes race and college mastery modifiers; item casting is
+identified separately because it uses item resources. Maintenance costs are
+not included in the initial casting cost.
 
 ## [video]
 
@@ -63,8 +102,10 @@ Ctrl + mouse wheel zooms the world view. Keyboard zoom shortcuts are listed
 under `[bindings]`. The world map retains its own navigation behavior.
 
 The options menu exposes VSync as an off/on switch; adaptive VSync remains
-available through `vsync_mode=2` in this file. The Language control currently
-shows English as its only entry; translation-pack selection is not implemented.
+available through `vsync_mode=2` in this file. The Language control offers
+English, Français, Español, Italiano, and Русский. Western language names use
+the same bitmap font as other option values. Russian uses a Unicode TrueType
+fallback because the bitmap font does not contain Cyrillic characters.
 The Modern Font switch uses `modern_fonts`, independently from dialogue numbering.
 Changes to custom font rendering require a restart.
 
@@ -91,6 +132,9 @@ Volume levels are integers `0`–`10`: `0` mutes the category, `10` is its maxim
 | Setting | Default | Values and purpose |
 | --- | --- | --- |
 | `dialogue_camera_mode` | `0` | `0` = minimal movement to keep the speaker visible, `1` = midpoint between player and NPC, `2` = NPC, `3` = player while keeping the NPC visible. |
+| `schematic_toolbar` | `1` | Boolean. Show the schematic search, batch quantity and companion-component toolbar, including stock labels, using `Schematic_Base_Xl.art` (50 pixels taller, aligned at the original top). `0` uses the original background, hides these controls, disables their search shortcut and uses one crafting batch per click. The companion-component setting remains independent. Restart after editing. |
+| `logbook_toolbar` | `1` | Boolean. Show the journal search bar and Filter/Underline controls, using `Book_Main_Xl.art` and `Book_Side_Xl.art`. `0` uses the original backgrounds and disables the bar, Ctrl+F, filtering and search underlines. Independent of `schematic_toolbar`. XL artwork adds 50 pixels below the original top position. Restart after editing. |
+| `worldmap_toolbar` | `1` | Boolean. Enable personal markers on world and town maps using `art/interface/MapMain_Xl.art` (50 pixels taller, aligned at the original top): Ctrl + right-click opens the description field with OK; Alt + right-click deletes a marker; hover shows its description in the lower message panel. `0` uses `MapMain.art`, disables these controls and hides personal markers while preserving them in saved games. If the XL artwork is unavailable, the original background is used. Built-in locations remain available. Restart after editing. |
 | `dialogue_camera_zoom_to_fit` | `1` | Boolean. Allow zooming out to fit dialogue participants. Previous zoom is restored after dialogue. Requires zoom availability. |
 | `dialogue_camera_tween_back` | `0` | Boolean. Smoothly recenter on the player after dialogue. |
 | `hud_stage` | `0` | `0` = full, `1` = medium, `2` = mini, `3` = hidden. The HUD shortcut cycles and saves the selected mode. Panels can temporarily reveal controls. |
@@ -162,6 +206,7 @@ The `#` inside a color value is part of the value.
 Use one keyboard key or two alternatives separated by `|`. For actions supporting
 mouse input, a mouse button can be an alternative (`center_camera=HOME|MIDDLE_MOUSE`).
 These are alternatives, not combinations; syntax such as `CTRL+X` is unsupported.
+Use `NONE` to disable an action; empty values are ignored when loading the INI.
 Ctrl + mouse wheel and dialogue number shortcuts are handled separately.
 
 Keyboard names include `A`–`Z`, `0`–`9`, `F1`–`F12`, `ESCAPE` (`ESC`), `RETURN`
@@ -225,10 +270,25 @@ fixed behavior with no separate INI binding.
 | `follower_stay_close` | `F3` | Followers stay close. |
 | `follower_spread_out` | `F4` | Followers spread out. |
 | `follower_stop` | `F5` | Followers stop. |
+| `logbook_previous` | `UP` | Previous journal tab (wraps). |
+| `logbook_next` | `DOWN` | Next journal tab (wraps). |
+| `logbook_page_previous` | `LEFT` | Previous journal page spread. |
+| `logbook_page_next` | `RIGHT` | Next journal page spread. |
+| `schematics_previous` | `UP` | Previous schematic discipline tab (wraps). |
+| `schematics_next` | `DOWN` | Next schematic discipline tab (wraps). |
+| `schematics_page_previous` | `LEFT` | Previous schematic page in the current discipline. |
+| `schematics_page_next` | `RIGHT` | Next schematic page in the current discipline. |
 | `scroll_up` | `UP` | Scroll camera up. |
 | `scroll_down` | `DOWN` | Scroll camera down. |
 | `scroll_left` | `LEFT` | Scroll camera left. |
 | `scroll_right` | `RIGHT` | Scroll camera right. |
+
+Journal and schematic navigation bindings accept keyboard and mouse alternatives.
+For example, `logbook_page_previous=LEFT|PREVIOUS_MOUSE` and
+`logbook_page_next=RIGHT|NEXT_MOUSE` enable the side buttons in the journal;
+use the equivalent `schematics_page_previous` and `schematics_page_next` keys
+for schematics. A mouse press navigates once; holding or releasing it does not
+trigger another action. Keyboard navigation activates on key release.
 
 Example:
 
@@ -250,6 +310,88 @@ cycle_hud=TAB
 center_camera=HOME|MIDDLE_MOUSE
 ```
 
+## [xbox_controller]
+
+Settings belong in `[xbox_controller]` in `arcanum.ini`; restart after editing. Use `enabled=1` to enable native Xbox controller input or `enabled=0` to disable it (the default). Mouse and keyboard remain usable.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `0` | Enable native Xbox controller input |
+| `cursor_speed` | `1200` | Maximum cursor speed in logical game pixels per second; clamped to 50–3000 |
+| `cursor_deadzone` | `8000` | Cursor stick dead zone; clamped to 0–30000 |
+| `camera_deadzone` | `12000` | Camera stick dead zone; clamped to 0–30000 |
+| `precision_percent` | `45` | Cursor speed percentage while holding LB; clamped to 5–100 |
+| `trigger_threshold` | `4500` | Trigger activation threshold, clamped to 0–32766; trigger values range from 0 to 32767 |
+| `swap_sticks` | `0` | Set to 1 for left-stick cursor and right-stick camera |
+
+Each action below accepts Xbox button names: `a`, `b`, `x`, `y`, `rb`, `back`, `start`, `dpad_up`, `dpad_right`, `dpad_down`, `dpad_left`, `left_stick`, `right_stick`, `lt` and `rt`. Separate alternatives with `|`, for example `mouse_left=a|rt`. Use `lb+` for a secondary button combination, for example `quick_save=lb+y`. Use `none` to unassign an action. Names are case-insensitive and spaces around alternatives are ignored.
+
+Named actions use their first keyboard binding from `[bindings]`, so remapping `inventory` also changes the controller shortcut. `mouse_left` and `mouse_right` directly generate mouse input. Actions configured exclusively as mouse bindings have no keyboard target. LB is reserved for precision and the secondary layer; the Guide button and LB-trigger combinations are not assigned. Keyboard key names and keyboard chords are configured in `[bindings]`, not as controller button values.
+
+A button can have one action per layer. For duplicate assignments, the first action in the table below wins and the conflict is logged. Explicit LB assignments override the inherited normal action; other LB combinations retain their normal mapping.
+
+| Action | Default buttons |
+| --- | --- |
+| `mouse_left` | `a\|rt` |
+| `mouse_right` | `b\|lt` |
+| `toggle_combat` | `x` |
+| `combat_mode` | `y` |
+| `end_turn` | `rb` |
+| `map` | `back\|dpad_left` |
+| `main_menu` | `start` |
+| `inventory` | `dpad_up` |
+| `character` | `dpad_right` |
+| `logbook` | `dpad_down` |
+| `center_camera` | `left_stick` |
+| `zoom_reset` | `right_stick` |
+| `quick_save` | `lb+y` |
+| `sleep` | `lb+rb` |
+| `spells` | `lb+back` |
+| `schematics` | `lb+start` |
+| `zoom_in` | `lb+x` |
+| `zoom_out` | `lb+b` |
+
+Unlisted LB combinations retain their normal mapping. Cursor motion is independent of frame rate, diagonal speed is bounded, and small fractional movements are accumulated for precision. Duplicate mappings are combined so releasing A does not release an RT click that is still held.
+
+Native SDL3 gamepad support is built into the executable. See [controller.md](docs/controller.md) for the control layout, lifecycle behavior and validation details.
+
+## Language archives
+
+```ini
+[global]
+language=french
+```
+
+| Menu name | INI value | Translation filename suffix |
+| --- | --- | --- |
+| English | `english` | No suffix for the base game; optional `_en.dat` overlays |
+| Français | `french` | `_fr.dat` |
+| Español | `spanish` | `_es.dat` |
+| Italiano | `italian` | `_it.dat` |
+| Русский | `russian` | `_ru.dat` |
+
+Common `Arcanum*.dat` repositories remain loaded in their existing alphabetical
+order. The selected language's archives are mounted afterwards, also in
+alphabetical order, so their files override common archives. Other languages'
+archives are excluded. Suffix matching is case-insensitive and must occur
+immediately before `.dat`: `Arcanum_fr.dat` and `translation_fr.dat` qualify,
+but `Arcanum_fr_extra.dat` does not.
+
+This applies in the game directory and `HighRes/Files`. Extracted directories
+named like `.dat` archives are supported too. Existing priority rules for loose
+files (`data`, `HighRes/Files`, and module directories) remain in effect.
+For a module such as `Modules/Arcanum.dat`, the engine additionally loads
+`Modules/Arcanum_fr.dat` when French is selected, after the module's patches and
+before its loose directory. Translation archives are hidden from the module
+picker. Unrelated `.dat` files such as installer data are not mounted.
+
+The Language option saves the selection immediately and displays a restart
+notice. Archives and cached texts keep the startup language until the next
+launch. Translation packs must contain resources in the usual game paths,
+such as `mes/MainMenu.mes`; this feature does not supply translations itself.
+With no selected-language pack installed, the common resources remain the
+fallback. English assumes the common resources are the English base game.
+
 ## Settings stored elsewhere
 
 Window size, windowed/fullscreen startup mode, FPS display, scrolling speed,
@@ -260,3 +402,7 @@ overrides the imported width and height; the other keys remain in the HighRes
 file. The legacy `arcanum.cfg` keeps the startup `splash` counter; supported
 legacy gameplay settings are imported into `arcanum.ini`. World-map labels and
 travel-time units are localized through `mes/worldmap.mes`.
+
+Journal and schematic navigation shortcuts are active only in their respective
+window. Page navigation stops at the first/last page. Tab changes reset the
+page like a mouse click and retain the learned/found schematic view.

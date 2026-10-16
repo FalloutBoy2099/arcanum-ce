@@ -77,10 +77,28 @@ static const InputBindingDef input_binding_defs[] = {
     { INPUT_ACTION_ZOOM_OUT, "zoom_out", "-|Keypad -" },
     { INPUT_ACTION_ZOOM_RESET, "zoom_reset", "Keypad 0" },
     { INPUT_ACTION_CYCLE_HUD, "cycle_hud", "TAB" },
+    { INPUT_ACTION_LOGBOOK_PREVIOUS, "logbook_previous", "UP" },
+    { INPUT_ACTION_LOGBOOK_NEXT, "logbook_next", "DOWN" },
+    { INPUT_ACTION_LOGBOOK_PAGE_PREVIOUS, "logbook_page_previous", "LEFT" },
+    { INPUT_ACTION_LOGBOOK_PAGE_NEXT, "logbook_page_next", "RIGHT" },
+    { INPUT_ACTION_SCHEMATICS_PREVIOUS, "schematics_previous", "UP" },
+    { INPUT_ACTION_SCHEMATICS_NEXT, "schematics_next", "DOWN" },
+    { INPUT_ACTION_SCHEMATICS_PAGE_PREVIOUS, "schematics_page_previous", "LEFT" },
+    { INPUT_ACTION_SCHEMATICS_PAGE_NEXT, "schematics_page_next", "RIGHT" },
 };
 
 static InputBindingPart input_bindings[INPUT_ACTION_COUNT][INPUT_BINDING_MAX_PARTS];
 static uint32_t input_binding_mouse_state;
+
+SDL_Scancode input_binding_named_scancode(const char* name)
+{
+    for (int i = 0; i < SDL_arraysize(input_binding_defs); i++) {
+        if (SDL_strcasecmp(name, input_binding_defs[i].key) == 0) {
+            return input_binding_primary_scancode(input_binding_defs[i].action, SDL_SCANCODE_UNKNOWN);
+        }
+    }
+    return input_binding_scancode_from_name(name);
+}
 
 void input_bindings_init(void)
 {
@@ -179,6 +197,25 @@ bool input_binding_matches_mouse(InputAction action, const TigMessage* msg)
     }
 
     return false;
+}
+
+InputBindingNavigationEvent input_binding_navigation_event(InputAction action, const TigMessage* msg)
+{
+    if (action < 0 || action >= INPUT_ACTION_COUNT) return INPUT_NAVIGATION_NONE;
+    if (input_binding_matches_keyboard(action, msg)) {
+        return msg->data.keyboard.pressed ? INPUT_NAVIGATION_CONSUME : INPUT_NAVIGATION_ACTIVATE;
+    }
+    if (msg->type == TIG_MESSAGE_MOUSE) {
+        for (int index = 0; index < INPUT_BINDING_MAX_PARTS; index++) {
+            const InputBindingPart* part = &input_bindings[action][index];
+            if (part->type != INPUT_BINDING_PART_MOUSE) continue;
+            if (msg->data.mouse.event == part->mouse_down) {
+                return msg->data.mouse.repeat ? INPUT_NAVIGATION_CONSUME : INPUT_NAVIGATION_ACTIVATE;
+            }
+            if (msg->data.mouse.event == part->mouse_up) return INPUT_NAVIGATION_CONSUME;
+        }
+    }
+    return INPUT_NAVIGATION_NONE;
 }
 
 bool input_binding_is_pressed(InputAction action)

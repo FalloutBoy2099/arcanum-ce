@@ -12,11 +12,11 @@ static int textedit_ui_focused;
 /**
  * Buffer to store the initial value of the text edit control.
  *
- * NOTE: Odd buffer size.
+ * Includes room for the longest map marker description and its terminator.
  *
  * 0x66D9D8
  */
-static char textedit_ui_backup[204];
+static char textedit_ui_backup[250];
 
 /**
  * Pointer to the currently focused text edit control.
@@ -237,7 +237,7 @@ bool textedit_ui_process_message(TigMessage* msg)
 
             if (!textedit_ui_overwrite_mode) {
                 // Check max string size.
-                if (textedit_ui_len > textedit_ui_current_textedit->size - 1) {
+                if (textedit_ui_len >= textedit_ui_current_textedit->size - 1) {
                     return true;
                 }
 

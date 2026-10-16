@@ -21,6 +21,7 @@ typedef uint32_t TigFontFlags;
 #define TIG_FONT_BLEND_ADD 0x0100u
 #define TIG_FONT_MODERN 0x0200u
 #define TIG_FONT_DIM_BRACKETS 0x0400u
+#define TIG_FONT_UTF8 0x0800u
 
 typedef struct TigFont {
     /* 0000 */ TigFontFlags flags;
@@ -43,6 +44,11 @@ typedef struct TigFont {
     int modern_shadow_distance;
 } TigFont;
 
+typedef struct TigTextRange {
+    int start; // Byte offset in the original string, before legacy conversion.
+    int length;
+} TigTextRange;
+
 int tig_font_init(TigInitInfo* init_info);
 void tig_font_exit(void);
 void tig_font_create(TigFont* font, tig_font_handle_t* font_handle_ptr);
@@ -51,6 +57,8 @@ int tig_font_push(tig_font_handle_t font_handle);
 void tig_font_pop(void);
 void tig_font_measure(TigFont* font);
 int tig_font_write(TigVideoBuffer* video_buffer, const char* str, const TigRect* rect, TigRect* dirty_rect);
+int tig_font_underline_ranges(TigVideoBuffer* video_buffer, const char* str, const TigRect* rect,
+    const TigTextRange* ranges, int count);
 
 #ifdef __cplusplus
 }

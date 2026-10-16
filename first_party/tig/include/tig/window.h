@@ -2,6 +2,7 @@
 #define TIG_WINDOW_H_
 
 #include "tig/rect.h"
+#include "tig/font.h"
 #include "tig/types.h"
 
 #ifdef __cplusplus
@@ -108,6 +109,8 @@ int tig_window_copy_from_vbuffer(tig_window_handle_t dst_window_handle, TigRect*
 int tig_window_copy_to_vbuffer(tig_window_handle_t src_window_handle, TigRect* src_rect, TigVideoBuffer* dst_video_buffer, TigRect* dst_rect);
 int tig_window_tint(tig_window_handle_t window_handle, TigRect* rect, int a3, int a4);
 int tig_window_text_write(tig_window_handle_t window_handle, const char* text, TigRect* rect);
+int tig_window_text_underline(tig_window_handle_t window_handle, const char* text, TigRect* rect,
+    const TigTextRange* ranges, int count);
 void tig_window_invalidate_rect(TigRect* rect);
 int tig_window_button_add(tig_window_handle_t window_handle, tig_button_handle_t button_handle);
 int tig_window_button_remove(tig_window_handle_t window_handle, tig_button_handle_t button_handle);
@@ -119,6 +122,10 @@ int tig_window_move_on_top(tig_window_handle_t window_handle);
 int tig_window_show(tig_window_handle_t window_handle);
 int tig_window_hide(tig_window_handle_t window_handle);
 bool tig_window_is_hidden(tig_window_handle_t window_handle);
+// Visible screen-space area requiring a fresh underlay for near-black alpha.
+// Returns false for opaque, hidden, clipped-away or invalid windows.
+bool tig_window_translucent_underlay_rect(tig_window_handle_t window_handle,
+    tig_window_handle_t underlay_handle, TigRect* rect);
 int tig_window_vbid_get(tig_window_handle_t window_handle, TigVideoBuffer** video_buffer_ptr);
 int tig_window_set_video_buffer(tig_window_handle_t window_handle, TigVideoBuffer* vb);
 void tig_window_set_invalidate_suppressed(bool suppressed);

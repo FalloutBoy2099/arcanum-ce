@@ -1447,8 +1447,6 @@ bool sector_load_editor(int64_t id, Sector* sector)
     return true;
 }
 
-// FIXME: There are many cleanup errors (mosty leaking `dif_stream`).
-//
 // 0x4D1A30
 bool sector_load_game(int64_t id, Sector* sector)
 {
@@ -1457,8 +1455,8 @@ bool sector_load_game(int64_t id, Sector* sector)
     int64_t v2 = -1;
     char sec_path[TIG_MAX_PATH];
     char dif_path[TIG_MAX_PATH];
-    TigFile* sec_stream;
-    TigFile* dif_stream;
+    TigFile* sec_stream = NULL;
+    TigFile* dif_stream = NULL;
     int placeholder;
 
     if (sector_check_demo_limits(id)) {
@@ -1496,6 +1494,7 @@ bool sector_load_game(int64_t id, Sector* sector)
         sec_stream = tig_file_fopen(sec_path, "rb");
         if (sec_stream == NULL) {
             tig_debug_printf("Error opening sector file %s\n", sec_path);
+            goto error;
         }
 
         strcpy(dif_path, sector_save_path);
@@ -1508,11 +1507,11 @@ bool sector_load_game(int64_t id, Sector* sector)
             if (dif_stream != NULL) {
                 if (tig_file_fread(&dif_flags, sizeof(dif_flags), 1, dif_stream) != 1) {
                     tig_debug_printf("Error reading flags from sector differences file %s\n", dif_path);
-                    tig_file_fclose(dif_stream);
-                    dif_stream = NULL;
+                    goto error;
                 }
             } else {
                 tig_debug_printf("Error opening sector differences file %s\n", dif_path);
+                goto error;
             }
         } else {
             dif_stream = NULL;
@@ -1522,51 +1521,36 @@ bool sector_load_game(int64_t id, Sector* sector)
         if ((dif_flags & DIF_HAVE_LIGHT_LIST) != 0) {
             if (!sector_light_list_load_with_dif(&(sector->lights), sec_stream, dif_stream, v2)) {
                 tig_debug_printf("Error loading lights with differences from files %s and %s\n", sec_path, dif_path);
-                tig_file_fclose(sec_stream);
-                tig_file_fclose(dif_stream);
-                return false;
+                goto error;
             }
         } else {
             if (!sector_light_list_load(&(sector->lights), sec_stream, v2)) {
                 tig_debug_printf("Error loading lights from sector file %s\n", sec_path);
-                tig_file_fclose(sec_stream);
-                return false;
+                goto error;
             }
         }
 
         li_update();
         if (!sector_tile_list_load(&(sector->tiles), sec_stream)) {
             tig_debug_printf("Error loading tiles from sector file %s\n", sec_path);
-            tig_file_fclose(sec_stream);
-            if (dif_stream != NULL) {
-                tig_file_fclose(dif_stream);
-            }
-            return false;
+            goto error;
         }
         if ((dif_flags & DIF_HAVE_TILE_LIST) != 0) {
             if (!sector_tile_list_load_with_dif(&(sector->tiles), dif_stream)) {
                 tig_debug_printf("Error loading tiles from differences file %s\n", dif_path);
-                tig_file_fclose(sec_stream);
-                tig_file_fclose(dif_stream);
-                return false;
+                goto error;
             }
         }
 
         li_update();
         if (!sector_roof_list_load(&(sector->roofs), sec_stream)) {
             tig_debug_printf("Error loading roofs from sector file %s\n", sec_path);
-            tig_file_fclose(sec_stream);
-            if (dif_stream != NULL) {
-                tig_file_fclose(dif_stream);
-            }
-            return false;
+            goto error;
         }
         if ((dif_flags & DIF_HAVE_ROOF_LIST) != 0) {
             if (!sector_roof_list_load_with_dif(&(sector->roofs), dif_stream)) {
                 tig_debug_printf("Error loading roofs from differences file %s\n", dif_path);
-                tig_file_fclose(sec_stream);
-                tig_file_fclose(dif_stream);
-                return false;
+                goto error;
             }
         }
 
@@ -1574,25 +1558,19 @@ bool sector_load_game(int64_t id, Sector* sector)
         if (!objf_read(&placeholder, sizeof(placeholder), sec_stream)
             || placeholder < 0xAA0000 || placeholder > 0xAA0004) {
             tig_debug_printf("Error loading placeholder from sector file %s\n", sec_path);
-            tig_file_fclose(sec_stream);
-            if (dif_stream != NULL) {
-                tig_file_fclose(dif_stream);
-            }
-            return false;
+            goto error;
         }
 
         if (placeholder != 0xAA0000) {
             li_update();
             if (!tile_script_list_load(&(sector->tile_scripts), sec_stream)) {
                 tig_debug_printf("Error loading tile scripts from sector file %s\n", sec_path);
-                tig_file_fclose(sec_stream);
-                return false;
+                goto error;
             }
             if ((dif_flags & DIF_HAVE_TILE_SCRIPT_LIST) != 0) {
                 if (!tile_script_list_load_with_dif(&(sector->tile_scripts), dif_stream)) {
                     tig_debug_printf("Error loading tile scripts from differences file %s\n", dif_path);
-                    tig_file_fclose(sec_stream);
-                    return false;
+                    goto error;
                 }
             }
 
@@ -1600,14 +1578,12 @@ bool sector_load_game(int64_t id, Sector* sector)
                 li_update();
                 if (!sector_script_list_load(&(sector->sector_scripts), sec_stream)) {
                     tig_debug_printf("Error loading sector scripts from sector file %s\n", sec_path);
-                    tig_file_fclose(sec_stream);
-                    return false;
+                    goto error;
                 }
                 if ((dif_flags & DIF_HAVE_SECTOR_SCRIPT_LIST) != 0) {
                     if (!sector_script_list_load_with_dif(&(sector->sector_scripts), dif_stream)) {
                         tig_debug_printf("Error loading sector scripts from differences file %s\n", dif_path);
-                        tig_file_fclose(sec_stream);
-                        return false;
+                        goto error;
                     }
                 }
             }
@@ -1616,57 +1592,49 @@ bool sector_load_game(int64_t id, Sector* sector)
                 li_update();
                 if (tig_file_fread(&(sector->townmap_info), sizeof(sector->townmap_info), 1, sec_stream) != 1) {
                     tig_debug_printf("Error loading townmap info from sector file %s\n", sec_path);
-                    tig_file_fclose(sec_stream);
-                    return false;
+                    goto error;
                 }
                 if ((dif_flags & DIF_HAVE_TOWNMAP) != 0) {
                     if (tig_file_fread(&(sector->townmap_info), sizeof(sector->townmap_info), 1, dif_stream) != 1) {
                         // FIXME: Wrong message.
                         tig_debug_printf("Error loading sound list from differences file %s\n", dif_path);
-                        tig_file_fclose(sec_stream);
-                        return false;
+                        goto error;
                     }
                 }
 
                 li_update();
                 if (tig_file_fread(&(sector->aptitude_adj), sizeof(sector->aptitude_adj), 1, sec_stream) != 1) {
                     tig_debug_printf("Error loading aptitude adjustment from sector file %s\n", sec_path);
-                    tig_file_fclose(sec_stream);
-                    return false;
+                    goto error;
                 }
                 if ((dif_flags & DIF_HAVE_APTITUDE_ADJ) != 0) {
                     if (tig_file_fread(&(sector->aptitude_adj), sizeof(sector->aptitude_adj), 1, dif_stream) != 1) {
                         tig_debug_printf("Error loading aptitude adjustment from differences file %s\n", dif_path);
-                        tig_file_fclose(sec_stream);
-                        return false;
+                        goto error;
                     }
                 }
 
                 li_update();
                 if (tig_file_fread(&(sector->light_scheme), sizeof(sector->light_scheme), 1, sec_stream) != 1) {
                     tig_debug_printf("Error loading light scheme from sector file %s\n", sec_path);
-                    tig_file_fclose(sec_stream);
-                    return false;
+                    goto error;
                 }
                 if ((dif_flags & DIF_HAVE_LIGHT_SCHEME) != 0) {
                     if (tig_file_fread(&(sector->light_scheme), sizeof(sector->light_scheme), 1, dif_stream) != 1) {
                         tig_debug_printf("Error loading light scheme from differences file %s\n", dif_path);
-                        tig_file_fclose(sec_stream);
-                        return false;
+                        goto error;
                     }
                 }
 
                 li_update();
                 if (!sector_sound_list_load(&(sector->sounds), sec_stream)) {
                     tig_debug_printf("Error loading sound list from sector file %s\n", sec_path);
-                    tig_file_fclose(sec_stream);
-                    return false;
+                    goto error;
                 }
                 if ((dif_flags & DIF_HAVE_SOUND_LIST) != 0) {
                     if (!sector_sound_list_load_with_dif(&(sector->sounds), dif_stream)) {
                         tig_debug_printf("Error loading sound list from differences file %s\n", dif_path);
-                        tig_file_fclose(sec_stream);
-                        return false;
+                        goto error;
                     }
                 }
 
@@ -1677,14 +1645,12 @@ bool sector_load_game(int64_t id, Sector* sector)
                 li_update();
                 if (!sector_block_list_load(&(sector->blocks), sec_stream)) {
                     tig_debug_printf("Error loading tile blocking info from sector file %s\n", sec_path);
-                    tig_file_fclose(sec_stream);
-                    return false;
+                    goto error;
                 }
                 if ((dif_flags & DIF_HAVE_BLOCK_LIST) != 0) {
                     if (!sector_block_list_load_with_dif(&(sector->blocks), dif_stream)) {
                         tig_debug_printf("Error loading tile blocking info from differences file %s\n", dif_path);
-                        tig_file_fclose(sec_stream);
-                        return false;
+                        goto error;
                     }
                 }
             }
@@ -1694,21 +1660,19 @@ bool sector_load_game(int64_t id, Sector* sector)
         if ((dif_flags & DIF_HAVE_OBJ_LIST) != 0) {
             if (!objlist_load_with_difs(&(sector->objects), sec_stream, dif_stream, v2)) {
                 tig_debug_printf("Error loading objects with differences from files %s and %s\n", sec_path, dif_path);
-                tig_file_fclose(sec_stream);
-                tig_file_fclose(dif_stream);
-                return false;
+                goto error;
             }
         } else {
             if (!objlist_load(&(sector->objects), sec_stream, v2)) {
                 tig_debug_printf("Error loading objects from sector file %s\n", sec_path);
-                tig_file_fclose(sec_stream);
-                return false;
+                goto error;
             }
         }
-
         tig_file_fclose(sec_stream);
-        if (dif_flags != 0) {
+        sec_stream = NULL;
+        if (dif_stream != NULL) {
             tig_file_fclose(dif_stream);
+            dif_stream = NULL;
         }
     }
 
@@ -1724,6 +1688,11 @@ bool sector_load_game(int64_t id, Sector* sector)
     }
 
     return true;
+
+error:
+    if (sec_stream != NULL) tig_file_fclose(sec_stream);
+    if (dif_stream != NULL) tig_file_fclose(dif_stream);
+    return false;
 }
 
 // 0x4D22E0
@@ -1981,7 +1950,6 @@ bool sector_save_game(Sector* sector)
     stream = tig_file_fopen(path, "wb");
     if (stream == NULL) {
         tig_debug_printf("Error creating differences file %s\n", path);
-        tig_file_fclose(stream); // FIXME: Crash!
         return false;
     }
 

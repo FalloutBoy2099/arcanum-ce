@@ -7,6 +7,8 @@
  */
 static unsigned int random_prev_value;
 
+unsigned int random_state(void) { return random_prev_value; }
+
 static void random_set_prev_value(unsigned int value);
 
 /**

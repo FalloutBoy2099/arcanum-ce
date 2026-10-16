@@ -56,6 +56,19 @@ static bool tig_memory_initialized;
 
 // 0x739F40
 static SDL_Mutex* tig_memory_mutex;
+static Uint64 tig_memory_allocation_requests;
+static Uint64 tig_memory_requested_bytes;
+
+void tig_memory_statistics(TigMemoryStatistics* statistics)
+{
+    if (statistics == NULL) return;
+    SDL_LockMutex(tig_memory_mutex);
+    statistics->allocation_requests = tig_memory_allocation_requests;
+    statistics->requested_bytes = tig_memory_requested_bytes;
+    statistics->live_bytes = tig_memory_current_allocated;
+    statistics->live_blocks = tig_memory_current_blocks;
+    SDL_UnlockMutex(tig_memory_mutex);
+}
 
 // 0x4FE380
 int tig_memory_init(TigInitInfo* init_info)
@@ -179,6 +192,8 @@ void* tig_memory_alloc(size_t size, const char* file, int line)
     tig_memory_current_blocks += 1;
     tig_memory_current_overhead += OVERHEAD_SIZE;
     tig_memory_current_allocated += size;
+    tig_memory_allocation_requests++;
+    tig_memory_requested_bytes += size;
 
     if (tig_memory_max_blocks < tig_memory_current_blocks) {
         tig_memory_max_blocks = tig_memory_current_blocks;
@@ -257,6 +272,8 @@ void* tig_memory_realloc(void* ptr, size_t size, const char* file, int line)
     memset((unsigned char*)block->data + size, END_GUARD_BYTE, END_GUARD_SIZE);
 
     tig_memory_current_allocated += size - old_size;
+    tig_memory_allocation_requests++;
+    tig_memory_requested_bytes += size;
 
     if (tig_memory_max_allocated < tig_memory_current_allocated) {
         tig_memory_max_allocated = tig_memory_current_allocated;

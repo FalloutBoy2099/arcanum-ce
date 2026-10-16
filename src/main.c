@@ -9,6 +9,7 @@
 #endif
 
 #include <tig/tig.h>
+#include "ui/benchmark_ui.h"
 
 #include "game/ai.h"
 #include "game/anim.h"
@@ -20,6 +21,7 @@
 #include "game/dialog.h"
 #include "game/dialog_camera.h"
 #include "game/gamelib.h"
+#include "game/mes.h"
 #include "game/gmovie.h"
 #include "game/gsound.h"
 #include "game/highres_config.h"
@@ -394,25 +396,30 @@ void main_loop(void)
 
     while (1) {
         if (enable_profiler) {
-            intgame_message_window_display_str(-1, "Enabling profiler...\n");
+            tig_performance_set_enabled(true, NULL);
             enable_profiler = false;
         }
 
         if (disable_profiler) {
-            intgame_message_window_display_str(-1, "Disabling profiler...\n");
+            tig_performance_set_enabled(false, NULL);
             disable_profiler = false;
         }
 
         if (output_profile_data) {
-            intgame_message_window_display_str(-1, "Outputing profile data...\n");
+            tig_performance_flush();
             output_profile_data = false;
         }
 
+        benchmark_ui_begin_frame();
+        Uint64 frame_start = tig_performance_begin();
         tig_ping();
         gamelib_ping();
         intgame_hud_tick_invalidate_alpha_strips();
         iso_redraw();
         tig_window_display();
+        tig_performance_end(TIG_PERF_FRAME, frame_start);
+        benchmark_ui_end_frame();
+        tig_performance_poll();
 
         pc_obj = player_get_local_pc_obj();
 
@@ -437,7 +444,7 @@ void main_loop(void)
                 }
             }
 
-            if (intgame_mode_supports_scrolling(intgame_mode_get())) {
+            if (!benchmark_ui_is_active() && intgame_mode_supports_scrolling(intgame_mode_get())) {
                 handle_keyboard_scroll();
             }
 
@@ -542,7 +549,7 @@ void main_loop(void)
                                 intgame_mode_set(INTGAME_MODE_MAIN);
                                 intgame_mode_set(INTGAME_MODE_MAIN);
                                 mainmenu_ui_feedback_saving();
-                                gamelib_save("SlotAuto", "Auto-Save");
+                                gamelib_save("SlotAuto", mes_localized_get("savegame", 102));
                                 mainmenu_ui_feedback_saving_completed();
                             } else {
                                 mainmenu_ui_feedback_cannot_save_in_tb();
@@ -583,7 +590,7 @@ void main_loop(void)
                                     intgame_mode_set(INTGAME_MODE_MAIN);
                                     intgame_mode_set(INTGAME_MODE_MAIN);
                                     mainmenu_ui_feedback_saving();
-                                    gamelib_save("SlotAuto", "Auto-Save");
+                                    gamelib_save("SlotAuto", mes_localized_get("savegame", 102));
                                     mainmenu_ui_feedback_saving_completed();
                                 } else {
                                     mainmenu_ui_feedback_cannot_save_in_tb();

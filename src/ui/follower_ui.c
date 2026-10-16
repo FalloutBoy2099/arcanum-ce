@@ -1,13 +1,16 @@
 #include "ui/follower_ui.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "game/broadcast.h"
 #include "game/critter.h"
 #include "game/hrp.h"
+#include "game/location.h"
 #include "game/mes.h"
 #include "game/obj.h"
 #include "game/object.h"
+#include "game/path.h"
 #include "game/player.h"
 #include "game/portrait.h"
 #include "game/stat.h"
@@ -22,7 +25,7 @@
  * Commands available in the follower drop-down context menu.
  *
  * Menu labels for each command is loaded from "mes\follower_ui.mes", keyed by
- * command index.
+ * command index, except Move Aside which uses the new message ID 100.
  */
 typedef enum FollowerUiCommand {
     FOLLOWER_UI_COMMAND_WALK,
@@ -33,8 +36,22 @@ typedef enum FollowerUiCommand {
     FOLLOWER_UI_COMMAND_WAIT,
     FOLLOWER_UI_COMMAND_INVENTORY,
     FOLLOWER_UI_COMMAND_CHARACTER_SHEET,
+    FOLLOWER_UI_COMMAND_MOVE_ASIDE,
     FOLLOWER_UI_COMMAND_COUNT,
 } FollowerUiCommand;
+
+// Keep the original command/message IDs stable while inserting the new row.
+static const FollowerUiCommand follower_ui_command_order[] = {
+    FOLLOWER_UI_COMMAND_WALK,
+    FOLLOWER_UI_COMMAND_MOVE_ASIDE,
+    FOLLOWER_UI_COMMAND_ATTACK,
+    FOLLOWER_UI_COMMAND_STAY_CLOSE,
+    FOLLOWER_UI_COMMAND_SPREAD_OUT,
+    FOLLOWER_UI_COMMAND_BACK_OFF,
+    FOLLOWER_UI_COMMAND_WAIT,
+    FOLLOWER_UI_COMMAND_INVENTORY,
+    FOLLOWER_UI_COMMAND_CHARACTER_SHEET,
+};
 
 /**
  * The maximum number of followers visible at one time in the panel.
@@ -158,6 +175,8 @@ static bool follower_ui_message_filter(TigMessage* msg);
 static void follower_ui_drop_down_menu_create(int index);
 static void follower_ui_drop_down_menu_destroy(void);
 static void follower_ui_begin_order_mode(int cmd);
+static void follower_ui_move_aside(void);
+static void follower_ui_issue_order(int cmd, int64_t loc, int64_t target_obj);
 static void follower_ui_draw(tig_window_handle_t window_handle, int num, int x, int y, int src_scale, int dst_scale);
 static void follower_ui_toggle(void);
 static void update_toggle_button_visibility(void);
@@ -402,7 +421,7 @@ bool follower_ui_init(GameInitInfo* init_info)
         follower_ui_drop_down_menu_rects[index].x = follower_ui_button_rects[index].x + follower_ui_button_rects[index].width;
         follower_ui_drop_down_menu_rects[index].y = follower_ui_button_rects[index].y;
         follower_ui_drop_down_menu_rects[index].width = art_frame_data.width;
-        follower_ui_drop_down_menu_rects[index].height = art_frame_data.height;
+        follower_ui_drop_down_menu_rects[index].height = art_frame_data.height + FOLLOWER_UI_DROP_DOWN_MENU_ENTRY_HEIGHT;
     }
 
     follower_ui_followers_capacity = FOLLOWER_UI_FOLLOWERS_INITIAL_CAPACITY;
@@ -643,9 +662,7 @@ bool follower_ui_message_filter(TigMessage* msg)
 {
     int64_t pc_obj;
     int index;
-    MesFileEntry mes_file_entry;
     char str[MAX_STRING];
-    Broadcast bcast;
     TargetDescriptor td;
 
     pc_obj = player_get_local_pc_obj();
@@ -688,6 +705,9 @@ bool follower_ui_message_filter(TigMessage* msg)
                             // a tile or object to complete the order.
                             follower_ui_begin_order_mode(index);
                             break;
+                        case FOLLOWER_UI_COMMAND_MOVE_ASIDE:
+                            follower_ui_move_aside();
+                            break;
                         case FOLLOWER_UI_COMMAND_INVENTORY:
                             // Open barter inventory if permitted.
                             if (inven_ui_can_open_inven(follower_ui_commander_obj, follower_ui_subordinate_obj)) {
@@ -704,15 +724,7 @@ bool follower_ui_message_filter(TigMessage* msg)
                             }
                             // FALLTHROUGH
                         default:
-                            // Stay Close, Spread Out, Back Off, and Wait (when
-                            // not mind-controlled) are issued as broadcast
-                            // messages.
-                            mes_file_entry.num = index;
-                            if (mes_search(follower_ui_mes_file, &mes_file_entry)) {
-                                object_examine(follower_ui_subordinate_obj, follower_ui_commander_obj, str);
-                                snprintf(bcast.str, sizeof(bcast.str), "%s %s", str, mes_file_entry.str);
-                                broadcast_msg(follower_ui_commander_obj, &bcast);
-                            }
+                            follower_ui_issue_order(index, 0, OBJ_HANDLE_NULL);
                             break;
                         }
                         return true;
@@ -843,8 +855,9 @@ bool follower_ui_message_filter(TigMessage* msg)
  */
 void follower_ui_drop_down_menu_create(int index)
 {
-    TigWindowData window_data;
+    TigWindowData window_data = { 0 };
     TigButtonData button_data;
+    int row;
     int cmd;
 
     follower_ui_commander_obj = player_get_local_pc_obj();
@@ -875,7 +888,8 @@ void follower_ui_drop_down_menu_create(int index)
     button_data.height = follower_ui_drop_down_menu_entry_rect.height;
     button_data.window_handle = follower_ui_drop_down_menu_window;
 
-    for (cmd = 0; cmd < FOLLOWER_UI_COMMAND_COUNT; cmd++) {
+    for (row = 0; row < FOLLOWER_UI_COMMAND_COUNT; row++) {
+        cmd = follower_ui_command_order[row];
         tig_button_create(&button_data, &(follower_ui_drop_menu_item_buttons[cmd]));
         button_data.y += FOLLOWER_UI_DROP_DOWN_MENU_ENTRY_HEIGHT;
     }
@@ -928,42 +942,127 @@ void follower_ui_begin_order_mode(int cmd)
     target_flags_set(tgt);
 }
 
+// The menu label is presentation only; it is never parsed as a command.
+static void follower_ui_issue_order(int cmd, int64_t loc, int64_t target_obj)
+{
+    BroadcastCommandType command;
+    MesFileEntry entry = { cmd, NULL };
+    switch (cmd) {
+    case FOLLOWER_UI_COMMAND_WALK:
+    case FOLLOWER_UI_COMMAND_MOVE_ASIDE:
+        command = BROADCAST_CMD_TYPE_WALK_HERE;
+        break;
+    case FOLLOWER_UI_COMMAND_ATTACK:
+        command = BROADCAST_CMD_TYPE_ATTACK;
+        break;
+    case FOLLOWER_UI_COMMAND_STAY_CLOSE:
+        command = BROADCAST_CMD_TYPE_STAY_CLOSE;
+        break;
+    case FOLLOWER_UI_COMMAND_SPREAD_OUT:
+        command = BROADCAST_CMD_TYPE_SPREAD_OUT;
+        break;
+    case FOLLOWER_UI_COMMAND_BACK_OFF:
+        command = BROADCAST_CMD_TYPE_BACK_OFF;
+        break;
+    case FOLLOWER_UI_COMMAND_WAIT:
+        command = BROADCAST_CMD_TYPE_WAIT;
+        break;
+    default:
+        return;
+    }
+    const char* label = cmd == FOLLOWER_UI_COMMAND_MOVE_ASIDE
+        ? mes_localized_get("follower_ui", 100)
+        : (mes_search(follower_ui_mes_file, &entry) ? entry.str : NULL);
+    broadcast_order_follower(follower_ui_commander_obj, follower_ui_subordinate_obj,
+        command, loc, target_obj, label);
+}
+
+/**
+ * Clear a doorway with a normal walk order to a free tile three steps away.
+ * Prefer moving away from the commander, then try the other directions.
+ */
+static void follower_ui_move_aside(void)
+{
+    static const int direction_offsets[] = { 0, 1, 7, 2, 6, 3, 5, 4 };
+    int64_t from;
+    int64_t commander_loc;
+    int64_t limits_x;
+    int64_t limits_y;
+    int64_t destinations[24];
+    int count = 0;
+    int base_rotation;
+    int8_t rotations[3];
+    PathCreateInfo path = { 0 };
+
+    if (follower_ui_subordinate_obj == OBJ_HANDLE_NULL
+        || follower_ui_commander_obj == OBJ_HANDLE_NULL
+        || critter_is_dead(follower_ui_subordinate_obj)
+        || critter_is_unconscious(follower_ui_subordinate_obj)
+        || (obj_field_int32_get(follower_ui_subordinate_obj, OBJ_F_SPELL_FLAGS) & OSF_ENTANGLED) != 0) {
+        return;
+    }
+
+    from = obj_field_int64_get(follower_ui_subordinate_obj, OBJ_F_LOCATION);
+    commander_loc = obj_field_int64_get(follower_ui_commander_obj, OBJ_F_LOCATION);
+    base_rotation = location_rot(commander_loc, from);
+    location_limits_get(&limits_x, &limits_y);
+
+    for (int i = 0; i < 8; i++) {
+        if (location_in_range(from, (base_rotation + direction_offsets[i]) % 8, 3, &destinations[count])) {
+            count++;
+        }
+    }
+
+    // Also support corridors that bend: these are the remaining tiles on
+    // the three-tile perimeter, between the eight cardinal/diagonal rays.
+    for (int dx = -3; dx <= 3; dx++) {
+        for (int dy = -3; dy <= 3; dy++) {
+            int64_t x = location_get_x(from) + dx;
+            int64_t y = location_get_y(from) + dy;
+            if ((abs(dx) != 3 && abs(dy) != 3)
+                || dx == 0 || dy == 0 || abs(dx) == abs(dy)
+                || x < 0 || y < 0 || x >= limits_x || y >= limits_y) {
+                continue;
+            }
+            destinations[count++] = location_make(x, y);
+        }
+    }
+
+    path.obj = follower_ui_subordinate_obj;
+    path.from = from;
+    path.max_rotations = 3;
+    path.rotations = rotations;
+    // Do not clear the passage by jumping a window or pushing another critter.
+    path.flags = PATH_FLAG_0x0004 | PATH_FLAG_0x0400;
+    if (!critter_can_open_portals(path.obj)) {
+        path.flags |= PATH_FLAG_0x0002;
+    }
+
+    for (int i = 0; i < count; i++) {
+        path.to = destinations[i];
+        if (path_make(&path) == 3) {
+            follower_ui_issue_order(FOLLOWER_UI_COMMAND_MOVE_ASIDE, path.to, OBJ_HANDLE_NULL);
+            return;
+        }
+    }
+}
+
 /**
  * Called by the `intgame` system when the player completes a targeting action
  * while in follower order mode (after `follower_ui_begin_order_mode`).
  *
  * Determines whether the player clicked a tile (walk order) or an object
- * (attack order), looks up the appropriate broadcast message, and sends it to
- * the follower.
+ * (attack order) and sends the corresponding typed order to the follower.
  *
  * 0x56B180
  */
 void follower_ui_execute_order(TargetDescriptor* td)
 {
-    int num;
-    Broadcast bcast;
-    MesFileEntry mes_file_entry;
-    char str[MAX_STRING];
-
     follower_ui_end_order_mode();
-
-    if (!critter_is_dead(follower_ui_commander_obj) && !critter_is_unconscious(follower_ui_commander_obj)) {
-        if (td->is_loc) {
-            // Walk
-            num = FOLLOWER_UI_COMMAND_WALK;
-            bcast.loc = td->loc;
-        } else {
-            // Attack
-            num = FOLLOWER_UI_COMMAND_ATTACK;
-            bcast.loc = obj_field_int64_get(td->obj, OBJ_F_LOCATION);
-        }
-
-        mes_file_entry.num = num;
-        if (mes_search(follower_ui_mes_file, &mes_file_entry)) {
-            object_examine(follower_ui_subordinate_obj, follower_ui_commander_obj, str);
-            snprintf(bcast.str, sizeof(bcast.str), "%s %s", str, mes_file_entry.str);
-            broadcast_msg(follower_ui_commander_obj, &bcast);
-        }
+    if (td->is_loc) {
+        follower_ui_issue_order(FOLLOWER_UI_COMMAND_WALK, td->loc, OBJ_HANDLE_NULL);
+    } else {
+        follower_ui_issue_order(FOLLOWER_UI_COMMAND_ATTACK, 0, td->obj);
     }
 }
 
@@ -1298,15 +1397,42 @@ void follower_ui_drop_down_menu_refresh(int highlighted_cmd)
 {
     TigRect rect;
     int cmd;
+    int row;
     MesFileEntry mes_file_entry;
     bool enabled;
+    tig_art_id_t art_id;
+    TigArtFrameData frame;
+    TigArtBlitInfo blit = { 0 };
+    TigRect source;
+    TigRect destination;
+    int split = follower_ui_drop_down_menu_entry_rect.y + FOLLOWER_UI_DROP_DOWN_MENU_ENTRY_HEIGHT;
 
-    follower_ui_draw(follower_ui_drop_down_menu_window, FOLLOWER_UI_DROP_DOWN_MENU_ART, 0, 0, 100, 100);
+    // Insert one row of the original texture, retaining the top/bottom borders.
+    tig_art_interface_id_create(FOLLOWER_UI_DROP_DOWN_MENU_ART, 0, 0, 0, &art_id);
+    tig_art_frame_data(art_id, &frame);
+    blit.art_id = art_id;
+    blit.src_rect = &source;
+    blit.dst_rect = &destination;
+    source = (TigRect){ 0, 0, frame.width, split };
+    destination = source;
+    tig_window_blit_art(follower_ui_drop_down_menu_window, &blit);
+    source.y = split;
+    source.height = FOLLOWER_UI_DROP_DOWN_MENU_ENTRY_HEIGHT;
+    destination = source;
+    tig_window_blit_art(follower_ui_drop_down_menu_window, &blit);
+    source.height = frame.height - split;
+    destination = source;
+    destination.y += FOLLOWER_UI_DROP_DOWN_MENU_ENTRY_HEIGHT;
+    tig_window_blit_art(follower_ui_drop_down_menu_window, &blit);
 
     rect = follower_ui_drop_down_menu_entry_rect;
-    for (cmd = 0; cmd < FOLLOWER_UI_COMMAND_COUNT; cmd++) {
+    for (row = 0; row < FOLLOWER_UI_COMMAND_COUNT; row++) {
+        cmd = follower_ui_command_order[row];
         mes_file_entry.num = cmd;
-        if (mes_search(follower_ui_mes_file, &mes_file_entry)) {
+        if (cmd == FOLLOWER_UI_COMMAND_MOVE_ASIDE) {
+            mes_file_entry.str = (char*)mes_localized_get("follower_ui", 100);
+        }
+        if (cmd == FOLLOWER_UI_COMMAND_MOVE_ASIDE || mes_search(follower_ui_mes_file, &mes_file_entry)) {
             // Determine whether this command is currently available.
             switch (cmd) {
             case FOLLOWER_UI_COMMAND_INVENTORY:

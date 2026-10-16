@@ -1,4 +1,10 @@
 #include "game/gamelib.h"
+#include <tig/performance.h>
+#include "game/journal_memory.h"
+#include "game/conversation_history.h"
+#include "game/crafting.h"
+#include "game/benchmark.h"
+#include "game/save_slot.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -31,8 +37,10 @@
 #include "game/gmovie.h"
 #include "game/gsound.h"
 #include "game/highres_config.h"
+#include "game/language.h"
 #include "game/hrp.h"
 #include "game/input_bindings.h"
+#include "game/controller.h"
 #include "game/invensource.h"
 #include "game/item.h"
 #include "game/item_effect.h"
@@ -76,6 +84,7 @@
 #include "game/tile_block.h"
 #include "game/tile_script.h"
 #include "game/timeevent.h"
+#include "ui/intgame.h"
 #include "game/townmap.h"
 #include "game/trap.h"
 #include "game/ui.h"
@@ -128,6 +137,7 @@ static int game_save_entry_compare_by_name(const void* va, const void* vb);
 static int gamelib_file_info_compare_by_path(const void* va, const void* vb);
 static void difficulty_changed(void);
 static void vsync_mode_changed(void);
+static void lighting_changed(void);
 static void gamelib_draw_game(GameDrawInfo* draw_info);
 static void gamelib_draw_editor(GameDrawInfo* draw_info);
 static void gamelib_logo(void);
@@ -273,6 +283,8 @@ static char byte_5D0EA4[TIG_MAX_PATH];
 
 // 0x5D0FA8
 static char gamelib_mod_dat_path[TIG_MAX_PATH];
+static char gamelib_mod_language_dat_path[TIG_MAX_PATH];
+static GameLanguage gamelib_language;
 
 // 0x5D10AC
 static void (*gamelib_draw_func)(GameDrawInfo* draw_info);
@@ -312,6 +324,9 @@ unsigned int gamelib_ping_time;
 
 // 0x739E70
 Settings settings;
+static char gamelib_loaded_save[256];
+
+const char* gamelib_loaded_save_name(void) { return gamelib_loaded_save; }
 
 // 0x739E7C
 TigVideoBuffer* gamelib_scratch_video_buffer;
@@ -350,6 +365,14 @@ bool gamelib_init(GameInitInfo* init_info)
         settings_load(&settings);
     }
 
+    settings_register(&settings, LANGUAGE_KEY, "english", NULL);
+    settings_register(&settings, PERFORMANCE_LOGGING_KEY, "0", NULL);
+    settings_register(&settings, BENCHMARK_AUTORUN_KEY, "0", NULL);
+    if (!tig_performance_set_enabled(settings_get_value(&settings, PERFORMANCE_LOGGING_KEY) != 0, NULL)) {
+        tig_debug_printf("Unable to open performance.csv; performance logging disabled.\n");
+    }
+    gamelib_language = language_from_name(settings_get_str_value(&settings, LANGUAGE_KEY));
+
     settings_register(&settings, DIFFICULTY_KEY, "1", difficulty_changed);
     difficulty_changed();
 
@@ -384,6 +407,7 @@ bool gamelib_init(GameInitInfo* init_info)
     settings_register(&settings, DIALOG_OPTIONS_MAX_KEY, "5", NULL);
     settings_register(&settings, SHOW_VERSION_KEY, "0", NULL);
     input_bindings_init();
+    controller_init();
     settings_register(&settings, VSYNC_MODE_KEY, "1", vsync_mode_changed);
     settings_register(&settings, ZOOM_FILTER_KEY, "linear", NULL);
     settings_register(&settings, SCROLL_USING_BORDERS_KEY, "1", NULL);
@@ -395,6 +419,14 @@ bool gamelib_init(GameInitInfo* init_info)
     settings_register(&settings, DIALOGUE_EMOTE_DIM_PERCENT_KEY, "60", NULL);
     settings_register(&settings, AUTOSAVE_TRAVEL_KEY, "1", NULL);
     settings_register(&settings, AUTOSAVE_SLEEP_KEY, "1", NULL);
+    settings_register(&settings, ACTION_TOOLTIPS_KEY, "0", NULL);
+    settings_register(&settings, WINDOW_CLOSE_MODE_KEY, "1", NULL);
+    settings_register(&settings, RANDOM_ENCOUNTERS_KEY, "0", NULL);
+    settings_register(&settings, LIGHTING_KEY, "0", lighting_changed);
+    settings_register(&settings, CRAFTING_PARTY_COMPONENTS_KEY, "0", NULL);
+    settings_register(&settings, SCHEMATIC_TOOLBAR_KEY, "1", NULL);
+    settings_register(&settings, LOGBOOK_TOOLBAR_KEY, "1", NULL);
+    settings_register(&settings, WORLDMAP_TOOLBAR_KEY, "1", NULL);
     settings_register(&settings, HUD_STAGE_KEY, "0", NULL);
     tig_window_modal_translucent_black_set(
         settings_get_value(&settings, TRANSLUCENT_BLACK_UI_KEY) != 0, 8, 128);
@@ -506,6 +538,9 @@ void gamelib_reset(void)
     tig_timer_now(&reset_started_at);
 
     in_reset = true;
+    gamelib_loaded_save[0] = '\0';
+    journal_memory_reset();
+    conversation_history_reset();
     strcpy(gamelib_current_module_name, "Arcanum");
     sector_art_cache_disable();
 
@@ -559,6 +594,7 @@ void gamelib_exit(void)
         }
     }
 
+    mes_localized_exit();
     mes_stats();
 
     TigRectListNode* node = gamelib_dirty_rects_head;
@@ -593,6 +629,7 @@ void gamelib_exit(void)
 void gamelib_ping(void)
 {
     int index;
+    Uint64 perf_start = tig_performance_begin();
 
     tig_timer_now(&gamelib_ping_time);
 
@@ -601,6 +638,8 @@ void gamelib_ping(void)
             gamelib_modules[index].ping_func(gamelib_ping_time);
         }
     }
+    intgame_action_tooltips_tick();
+    tig_performance_end(TIG_PERF_SIMULATION, perf_start);
 }
 
 // 0x4025C0
@@ -718,6 +757,9 @@ void gamelib_modlist_create(GameModuleList* module_list, int type)
     qsort(file_list.entries, file_list.count, sizeof(*file_list.entries), gamelib_file_info_compare_by_path);
 
     for (file_index = 0; file_index < file_list.count; file_index++) {
+        if (language_archive_language(file_list.entries[file_index].path) != GAME_LANGUAGE_NONE) {
+            continue;
+        }
         cont = false;
         is_dat_repository = false;
         dot = strrchr(file_list.entries[file_index].path, '.');
@@ -875,6 +917,9 @@ void gamelib_mod_unload(void)
 {
     int index;
 
+    journal_memory_reset();
+    conversation_history_reset();
+
     if (gamelib_mod_loaded) {
         for (index = MODULE_COUNT - 1; index >= 0; index--) {
             if (gamelib_modules[index].mod_unload_func != NULL) {
@@ -999,6 +1044,10 @@ void gamelib_invalidate_rect(TigRect* rect)
         }
     } else {
         dirty_rect = clip_rect;
+    }
+
+    if (dirty_rect.width > 0 && dirty_rect.height > 0) {
+        tig_performance_count(TIG_PERF_DIRTY_PIXELS, (Uint64)dirty_rect.width * (Uint64)dirty_rect.height);
     }
 
     if (in_draw) {
@@ -1205,7 +1254,9 @@ bool gamelib_draw(void)
             perf_frame_full = (perf_frame_dirty_px >= full_px);
             tig_timer_now(&perf_render_start);
         }
+        Uint64 world_start = tig_performance_begin();
         gamelib_draw_func(&draw_info);
+        tig_performance_end(TIG_PERF_WORLD, world_start);
         if (gamelib_zoom_perf_enabled && zoom_active) {
             gamelib_zoom_perf_total_render_ms += tig_timer_elapsed(perf_render_start);
         }
@@ -1263,7 +1314,9 @@ bool gamelib_draw(void)
             if (gamelib_zoom_perf_enabled) {
                 tig_timer_now(&perf_blit_start);
             }
+            Uint64 zoom_start = tig_performance_begin();
             tig_video_buffer_blit(&blit);
+            tig_performance_end(TIG_PERF_ZOOM_BLIT, zoom_start);
 
             if (gamelib_zoom_perf_enabled) {
                 gamelib_zoom_perf_total_blit_ms += tig_timer_elapsed(perf_blit_start);
@@ -1404,6 +1457,13 @@ void gamelib_clear_screen(void)
 }
 
 // 0x402FE0
+// The active language is fixed when packs are mounted; changing the setting
+// in the options menu takes effect only after restarting the game.
+GameLanguage gamelib_current_language_get(void)
+{
+    return gamelib_language;
+}
+
 const char* gamelib_current_module_name_get(void)
 {
     return gamelib_current_module_name;
@@ -1516,6 +1576,11 @@ bool gamelib_save(const char* name, const char* description)
         tig_debug_printf("done. Time (ms): %d\n", duration);
     }
 
+    if (!journal_memory_save() || !conversation_history_save()) {
+        in_save = false;
+        return false;
+    }
+
     if (!gamelib_saveinfo_init(name, description, &save_info)) {
         tig_debug_printf("gamelib_save(): error creating saveinfo\n");
         in_save = false;
@@ -1571,6 +1636,8 @@ bool gamelib_load(const char* name)
     tig_timer_now(&start_time);
 
     in_load = true;
+    journal_memory_reset();
+    conversation_history_reset();
 
     ui_progressbar_init(MODULE_COUNT + 2);
 
@@ -1677,7 +1744,10 @@ bool gamelib_load(const char* name)
     in_load = false;
 
     duration = tig_timer_elapsed(start_time);
+    journal_memory_load();
+    conversation_history_load();
     tig_debug_printf("gamelib_load: Load Complete.  Total time: %d ms.\n", duration);
+    SDL_strlcpy(gamelib_loaded_save, name, sizeof(gamelib_loaded_save));
 
     return true;
 }
@@ -1687,7 +1757,7 @@ bool gamelib_delete(const char* name)
 {
     char path[TIG_MAX_PATH];
 
-    if (SDL_strcasecmp(name, "SlotAutoAuto-Save") == 0) {
+    if (save_slot_is_quicksave(name)) {
         return false;
     }
 
@@ -1886,13 +1956,8 @@ int game_save_entry_compare_by_date(const void* va, const void* vb)
     const GameSaveEntry* b = (const GameSaveEntry*)vb;
 
     if (gamelib_savelist_sort_check_autosave) {
-        if (SDL_toupper(a->path[4]) == 'A') {
-            return -1;
-        }
-
-        if (SDL_toupper(b->path[4]) == 'A') {
-            return 1;
-        }
+        int priority = save_slot_compare_priority(a->path, b->path);
+        if (priority != 0) return priority;
     }
 
     if (a->modify_time < b->modify_time) {
@@ -2197,6 +2262,13 @@ const char* gamelib_get_locale(void)
 }
 
 // 0x4046F0
+static void lighting_changed(void)
+{
+    // Rebuild from the original hourly scheme so repeated changes do not
+    // accumulate brightness and Normal restores the original colors.
+    light_scheme_set_hour(light_scheme_get_hour());
+}
+
 static void vsync_mode_changed(void)
 {
     int mode = settings_get_value(&settings, VSYNC_MODE_KEY);
@@ -2326,44 +2398,39 @@ void gamelib_splash(tig_window_handle_t window_handle)
     settings_exit(&splash_settings);
 }
 
+// Keep base archives in their original order, then mount only the selected
+// language overlays. Later repositories retain their normal precedence.
+static void gamelib_load_language_archives(const char* prefix)
+{
+    TigFileList files;
+    char pattern[TIG_MAX_PATH];
+    snprintf(pattern, sizeof(pattern), "%s*.dat", prefix);
+    tig_file_list_create(&files, pattern);
+    qsort(files.entries, files.count, sizeof(*files.entries), gamelib_file_info_compare_by_path);
+    for (int phase = 0; phase < 2; phase++) {
+        for (unsigned int index = 0; index < files.count; index++) {
+            const char* file = files.entries[index].path;
+            if (language_archive_load_phase(file, gamelib_language) != phase) continue;
+            char path[TIG_MAX_PATH];
+            snprintf(path, sizeof(path), "%s%s", prefix, file);
+            tig_file_repository_add(path);
+        }
+    }
+    tig_file_list_destroy(&files);
+}
+
 // 0x404A20
 void gamelib_load_data(void)
 {
-    TigFileList file_list;
-    unsigned int index;
-
-    tig_file_list_create(&file_list, "arcanum*.dat");
-    qsort(file_list.entries, file_list.count, sizeof(*file_list.entries), gamelib_file_info_compare_by_path);
-
-    for (index = 0; index < file_list.count; index++) {
-        tig_file_repository_add(file_list.entries[index].path);
-    }
-
-    tig_file_list_destroy(&file_list);
-
+    gamelib_load_language_archives("");
     tig_file_mkdir("data");
     tig_file_repository_add("data");
-
     gamelib_load_highres_data();
 }
 
 void gamelib_load_highres_data(void)
 {
-    TigFileList file_list;
-    unsigned int index;
-
-    tig_file_list_create(&file_list, "HighRes\\Files\\arcanum*.dat");
-    qsort(file_list.entries, file_list.count, sizeof(*file_list.entries), gamelib_file_info_compare_by_path);
-
-    for (index = 0; index < file_list.count; index++) {
-        char path[TIG_MAX_PATH];
-
-        snprintf(path, sizeof(path), "HighRes\\Files\\%s", file_list.entries[index].path);
-        tig_file_repository_add(path);
-    }
-
-    tig_file_list_destroy(&file_list);
-
+    gamelib_load_language_archives("HighRes\\Files\\");
     if (tig_file_is_directory("HighRes\\Files")) {
         tig_file_repository_add("HighRes\\Files");
     }
@@ -2410,6 +2477,12 @@ bool gamelib_load_module_data(const char* module_name)
 
     path1[end] = '\0';
 
+    snprintf(path2, sizeof(path2), "%s_%s.dat", path1, language_suffix(gamelib_language));
+    if (tig_file_exists(path2, NULL) || tig_file_is_directory(path2)) {
+        if (!tig_file_repository_add(path2)) return false;
+        SDL_strlcpy(gamelib_mod_language_dat_path, path2, sizeof(gamelib_mod_language_dat_path));
+    }
+
     if (tig_file_is_directory(path1)) {
         tig_file_repository_add(path1);
         strcpy(gamelib_mod_dir_path, path1);
@@ -2450,6 +2523,10 @@ void gamelib_unload_module_data(void)
 {
     int index;
 
+    if (gamelib_mod_language_dat_path[0] != '\0') {
+        tig_file_repository_remove(gamelib_mod_language_dat_path);
+        gamelib_mod_language_dat_path[0] = '\0';
+    }
     tig_file_repository_remove(gamelib_mod_dir_path);
 
     if (byte_5D0B58[0] != '\0') {

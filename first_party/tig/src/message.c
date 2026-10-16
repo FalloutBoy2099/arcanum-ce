@@ -1,6 +1,7 @@
 #include "tig/message.h"
 
 #include "tig/button.h"
+#include "tig/controller.h"
 #include "tig/core.h"
 #include "tig/kb.h"
 #include "tig/memory.h"
@@ -44,6 +45,25 @@ static TigMessageListNode* tig_message_queue_head;
 
 // 0x62B298
 static int tig_message_key_handlers_count;
+static TigMessageEventFilter tig_message_event_filter;
+static bool tig_message_input_blocked;
+
+void tig_message_input_block_set(bool blocked)
+{
+    tig_message_input_blocked = blocked;
+    if (blocked) {
+        tig_mouse_set_button(TIG_MOUSE_BUTTON_LEFT, false);
+        tig_mouse_set_button(TIG_MOUSE_BUTTON_RIGHT, false);
+        tig_mouse_set_button(TIG_MOUSE_BUTTON_MIDDLE, false);
+        tig_mouse_set_button(TIG_MOUSE_BUTTON_X1, false);
+        tig_mouse_set_button(TIG_MOUSE_BUTTON_X2, false);
+    }
+}
+
+void tig_message_event_filter_set(TigMessageEventFilter filter)
+{
+    tig_message_event_filter = filter;
+}
 
 // 0x52B6D0
 int tig_message_init(TigInitInfo* init_info)
@@ -55,6 +75,8 @@ int tig_message_init(TigInitInfo* init_info)
     tig_message_empty_node_head = NULL;
     tig_message_queue_head = NULL;
     tig_message_key_handlers_count = 0;
+    tig_message_event_filter = NULL;
+    tig_message_input_blocked = false;
 
     return TIG_OK;
 }
@@ -63,6 +85,8 @@ int tig_message_init(TigInitInfo* init_info)
 void tig_message_exit(void)
 {
     TigMessageListNode* next;
+
+    tig_controller_exit();
 
     while (tig_message_queue_head != NULL) {
         next = tig_message_queue_head->next;
@@ -92,7 +116,7 @@ void tig_message_ping(void)
     message.timestamp = tig_ping_timestamp;
     tig_message_enqueue(&message);
 
-    for (index = 0; index < tig_message_key_handlers_count; index++) {
+    for (index = 0; !tig_message_input_blocked && index < tig_message_key_handlers_count; index++) {
         if (tig_kb_is_key_pressed(tig_message_key_handlers[index].key)) {
             if (!tig_message_key_triggers[index]) {
                 tig_message_key_triggers[index] = true;
@@ -108,6 +132,7 @@ void tig_message_ping(void)
     }
 
     while (SDL_PollEvent(&event)) {
+        if (tig_message_event_filter != NULL && !tig_message_event_filter(&event)) continue;
         SDL_ConvertEventToRenderCoordinates(renderer, &event);
 
         switch (event.type) {
@@ -124,6 +149,9 @@ void tig_message_ping(void)
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP:
+            if (!event.button.down
+                && ((event.button.button == SDL_BUTTON_LEFT && tig_controller_mouse_held(TIG_MOUSE_BUTTON_LEFT))
+                    || (event.button.button == SDL_BUTTON_RIGHT && tig_controller_mouse_held(TIG_MOUSE_BUTTON_RIGHT)))) break;
             switch (event.button.button) {
             case SDL_BUTTON_LEFT:
                 tig_mouse_set_button(TIG_MOUSE_BUTTON_LEFT, event.button.down);
@@ -154,11 +182,16 @@ void tig_message_ping(void)
             message.data.text.text = event.text.text;
             tig_message_enqueue(&message);
             break;
+        case SDL_EVENT_GAMEPAD_ADDED:
+        case SDL_EVENT_GAMEPAD_REMOVED:
+            tig_controller_devices_changed();
+            break;
         case SDL_EVENT_QUIT:
             tig_message_post_quit(0);
             break;
         }
     }
+    tig_controller_ping(tig_message_input_blocked);
 }
 
 // 0x52B890
@@ -256,6 +289,10 @@ int tig_message_dequeue(TigMessage* message)
         temp_message = tig_message_queue_head->message;
         tig_message_node_release(tig_message_queue_head);
         tig_message_queue_head = next;
+
+        if (tig_message_input_blocked && (temp_message.type == TIG_MESSAGE_MOUSE
+            || temp_message.type == TIG_MESSAGE_KEYBOARD || temp_message.type == TIG_MESSAGE_BUTTON
+            || temp_message.type == TIG_MESSAGE_TEXT_INPUT)) continue;
 
         if (!tig_movie_is_playing()) {
             if (temp_message.type == TIG_MESSAGE_MOUSE

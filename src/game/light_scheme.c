@@ -3,6 +3,8 @@
 #include <stdio.h>
 
 #include "game/light.h"
+#include "game/gamelib.h"
+#include "game/lighting_options.h"
 #include "game/mes.h"
 
 // A lighting scheme contains exactly 24 values - for each hour of the day.
@@ -291,8 +293,15 @@ bool light_scheme_set_hour(int hour)
 
     // Retrieve color data for the specified hour.
     light_scheme_data = &(light_scheme_colors[hour]);
-    indoor_color = tig_color_make(light_scheme_data->indoor.red, light_scheme_data->indoor.green, light_scheme_data->indoor.blue);
-    outdoor_color = tig_color_make(light_scheme_data->outdoor.red, light_scheme_data->outdoor.green, light_scheme_data->outdoor.blue);
+    int reduction = settings_get_value(&settings, LIGHTING_KEY);
+    indoor_color = tig_color_make(
+        lighting_adjust_channel(light_scheme_data->indoor.red, reduction),
+        lighting_adjust_channel(light_scheme_data->indoor.green, reduction),
+        lighting_adjust_channel(light_scheme_data->indoor.blue, reduction));
+    outdoor_color = tig_color_make(
+        lighting_adjust_channel(light_scheme_data->outdoor.red, reduction),
+        lighting_adjust_channel(light_scheme_data->outdoor.green, reduction),
+        lighting_adjust_channel(light_scheme_data->outdoor.blue, reduction));
 
     // Update ambient colors.
     light_set_colors(indoor_color, outdoor_color);

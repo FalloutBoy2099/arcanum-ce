@@ -141,8 +141,9 @@ bool sector_script_list_save_with_dif(SectorScriptList* list, TigFile* stream)
         return false;
     }
 
-    // FIXME: This looks wrong. This flag should be unset after script list is
-    // saved.
+    // Keep the difference from the base .sec file. Game saves rewrite .dif
+    // files completely, so clearing this flag would omit the script on the
+    // next save when another component changes.
     list->flags |= SECTOR_SCRIPT_LIST_MODIFIED;
 
     return true;

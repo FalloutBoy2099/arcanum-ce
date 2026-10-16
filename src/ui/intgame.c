@@ -60,6 +60,7 @@
 #include "ui/mainmenu_ui.h"
 #include "ui/roller_ui.h"
 #include "ui/schematic_ui.h"
+#include "ui/search_bar.h"
 #include "ui/scrollbar_ui.h"
 #include "ui/skill_ui.h"
 #include "ui/sleep_ui.h"
@@ -166,6 +167,7 @@ static void intgame_mt_spells_enable(void);
 static int find_interface_window_index(int x, int y);
 static void sub_5517F0(void);
 static bool intgame_adjust_mouse_for_zoom(int x, int y, int* adj_x, int* adj_y);
+static void intgame_action_tooltips_reset(void);
 static bool sub_5518C0(int x, int y);
 static void sub_551910(TigMessage* msg);
 static void sub_551A10(int64_t obj);
@@ -908,7 +910,7 @@ static UiMessage intgame_message_history[MAX_MESSAGE_HISTORY_ITEMS];
 static bool intgame_big_window_locked;
 
 // 0x64C634
-static IntgameMode intgame_mode_stack[11];
+static IntgameModeState intgame_mode_state;
 
 // 0x64C660
 static TigRect intgame_pc_lens_src_rect;
@@ -949,9 +951,6 @@ static bool dword_64C6B0;
 // 0x64C6B4
 static bool intgame_iso_interface_created;
 
-// 0x64C6B8
-static int intgame_mode_stack_size;
-
 // 0x64C6BC
 static PcLensMode intgame_pc_lens_mode;
 
@@ -984,9 +983,6 @@ static bool dword_64C6E0;
 
 // 0x64C6E4
 static TigVideoBuffer* intgame_pc_lens_video_buffer;
-
-// 0x64C6E8
-static bool dword_64C6E8;
 
 // 0x64C6F0
 static unsigned int intgame_iso_window_flags;
@@ -1063,6 +1059,8 @@ bool intgame_init(GameInitInfo* init_info)
 void intgame_reset(void)
 {
     int index;
+
+    intgame_action_tooltips_reset();
 
     dword_64C6D8 = 0;
     intgame_refresh_cursor();
@@ -1143,6 +1141,7 @@ void intgame_resize(GameResizeInfo* resize_info)
 // 0x54A130
 void intgame_exit(void)
 {
+    intgame_action_tooltips_reset();
     tig_font_destroy(intgame_morph15_white_font);
     tig_font_destroy(intgame_morph15_blue_font);
     tig_font_destroy(intgame_morph15_orange_font);
@@ -1173,6 +1172,8 @@ bool intgame_load(GameLoadInfo* load_info)
     int v1;
     int btn;
     int64_t obj;
+
+    intgame_action_tooltips_reset();
 
     if (load_info->stream == NULL) return false;
     if (tig_file_fread(&v1, sizeof(v1), 1, load_info->stream) != 1) return false;
@@ -1348,8 +1349,7 @@ void iso_interface_create(tig_window_handle_t window_handle)
     intgame_button_create(&intgame_mt_button_info);
     intgame_mt_button_disable();
 
-    intgame_mode_stack_size = 0;
-    intgame_mode_stack[0] = INTGAME_MODE_MAIN;
+    intgame_mode_state_reset(&intgame_mode_state);
     target_flags_set(TGT_OBJECT | TGT_OBJ_NO_T_WALL | TGT_TILE);
     intgame_pc_lens_mode = PC_LENS_MODE_NONE;
 
@@ -1438,6 +1438,8 @@ void iso_interface_destroy(void)
 {
     int index;
 
+    intgame_action_tooltips_reset();
+
     if (intgame_iso_interface_created) {
         for (index = 0; index < 2; index++) {
             tig_window_destroy(dword_64C4F8[index]);
@@ -1463,8 +1465,7 @@ void iso_interface_destroy(void)
 // 0x54AA30
 void sub_54AA30(void)
 {
-    intgame_mode_stack_size = 0;
-    intgame_mode_stack[intgame_mode_stack_size] = INTGAME_MODE_MAIN;
+    intgame_mode_state_reset(&intgame_mode_state);
     intgame_message_history_size = 0;
     intgame_message_history_end = 0;
     intgame_message_history_curr = 0;
@@ -4070,8 +4071,7 @@ void sub_550000(int64_t critter_obj, Hotkey* hotkey, int inventory_location)
     if (item_obj != OBJ_HANDLE_NULL) {
         sound_id = sfx_item_sound(item_obj, critter_obj, OBJ_HANDLE_NULL, ITEM_SOUND_DROP);
     } else {
-        // FIXME: Looks wrong.
-        sound_id = inventory_location;
+        sound_id = sfx_item_sound(hotkey->item_obj.obj, critter_obj, OBJ_HANDLE_NULL, ITEM_SOUND_DROP);
     }
 
     if (sound_id != -1) {
@@ -4510,7 +4510,7 @@ bool intgame_message_window_write_text(tig_window_handle_t window_handle, char* 
 
     if (intgame_is_compact_interface()) {
         if (str[0] == '\0') {
-            // FIXME: Leaking font!
+            tig_font_pop();
             return true;
         }
 
@@ -4763,6 +4763,28 @@ bool intgame_pc_lens_check_pt_unscale(int x, int y)
     return intgame_pc_lens_check_pt(x, y);
 }
 
+// The five gameplay panels close through the circular portrait, not the
+// transparent corners of its rectangular backing buffer.
+bool intgame_panel_close_lens_check_pt(int x, int y)
+{
+    TigWindowData window;
+    if (!intgame_pc_lens_check_pt(x, y)
+        || tig_window_data(intgame_pc_lens.window_handle, &window) != TIG_OK
+        || intgame_pc_lens.rect->width <= 0 || intgame_pc_lens.rect->height <= 0) {
+        return false;
+    }
+    const TigRect* rect = intgame_pc_lens.rect;
+    double dx = (x - window.rect.x - rect->x + 0.5) * 2.0 / rect->width - 1.0;
+    double dy = (y - window.rect.y - rect->y + 0.5) * 2.0 / rect->height - 1.0;
+    return dx * dx + dy * dy <= 1.0;
+}
+
+bool intgame_panel_close_lens_check_pt_unscale(int x, int y)
+{
+    hrp_center(&x, &y);
+    return intgame_panel_close_lens_check_pt(x, y);
+}
+
 // True if a mouse click should dismiss an overlay menu: the click is
 // outside the given menu rect AND not on either of the iso-interface HUD
 // strips. All coordinates are in screen space.
@@ -4832,6 +4854,13 @@ bool intgame_should_dismiss_overlay_click(int screen_x, int screen_y, const TigR
     }
 
     return true;
+}
+
+bool intgame_panel_should_dismiss_overlay_click(int screen_x, int screen_y, const TigRect* menu_rect)
+{
+    // Always consume the dialogue-opening mouse-up guard, even in group mode.
+    bool outside = intgame_should_dismiss_overlay_click(screen_x, screen_y, menu_rect);
+    return settings_get_value(&settings, WINDOW_CLOSE_MODE_KEY) != 0 && outside;
 }
 
 // 0x551080
@@ -5198,7 +5227,7 @@ void sub_551910(TigMessage* msg)
 // 0x551A00
 IntgameMode intgame_mode_get(void)
 {
-    return intgame_mode_stack[intgame_mode_stack_size];
+    return intgame_mode_state_current(&intgame_mode_state);
 }
 
 // 0x551A10
@@ -5224,31 +5253,29 @@ bool intgame_mode_set(IntgameMode mode)
     int64_t pc_obj;
     int64_t obj;
     IntgameMode prev_mode;
-    bool v1 = false;
-    bool v2 = false;
-    bool v17 = false;
-    bool v18 = false;
+    bool cancel_drag = false;
+    bool returning_to_parent = false;
+    bool unwind_targeting_mode = false;
+    bool entering_child = false;
 
     intgame_camera_pan_active = false;
     intgame_camera_pan_moved = false;
 
-    if (dword_64C6E8) {
-        return true;
-    }
-
     while (1) {
-        dword_64C6E8 = true;
+        IntgameModeTransition transition;
+        IntgameModeResult result = intgame_mode_state_begin(&intgame_mode_state, mode, &transition);
+        if (result == INTGAME_MODE_REENTRANT) return true;
+        if (result != INTGAME_MODE_READY) {
+            tig_debug_printf("intgame_mode_set: rejected mode %d (reason %d).\n", mode, result);
+            return false;
+        }
         pc_obj = player_get_local_pc_obj();
-        prev_mode = intgame_mode_stack[intgame_mode_stack_size];
+        prev_mode = transition.from;
+        mode = transition.to;
+        entering_child = transition.pushing;
+        returning_to_parent = transition.popping;
 
-        if (mode != INTGAME_MODE_MAIN) {
-            intgame_mode_stack_size++;
-            v18 = true;
-        } else {
-            if (intgame_mode_stack_size > 0) {
-                mode = intgame_mode_stack[--intgame_mode_stack_size];
-                v2 = true;
-            }
+        if (!transition.pushing) {
             if (inven_ui_drag_item_obj_get() == OBJ_HANDLE_NULL) {
                 intgame_refresh_cursor();
             }
@@ -5257,24 +5284,24 @@ bool intgame_mode_set(IntgameMode mode)
         switch (prev_mode) {
         case INTGAME_MODE_MAIN:
         case INTGAME_MODE_FOLLOWER:
-            v1 = true;
+            cancel_drag = true;
             target_flags_set(TGT_OBJECT | TGT_OBJ_NO_T_WALL | TGT_TILE);
             break;
         case INTGAME_MODE_SPELL:
-            v1 = true;
-            v17 = true;
+            cancel_drag = true;
+            unwind_targeting_mode = true;
             spell_ui_cancel();
             combat_check_cast_spell(player_get_local_pc_obj());
             break;
         case INTGAME_MODE_SKILL:
-            v1 = true;
-            v17 = true;
+            cancel_drag = true;
+            unwind_targeting_mode = true;
             skill_ui_cancel();
             combat_check_use_skill(player_get_local_pc_obj());
             break;
         case INTGAME_MODE_DIALOG:
-            v1 = 1;
-            if (v2) {
+            cancel_drag = 1;
+            if (returning_to_parent) {
                 dialog_ui_end_dialog(player_get_local_pc_obj(), 0);
             } else {
                 dialog_ui_notify_dialog_ended(player_get_local_pc_obj());
@@ -5284,13 +5311,13 @@ bool intgame_mode_set(IntgameMode mode)
             if (mode != INTGAME_MODE_QUANTITY) {
                 inven_ui_destroy();
             }
-            v1 = true;
+            cancel_drag = true;
             if (mode != INTGAME_MODE_QUANTITY) {
                 intgame_unforce_fullscreen();
             }
             break;
         case INTGAME_MODE_WMAP:
-            v1 = true;
+            cancel_drag = true;
             wmap_ui_close();
             if (intgame_iso_window_type == ROTWIN_TYPE_MAP_NOTE) {
                 iso_interface_window_set(ROTWIN_TYPE_MSG);
@@ -5299,11 +5326,11 @@ bool intgame_mode_set(IntgameMode mode)
             intgame_unforce_fullscreen();
             break;
         case INTGAME_MODE_SLEEP:
-            v1 = true;
+            cancel_drag = true;
             sleep_ui_close();
             break;
         case INTGAME_MODE_LOGBOOK:
-            v1 = true;
+            cancel_drag = true;
             logbook_ui_close();
             intgame_unforce_fullscreen();
             break;
@@ -5313,10 +5340,10 @@ bool intgame_mode_set(IntgameMode mode)
             case INTGAME_MODE_SKILL:
             case INTGAME_MODE_QUANTITY:
             case INTGAME_MODE_ITEM:
-                v1 = true;
+                cancel_drag = true;
                 break;
             default:
-                v1 = false;
+                cancel_drag = false;
                 inven_ui_destroy();
                 break;
             }
@@ -5326,7 +5353,7 @@ bool intgame_mode_set(IntgameMode mode)
             }
             break;
         case INTGAME_MODE_CHAREDIT:
-            v1 = true;
+            cancel_drag = true;
             charedit_close();
             intgame_unforce_fullscreen();
             break;
@@ -5353,12 +5380,12 @@ bool intgame_mode_set(IntgameMode mode)
             inven_ui_update(OBJ_HANDLE_NULL);
             break;
         case INTGAME_MODE_SCHEMATIC:
-            v1 = true;
+            cancel_drag = true;
             schematic_ui_close();
             intgame_unforce_fullscreen();
             break;
         case INTGAME_MODE_WRITTEN:
-            v1 = true;
+            cancel_drag = true;
             written_ui_close();
             intgame_unforce_fullscreen();
             break;
@@ -5374,7 +5401,7 @@ bool intgame_mode_set(IntgameMode mode)
             if (mode != INTGAME_MODE_QUANTITY) {
                 inven_ui_destroy();
             }
-            v1 = true;
+            cancel_drag = true;
             intgame_unforce_fullscreen();
             break;
         default:
@@ -5389,7 +5416,7 @@ bool intgame_mode_set(IntgameMode mode)
             break;
         case INTGAME_MODE_DIALOG:
             compact_ui_message_window_hide();
-            if (!v18) {
+            if (!entering_child) {
                 dialog_ui_notify_dialog_started(player_get_local_pc_obj());
             }
             break;
@@ -5418,26 +5445,28 @@ bool intgame_mode_set(IntgameMode mode)
             break;
         }
 
-        if (v1) {
+        if (cancel_drag) {
             if (inven_ui_drag_item_obj_get() != OBJ_HANDLE_NULL) {
                 sub_575770();
             }
         }
 
-        intgame_mode_stack[intgame_mode_stack_size] = mode;
+        // Keep the historical ordering: cursor refresh occurs after the new
+        // mode is stored, while recursive close callbacks are still blocked.
+        intgame_mode_state_commit(&intgame_mode_state, &transition);
         intgame_refresh_cursor();
 
-        v1 = false;
-        dword_64C6E8 = false;
+        cancel_drag = false;
+        intgame_mode_state_end(&intgame_mode_state);
 
-        if (!v17) {
+        if (!unwind_targeting_mode) {
             return true;
         }
 
-        mode = 0;
-        v18 = false;
-        v2 = false;
-        v17 = false;
+        mode = INTGAME_MODE_MAIN;
+        entering_child = false;
+        returning_to_parent = false;
+        unwind_targeting_mode = false;
     }
 }
 
@@ -5464,7 +5493,8 @@ void intgame_unforce_fullscreen(void)
 // 0x551F70
 bool intgame_mode_supports_scrolling(IntgameMode mode)
 {
-    return intgame_mode_scrolling[mode];
+    return mode >= INTGAME_MODE_MAIN && mode < INTGAME_MODE_COUNT
+        && intgame_mode_scrolling[mode];
 }
 
 // 0x551F80
@@ -8630,9 +8660,16 @@ bool intgame_big_window_message_filter(TigMessage* msg)
 // 0x5572D0
 bool intgame_big_window_lock(TigWindowMessageFilterFunc func, tig_window_handle_t* window_handle_ptr)
 {
+    return intgame_big_window_lock_height(func, window_handle_ptr, 400);
+}
+
+bool intgame_big_window_lock_height(TigWindowMessageFilterFunc func, tig_window_handle_t* window_handle_ptr, int height)
+{
     if (intgame_big_window_locked) {
         return false;
     }
+
+    if ((height != 400 && height != 450) || !ui_panel_window_height(&intgame_big_window_handle, height)) return false;
 
     intgame_big_window_locked = true;
     tig_window_message_filter_set(intgame_big_window_handle, func);
@@ -9147,6 +9184,12 @@ void intgame_hide(void)
     int index;
     TigRect rect;
 
+    logbook_ui_search_bar_visible(false);
+    schematic_ui_toolbar_visible(false);
+    wmap_ui_markers_visible(false);
+
+    intgame_action_tooltips_reset();
+
     if (!intgame_iso_interface_created) {
         return;
     }
@@ -9294,6 +9337,9 @@ void intgame_show(void)
     // called on close and would otherwise leave the strips fully
     // visible regardless of the user's TAB stage.
     intgame_hud_apply_clips();
+    logbook_ui_search_bar_visible(true);
+    schematic_ui_toolbar_visible(true);
+    wmap_ui_markers_visible(true);
 }
 
 // Compute and install the per-strip clip rects for the current
@@ -9591,25 +9637,18 @@ int intgame_hud_bottom_gap_offset(void)
 
 void intgame_hud_tick_invalidate_alpha_strips(void)
 {
-    // Currently only the bottom strip + (optionally) the big window opt
-    // in to per-pixel see-through. Tell gamelib to repaint the world
-    // under each every tick so the alpha-blend composite has fresh
-    // world pixels to blend against.
+    // Only visible translucent regions sample the world's buffer. Opaque or
+    // cropped-away HUD areas do not require a world redraw each tick.
     if (!intgame_iso_interface_created) {
         return;
     }
-    if (dword_64C4F8[1] != TIG_WINDOW_HANDLE_INVALID) {
-        TigWindowData wd;
-        if (tig_window_data(dword_64C4F8[1], &wd) == TIG_OK) {
-            iso_invalidate_rect(&wd.rect);
-        }
+    TigRect rect;
+    if (tig_window_translucent_underlay_rect(dword_64C4F8[1], intgame_iso_window, &rect)) {
+        iso_invalidate_rect(&rect);
     }
     if (intgame_big_window_locked
-        && intgame_big_window_handle != TIG_WINDOW_HANDLE_INVALID) {
-        TigWindowData bwd;
-        if (tig_window_data(intgame_big_window_handle, &bwd) == TIG_OK) {
-            iso_invalidate_rect(&bwd.rect);
-        }
+        && tig_window_translucent_underlay_rect(intgame_big_window_handle, intgame_iso_window, &rect)) {
+        iso_invalidate_rect(&rect);
     }
 }
 
@@ -9632,4 +9671,170 @@ void intgame_apply_translucent_black(tig_window_handle_t window_handle, bool ena
     }
     tig_window_near_black_alpha_set(window_handle, enable,
         intgame_iso_window, 8, 128);
+}
+
+#define ACTION_INFO_FRAME_WIDTH 210
+#define ACTION_INFO_FRAME_HEIGHT 24
+
+static tig_window_handle_t intgame_action_info_windows[2] = {
+    TIG_WINDOW_HANDLE_INVALID, TIG_WINDOW_HANDLE_INVALID,
+};
+static tig_timestamp_t intgame_action_tooltips_last_tick;
+
+static void intgame_action_info_hide(void)
+{
+    for (int side = 0; side < 2; side++) {
+        if (intgame_action_info_windows[side] != TIG_WINDOW_HANDLE_INVALID) {
+            tig_window_hide(intgame_action_info_windows[side]);
+        }
+    }
+}
+
+static void intgame_action_tooltips_reset(void)
+{
+    intgame_action_tooltips_last_tick = 0;
+    for (int side = 0; side < 2; side++) {
+        if (intgame_action_info_windows[side] != TIG_WINDOW_HANDLE_INVALID) {
+            tig_window_destroy(intgame_action_info_windows[side]);
+            intgame_action_info_windows[side] = TIG_WINDOW_HANDLE_INVALID;
+        }
+    }
+}
+
+static void intgame_action_info_draw(int side, const char* text)
+{
+    TigWindowData data = { 0 };
+    TigWindowData previous;
+    TigRect rect = { 0, 0, ACTION_INFO_FRAME_WIDTH, ACTION_INFO_FRAME_HEIGHT };
+    TigRect body = { 6, 0, ACTION_INFO_FRAME_WIDTH - 11, ACTION_INFO_FRAME_HEIGHT };
+    TigRect anchor = intgame_interface_window_frames[1];
+    tig_window_handle_t* handle = &intgame_action_info_windows[side];
+    TigFont measure = { 0 };
+
+    hrp_apply(&anchor, GRAVITY_CENTER_HORIZONTAL | GRAVITY_BOTTOM);
+    if (intgame_hud_stage == INTGAME_HUD_STAGE_MEDIUM || intgame_hud_stage == INTGAME_HUD_STAGE_MINI) {
+        int chrome_y = INTGAME_HUD_MEDIUM_BAND_Y;
+        if (intgame_iso_window_type >= 0 && intgame_iso_window_type < ROTWIN_TYPE_COUNT) {
+            int button_y = intgame_rotwin_button_info[intgame_iso_window_type].y;
+            if (button_y > intgame_interface_window_frames[1].y) {
+                chrome_y = button_y - intgame_interface_window_frames[1].y;
+            }
+        }
+        anchor.y += chrome_y;
+        if (intgame_hud_stage == INTGAME_HUD_STAGE_MINI) {
+            anchor.y += INTGAME_HUD_MINI_BAND_Y - INTGAME_HUD_MEDIUM_BAND_Y;
+        }
+    } else if (intgame_hud_stage == INTGAME_HUD_STAGE_HIDDEN || intgame_is_compact_interface()) {
+        anchor.y = hrp_iso_window_height_get();
+    }
+    // Leave the central turn-based action-point bar unobstructed.
+    int x = side == 0 ? anchor.x + 6 : anchor.x + anchor.width - ACTION_INFO_FRAME_WIDTH - 6;
+    int y = anchor.y - ACTION_INFO_FRAME_HEIGHT - 2;
+    if (*handle == TIG_WINDOW_HANDLE_INVALID) {
+        data.flags = TIG_WINDOW_ALWAYS_ON_TOP;
+        data.rect = rect;
+        data.rect.x = x;
+        data.rect.y = y;
+        data.background_color = tig_color_make(0, 0, 0);
+        if (tig_window_create(&data, handle) != TIG_OK) return;
+    } else {
+        tig_window_data(*handle, &previous);
+        if (previous.rect.x != x || previous.rect.y != y) tig_window_move(*handle, x, y);
+    }
+    tig_window_fill(*handle, &rect, tig_color_make(0, 0, 0));
+    tig_window_box(*handle, &rect, tig_color_make(144, 112, 48));
+    if (text[0] != '\0') {
+        tig_font_push(intgame_flare12_white_font);
+        measure.str = text;
+        tig_font_measure(&measure);
+        body.y = (body.height - measure.height) / 2;
+        body.height = measure.height;
+        tig_window_text_write(*handle, text, &body);
+        tig_font_pop();
+    }
+    tig_window_show(*handle);
+}
+
+static const char* intgame_action_info_label(int id)
+{
+    return mes_localized_get("combat_info", id);
+}
+
+static void intgame_action_info_build(int64_t pc, int mode, char* left, size_t left_size, char* right, size_t right_size)
+{
+    TigMouseState mouse;
+    TargetDescriptor td;
+    int x, y;
+    if (intgame_camera_pan_active || hotkey_ui_is_dragging()
+        || inven_ui_drag_item_obj_get() != OBJ_HANDLE_NULL
+        || tig_mouse_get_state(&mouse) != TIG_OK || !sub_5518C0(mouse.x, mouse.y)) return;
+    intgame_adjust_mouse_for_zoom(mouse.x, mouse.y, &x, &y);
+    if (!target_pick_at_screen_xy_ex(x, y, &td, TGT_TILE | TGT_OBJECT | TGT_OBJ_T_CRITTER, intgame_fullscreen)) return;
+    int64_t loc = td.is_loc ? td.loc : obj_field_int64_get(td.obj, OBJ_F_LOCATION);
+    int distance = (int)location_dist(obj_field_int64_get(pc, OBJ_F_LOCATION), loc);
+    if (mode == INTGAME_MODE_SPELL) {
+        int fatigue, range;
+        if (!spell_ui_cast_preview(&fatigue, &range)) return;
+        if (fatigue >= 0) {
+            SDL_snprintf(left, left_size, "%s %d | %s %d",
+                intgame_action_info_label(6), fatigue,
+                intgame_action_info_label(5), distance);
+        } else {
+            SDL_snprintf(left, left_size, "%s | %s %d",
+                intgame_action_info_label(7),
+                intgame_action_info_label(5), distance);
+        }
+        SDL_snprintf(right, right_size, "%s : %d", intgame_action_info_label(3), range);
+    } else if (!td.is_loc && td.obj != pc && !critter_is_dead(td.obj)) {
+        int64_t weapon = combat_critter_weapon(pc);
+        int range = item_weapon_skill(weapon) == SKILL_THROWING
+            ? item_throwing_distance(weapon, pc) : item_weapon_range(weapon, pc);
+        int hit_loc = tig_kb_is_key_pressed(SDL_SCANCODE_COMMA) ? HIT_LOC_HEAD
+            : tig_kb_is_key_pressed(SDL_SCANCODE_PERIOD) ? HIT_LOC_LEG
+            : tig_kb_is_key_pressed(SDL_SCANCODE_SLASH) ? HIT_LOC_ARM : HIT_LOC_TORSO;
+        int chance = combat_hit_chance_preview(pc, td.obj, hit_loc);
+        if (distance > range) chance = 0;
+        SDL_snprintf(left, left_size, "%s %d %s | %s %d",
+            intgame_action_info_label(1), combat_attack_cost(pc),
+            intgame_action_info_label(9), intgame_action_info_label(5), distance);
+        SDL_snprintf(right, right_size, "%s ~%d%% | %s %d",
+            intgame_action_info_label(2), chance, intgame_action_info_label(3), range);
+    } else if (td.is_loc) {
+        int cost = combat_move_cost(pc, loc, false);
+        if (cost == 0 && distance != 0) {
+            SDL_strlcpy(left, intgame_action_info_label(8), left_size);
+        } else {
+            SDL_snprintf(left, left_size, "%s %d %s | %s %d",
+                intgame_action_info_label(4), cost,
+                intgame_action_info_label(9), intgame_action_info_label(5), distance);
+        }
+    }
+}
+
+void intgame_action_tooltips_tick(void)
+{
+    int mode = intgame_mode_get();
+    if (!intgame_iso_interface_created || mainmenu_ui_is_active()
+        || (mode != INTGAME_MODE_MAIN && mode != INTGAME_MODE_SPELL)
+        || intgame_dialog_process_event_func != NULL || tig_window_is_hidden(dword_64C52C)) {
+        intgame_action_info_hide();
+        return;
+    }
+    int64_t pc = player_get_local_pc_obj();
+    if (pc == OBJ_HANDLE_NULL || !obj_handle_is_valid(pc)
+        || !settings_get_value(&settings, ACTION_TOOLTIPS_KEY)
+        || (!combat_critter_is_combat_mode_active(pc) && !combat_turn_based_is_active())) {
+        intgame_action_info_hide();
+        return;
+    }
+    // Bound pathfinding to five updates per second, only during combat.
+    if (tig_timer_between(intgame_action_tooltips_last_tick, gamelib_ping_time) < 200) return;
+    intgame_action_tooltips_last_tick = gamelib_ping_time;
+    char left[128] = "";
+    char right[128] = "";
+    intgame_action_info_build(pc, mode, left, sizeof(left), right, sizeof(right));
+    // Both frames remain visible during combat; clear unavailable information
+    // rather than retaining the previous target or following the pointer.
+    intgame_action_info_draw(0, left);
+    intgame_action_info_draw(1, right);
 }

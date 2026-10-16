@@ -1,12 +1,16 @@
 #include "ui/wmap_rnd.h"
 
 #include "game/area.h"
+#include "game/critter.h"
+#include "game/encounter_options.h"
+#include "game/gamelib.h"
 #include "game/map.h"
 #include "game/mes.h"
 #include "game/object.h"
 #include "game/player.h"
 #include "game/proto.h"
 #include "game/random.h"
+#include "game/script.h"
 #include "game/sector.h"
 #include "game/stat.h"
 #include "game/target.h"
@@ -120,6 +124,7 @@ static bool wmap_rnd_encounter_entry_check(WmapRndEncounterTableEntry* entry);
 static int wmap_rnd_encounter_total_frequency(WmapRndEncounterTable* table);
 static int wmap_rnd_encounter_entry_total_monsters(WmapRndEncounterTableEntry* entry);
 static void wmap_rnd_encounter_spawn(WmapRndEncounterTableEntry* entry);
+static bool wmap_rnd_encounter_is_trivial(WmapRndEncounterTableEntry* entry);
 static void wmap_rnd_spawn_position_offset(int a1, int64_t* dx_ptr, int64_t* dy_ptr);
 static void wmap_rnd_encounter_build_object(int name, int64_t loc, int64_t* obj_ptr);
 
@@ -1004,7 +1009,9 @@ bool wmap_rnd_check(int64_t loc)
         wmap_rnd_frequency *= 5;
     }
 
-    if (random_between(1, 100) > wmap_rnd_frequency) {
+    int mode = settings_get_value(&settings, RANDOM_ENCOUNTERS_KEY);
+    if (random_between(1, encounter_frequency_roll_max(mode))
+        > encounter_frequency_threshold(wmap_rnd_frequency)) {
         return false;
     }
 
@@ -1161,16 +1168,66 @@ bool wmap_rnd_encounter_check(void)
         index = last_eligible;
     }
 
-    table->entries[index].trigger_cnt++;
+    bool interesting = settings_get_value(&settings, RANDOM_ENCOUNTERS_KEY) == RANDOM_ENCOUNTERS_INTERESTING;
+    if (!interesting) table->entries[index].trigger_cnt++;
 
     if (wmap_rnd_encounter_entry_total_monsters(&(table->entries[index])) == 0) {
         tig_debug_println("WmapRnd: Total monsters is zero.");
         return false;
     }
 
+    if (interesting) {
+        // Skip the selected encounter instead of rerolling into a harder one.
+        // A skipped encounter must not consume a one-time trigger.
+        if (wmap_rnd_encounter_is_trivial(&(table->entries[index]))) return false;
+        table->entries[index].trigger_cnt++;
+    }
+
     wmap_rnd_encounter_spawn(&(table->entries[index]));
 
     return true;
+}
+
+static bool wmap_rnd_encounter_is_trivial(WmapRndEncounterTableEntry* entry)
+{
+    int64_t pc = player_get_local_pc_obj();
+    int strongest = 0;
+    int64_t enemy_levels = 0;
+    int party_levels;
+    ObjectList followers;
+    ObjectNode* node;
+
+    // Preserve special tables, story gates and limited-use encounters.
+    if (pc == OBJ_HANDLE_NULL || wmap_rnd_encounter >= 54
+        || entry->global_flag_num != -1 || entry->max_trigger_cnt != -1) return false;
+    int player_level = stat_level_get(pc, STAT_LEVEL);
+    if (player_level < 6) return false;
+
+    for (int slot = 0; slot < 5 && entry->critter_basic_prototype[slot] != 0; slot++) {
+        if (wmap_rnd_critter_spawn_counts[slot] <= 0) continue;
+        int64_t proto = sub_4685A0(entry->critter_basic_prototype[slot]);
+        if (proto == OBJ_HANDLE_NULL || obj_field_int32_get(proto, OBJ_F_TYPE) != OBJ_TYPE_NPC) return false;
+        unsigned int flags = obj_field_int32_get(proto, OBJ_F_NPC_FLAGS);
+        // Only plain hostile groups are filtered. Scripted and non-hostile
+        // actors can carry dialogue or rewards despite their low level.
+        if ((flags & ONF_KOS) == 0 || (flags & ONF_KOS_OVERRIDE) != 0
+            || obj_arrayfield_length_get(proto, OBJ_F_SCRIPTS_IDX) != 0) return false;
+        int level = stat_level_get(proto, STAT_LEVEL);
+        if (level <= 0) return false;
+        if (level > strongest) strongest = level;
+        enemy_levels += (int64_t)level * wmap_rnd_critter_spawn_counts[slot];
+    }
+
+    party_levels = player_level;
+    object_list_all_followers(pc, &followers);
+    for (node = followers.head; node != NULL; node = node->next) {
+        if (critter_is_active(node->obj)) {
+            int level = stat_level_get(node->obj, STAT_LEVEL);
+            if (level > 0) party_levels += level;
+        }
+    }
+    object_list_destroy(&followers);
+    return encounter_group_is_trivial(player_level, party_levels, strongest, enemy_levels);
 }
 
 /**

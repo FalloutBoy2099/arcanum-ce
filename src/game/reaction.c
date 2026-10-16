@@ -1,4 +1,6 @@
 #include "game/reaction.h"
+#include "game/journal_memory.h"
+#include "game/player.h"
 
 #include "game/ai.h"
 #include "game/critter.h"
@@ -537,6 +539,9 @@ void sub_4C1490(int64_t npc_obj, int64_t pc_obj, int level, int index)
     obj_arrayfield_obj_set(npc_obj, OBJ_F_NPC_REACTION_PC_IDX, index, pc_obj);
     obj_arrayfield_uint32_set(npc_obj, OBJ_F_NPC_REACTION_LEVEL_IDX, index, level);
     obj_arrayfield_uint32_set(npc_obj, OBJ_F_NPC_REACTION_TIME_IDX, index, datetime_current_second());
+    if (index != 0 && pc_obj != OBJ_HANDLE_NULL && pc_obj == player_get_local_pc_obj()) {
+        journal_memory_remember(obj_field_int32_get(npc_obj, OBJ_F_DESCRIPTION));
+    }
     ui_refresh_health_bar(npc_obj);
     combat_recalc_reaction(npc_obj);
 }

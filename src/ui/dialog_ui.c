@@ -1,4 +1,5 @@
 #include "ui/dialog_ui.h"
+#include "game/conversation_history.h"
 
 #include <stdio.h>
 
@@ -459,6 +460,11 @@ void dialog_ui_npc_say(int64_t npc_obj, int64_t pc_obj, int type, int expires_in
 // 0x5686C0
 void dialog_ui_pc_say(int64_t pc_obj, int64_t npc_obj, int type, int expires_in, const char* str)
 {
+    if (player_is_local_pc_obj(pc_obj)) {
+        char speaker[MAX_STRING] = "";
+        object_examine(pc_obj, pc_obj, speaker);
+        conversation_history_add(speaker, str, sub_45A7C0());
+    }
     if (npc_obj != OBJ_HANDLE_NULL
         && !critter_is_dead(pc_obj)
         && !sub_423300(pc_obj, NULL)) {

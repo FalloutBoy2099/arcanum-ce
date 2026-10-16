@@ -12,6 +12,7 @@
 #include "game/light.h"
 #include "game/magictech.h"
 #include "game/map.h"
+#include "game/mes.h"
 #include "game/obj_private.h"
 #include "game/object.h"
 #include "game/player.h"
@@ -110,7 +111,7 @@ void teleport_ping(tig_timestamp_t timestamp)
         if (moved && player_is_local_pc_obj(current_teleport_data.obj)
             && settings_get_value(&settings, AUTOSAVE_TRAVEL_KEY) != 0
             && !gamelib_in_save()) {
-            if (!gamelib_save("slotAUTO", "Autosave - Travel")) {
+            if (!gamelib_save("slotAUTO", mes_localized_get("savegame", 100))) {
                 tig_debug_printf("Travel autosave failed.\n");
             }
         }

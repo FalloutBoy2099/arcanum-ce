@@ -7,6 +7,7 @@
 #include "game/timeevent.h"
 #include "game/ui.h"
 #include "ui/types.h"
+#include "ui/intgame_mode.h"
 
 typedef enum PcLensMode {
     PC_LENS_MODE_NONE,
@@ -25,31 +26,6 @@ typedef enum IntgameBar {
     INTGAME_BAR_FATIGUE,
     INTGAME_BAR_COUNT,
 } IntgameBar;
-
-typedef enum IntgameMode {
-    INTGAME_MODE_MAIN,
-    INTGAME_MODE_SPELL,
-    INTGAME_MODE_SKILL,
-    INTGAME_MODE_DIALOG,
-    INTGAME_MODE_BARTER,
-    INTGAME_MODE_WMAP,
-    INTGAME_MODE_SLEEP,
-    INTGAME_MODE_LOGBOOK,
-    INTGAME_MODE_INVEN,
-    INTGAME_MODE_CHAREDIT,
-    INTGAME_MODE_LOOT,
-    INTGAME_MODE_STEAL,
-    INTGAME_MODE_12,
-    INTGAME_MODE_QUANTITY,
-    INTGAME_MODE_SCHEMATIC,
-    INTGAME_MODE_WRITTEN,
-    INTGAME_MODE_ITEM,
-    INTGAME_MODE_17,
-    INTGAME_MODE_FOLLOWER,
-    INTGAME_MODE_NPC_IDENTIFY,
-    INTGAME_MODE_NPC_REPAIR,
-    INTGAME_MODE_COUNT,
-} IntgameMode;
 
 typedef enum RotatingWindowType {
     ROTWIN_TYPE_INVALID = -1,
@@ -71,6 +47,7 @@ extern tig_font_handle_t intgame_morph15_white_font;
 
 bool intgame_init(GameInitInfo* init_info);
 void intgame_reset(void);
+void intgame_action_tooltips_tick(void);
 void intgame_resize(GameResizeInfo* resize_info);
 void intgame_exit(void);
 bool intgame_save(TigFile* stream);
@@ -103,6 +80,9 @@ void intgame_pc_lens_do(PcLensMode mode, PcLens* pc_lens);
 bool intgame_pc_lens_check_pt(int x, int y);
 bool intgame_pc_lens_check_pt_unscale(int x, int y);
 bool intgame_should_dismiss_overlay_click(int screen_x, int screen_y, const TigRect* menu_rect);
+bool intgame_panel_should_dismiss_overlay_click(int screen_x, int screen_y, const TigRect* menu_rect);
+bool intgame_panel_close_lens_check_pt(int x, int y);
+bool intgame_panel_close_lens_check_pt_unscale(int x, int y);
 
 // CE: arm a one-shot suppression of the next overlay click-outside
 // dismiss. Call right before opening an overlay from a dialogue
@@ -144,6 +124,7 @@ void sub_5570A0(int64_t obj);
 void intgame_notify_item_inserted_or_removed(int64_t item_obj, bool removed, int inventory_location);
 void intgame_refresh_health_bar(int64_t obj);
 bool intgame_big_window_lock(TigWindowMessageFilterFunc func, tig_window_handle_t* window_handle_ptr);
+bool intgame_big_window_lock_height(TigWindowMessageFilterFunc func, tig_window_handle_t* window_handle_ptr, int height);
 void intgame_big_window_unlock(void);
 void sub_557370(int64_t source_obj, int64_t target_obj);
 void intgame_there_is_nothing_to_loot(void);

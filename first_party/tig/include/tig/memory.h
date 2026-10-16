@@ -34,6 +34,17 @@ void tig_memory_print_stats(TigMemoryPrintStatsOptions opts);
 void tig_memory_validate_all(const char* file, int line);
 void tig_memory_get_system_status(size_t* total, size_t* available);
 
+typedef struct TigMemoryStatistics {
+    Uint64 allocation_requests;
+    Uint64 requested_bytes;
+    size_t live_bytes;
+    size_t live_blocks;
+} TigMemoryStatistics;
+
+// Counts allocations made through tig_memory_* only. Release MALLOC macros
+// normally use the C runtime directly and are not covered by these counters.
+void tig_memory_statistics(TigMemoryStatistics* statistics);
+
 // NOTE: Unlike Fallouts, where entire code base use similar functionality to
 // manage memory, allocation functions of this module are never used (at least
 // in Arcanum, one call in ToEE doesn't count). However, their presence imply

@@ -1,11 +1,21 @@
 #include "ui/schematic_ui.h"
+#include <tig/performance.h>
+#include "ui/cache_key.h"
+#include "ui/search_cache.h"
+#include "ui/search_bar.h"
 
 #include <stdio.h>
 
 #include "game/critter.h"
+#include "game/description.h"
+#include "game/crafting.h"
+#include "game/gamelib.h"
+#include "game/language.h"
 #include "game/gsound.h"
 #include "game/item.h"
+#include "game/input_bindings.h"
 #include "game/mes.h"
+#include "game/name.h"
 #include "game/obj.h"
 #include "game/object.h"
 #include "game/player.h"
@@ -13,7 +23,9 @@
 #include "game/snd.h"
 #include "game/tech.h"
 #include "ui/intgame.h"
+#include "ui/logbook_ui.h"
 #include "ui/tb_ui.h"
+#include "ui/textedit_ui.h"
 
 #define SCHEMATIC_F_NAME 0
 #define SCHEMATIC_F_DESCRIPTION 1
@@ -52,7 +64,25 @@ static int tech_from_schematic(int schematic);
 static int schematic_ui_current_id(void);
 static void schematic_ui_parse_items(const char* str, int* items);
 static void schematic_ui_redraw(void);
-static void schematic_ui_draw_component(int ingr, SchematicInfo* schematic_info, bool* a3, bool* a4);
+static void schematic_ui_draw_component(int ingr, const CraftingPreview* preview);
+static void schematic_ui_search_changed(TextEdit* edit);
+static void schematic_ui_search_finished(TextEdit* edit);
+static bool schematic_ui_search_step(int step);
+static bool schematic_ui_search_matches(int schematic);
+static void schematic_ui_draw_toolbar(const CraftingPreview* preview);
+
+static char schematic_ui_search[128];
+static bool schematic_ui_search_focused;
+static int schematic_ui_search_count;
+static UiSearchCache schematic_ui_search_cache;
+static int schematic_ui_batch_size = 1;
+static bool schematic_ui_batch_processing;
+static TextEdit schematic_ui_search_edit = { 0, schematic_ui_search, sizeof(schematic_ui_search),
+    schematic_ui_search_finished, schematic_ui_search_changed, schematic_ui_search_finished };
+static tig_window_handle_t schematic_ui_toolbar_window = TIG_WINDOW_HANDLE_INVALID;
+static TigRect schematic_ui_search_rect = { 220, 418, 348, 22 };
+static TigRect schematic_ui_quantity_rects[3] = { { 578, 418, 24, 22 }, { 603, 418, 65, 22 }, { 669, 418, 24, 22 } };
+static TigRect schematic_ui_party_rect = { 220, 393, 473, 22 };
 
 /**
  * 0x5CA818
@@ -444,6 +474,7 @@ bool schematic_ui_init(GameInitInfo* init_info)
  */
 void schematic_ui_exit(void)
 {
+    ui_search_bar_close(&schematic_ui_toolbar_window);
     mes_unload(schematic_ui_rules_mes_file);
     mes_unload(schematic_ui_text_mes_file);
 
@@ -474,6 +505,8 @@ void schematic_ui_reset(void)
 // 0x56D0D0
 void sub_56D0D0(void)
 {
+    ui_search_bar_close(&schematic_ui_toolbar_window);
+    ui_search_cache_clear(&schematic_ui_search_cache);
     schematic_ui_readiness = SCHEMATIC_UI_READINESS_NO_ITEMS;
 
     schematic_ui_cur_tech = 0;
@@ -598,7 +631,8 @@ void schematic_ui_create(void)
         return;
     }
 
-    if (!intgame_big_window_lock(schematic_ui_message_filter, &schematic_ui_window)) {
+    if (!intgame_big_window_lock_height(schematic_ui_message_filter, &schematic_ui_window,
+            settings_get_value(&settings, SCHEMATIC_TOOLBAR_KEY) ? 450 : 400)) {
         tig_debug_printf("schematic_ui_create: ERROR: intgame_big_window_lock failed!\n");
         exit(0);
     }
@@ -672,6 +706,12 @@ void schematic_ui_create(void)
  */
 void schematic_ui_destroy(void)
 {
+    ui_search_bar_close(&schematic_ui_toolbar_window);
+    ui_search_cache_clear(&schematic_ui_search_cache);
+    if (schematic_ui_search_focused) textedit_ui_unfocus(&schematic_ui_search_edit);
+    schematic_ui_search_focused = false;
+    schematic_ui_search[0] = '\0';
+    schematic_ui_batch_size = 1;
     if (!schematic_ui_created) {
         return;
     }
@@ -703,11 +743,95 @@ bool schematic_ui_message_filter(TigMessage* msg)
     UiMessage ui_message;
     int tech;
 
+    if (schematic_ui_search_focused && (msg->type == TIG_MESSAGE_KEYBOARD || msg->type == TIG_MESSAGE_TEXT_INPUT)) {
+        if (msg->type == TIG_MESSAGE_KEYBOARD && msg->data.keyboard.scancode == SDL_SCANCODE_ESCAPE) {
+            if (!msg->data.keyboard.pressed) {
+                schematic_ui_search[0] = '\0';
+                schematic_ui_search_finished(&schematic_ui_search_edit);
+            }
+            return true;
+        }
+        if (msg->type == TIG_MESSAGE_TEXT_INPUT) {
+            char input[128];
+            language_input_to_legacy(msg->data.text.text, input, sizeof(input), gamelib_current_language_get());
+            TigMessage converted = *msg;
+            converted.data.text.text = input;
+            textedit_ui_process_message(&converted);
+        } else textedit_ui_process_message(msg);
+        return true;
+    }
+    if (settings_get_value(&settings, SCHEMATIC_TOOLBAR_KEY)
+        && msg->type == TIG_MESSAGE_KEYBOARD && msg->data.keyboard.scancode == SDL_SCANCODE_F
+        && (SDL_GetModState() & SDL_KMOD_CTRL) != 0) {
+        if (!msg->data.keyboard.pressed) {
+            schematic_ui_search_focused = true;
+            textedit_ui_focus(&schematic_ui_search_edit);
+            schematic_ui_redraw();
+        }
+        return true;
+    }
+
+    if (msg->type == TIG_MESSAGE_KEYBOARD || msg->type == TIG_MESSAGE_MOUSE) {
+        for (int action = 0; action < 4; action++) {
+            InputBindingNavigationEvent event = input_binding_navigation_event((InputAction)(INPUT_ACTION_SCHEMATICS_PREVIOUS + action), msg);
+            if (event == INPUT_NAVIGATION_NONE) continue;
+            if (event == INPUT_NAVIGATION_CONSUME) return true;
+            TigMessage button = { 0 };
+            button.type = TIG_MESSAGE_BUTTON;
+            button.data.button.state = TIG_BUTTON_STATE_PRESSED;
+            if (action < 2) {
+                int tech = (schematic_ui_cur_tech + (action == 0 ? -1 : 1) + TECH_COUNT) % TECH_COUNT;
+                button.data.button.button_handle = schematic_ui_tabs[tech].button_handle;
+                tig_button_state_change(button.data.button.button_handle, TIG_BUTTON_STATE_PRESSED);
+            } else {
+                if (schematic_ui_search[0] == '\0' && ((action == 2 && schematic_ui_cur_page == 0)
+                    || (action == 3 && schematic_ui_cur_page >= schematic_ui_cur_num_schematics_by_tech[schematic_ui_cur_tech] - 1))) {
+                    return true;
+                }
+                int index = action == 2 ? SCHEMATIC_UI_BUTTON_PREV : SCHEMATIC_UI_BUTTON_NEXT;
+                button.data.button.button_handle = schematic_ui_buttons[index].button_handle;
+            }
+            return schematic_ui_message_filter(&button);
+        }
+    }
+
     switch (msg->type) {
     case TIG_MESSAGE_MOUSE:
+        if (msg->data.mouse.event == TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP) {
+            TigWindowData window;
+            if (settings_get_value(&settings, SCHEMATIC_TOOLBAR_KEY)
+                && tig_window_data(schematic_ui_window, &window) == TIG_OK) {
+                int x = msg->data.mouse.x - window.rect.x;
+                int y = msg->data.mouse.y - window.rect.y;
+                if (x >= schematic_ui_search_rect.x && x < schematic_ui_search_rect.x + schematic_ui_search_rect.width
+                    && y >= schematic_ui_search_rect.y && y < schematic_ui_search_rect.y + schematic_ui_search_rect.height) {
+                    schematic_ui_search_focused = true;
+                    textedit_ui_focus(&schematic_ui_search_edit);
+                    schematic_ui_redraw();
+                    return true;
+                }
+                if (schematic_ui_search_focused) schematic_ui_search_finished(&schematic_ui_search_edit);
+                for (int i = 0; i < 3; i++) {
+                    TigRect* rect = &schematic_ui_quantity_rects[i];
+                    if (x >= rect->x && x < rect->x + rect->width && y >= rect->y && y < rect->y + rect->height) {
+                        int step = (SDL_GetModState() & SDL_KMOD_SHIFT) != 0 ? 10 : 1;
+                        if (i != 1) schematic_ui_batch_size = SDL_clamp(schematic_ui_batch_size + (i == 0 ? -step : step), 1, 99);
+                        schematic_ui_redraw();
+                        return true;
+                    }
+                }
+                if (x >= schematic_ui_party_rect.x && x < schematic_ui_party_rect.x + schematic_ui_party_rect.width
+                    && y >= schematic_ui_party_rect.y && y < schematic_ui_party_rect.y + schematic_ui_party_rect.height) {
+                    settings_set_value(&settings, CRAFTING_PARTY_COMPONENTS_KEY, !settings_get_value(&settings, CRAFTING_PARTY_COMPONENTS_KEY));
+                    settings_save(&settings);
+                    schematic_ui_redraw();
+                    return true;
+                }
+            }
+        }
         // Clicking on the PC lens closes schematic UI.
         if (msg->data.mouse.event == TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP
-            && intgame_pc_lens_check_pt(msg->data.mouse.x, msg->data.mouse.y)) {
+            && intgame_panel_close_lens_check_pt(msg->data.mouse.x, msg->data.mouse.y)) {
             schematic_ui_close();
             return true;
         }
@@ -718,7 +842,7 @@ bool schematic_ui_message_filter(TigMessage* msg)
             && schematic_ui_window != TIG_WINDOW_HANDLE_INVALID) {
             TigWindowData menu_wd;
             if (tig_window_data(schematic_ui_window, &menu_wd) == TIG_OK
-                && intgame_should_dismiss_overlay_click(msg->data.mouse.x, msg->data.mouse.y, &menu_wd.rect)) {
+                && intgame_panel_should_dismiss_overlay_click(msg->data.mouse.x, msg->data.mouse.y, &menu_wd.rect)) {
                 schematic_ui_close();
                 return true;
             }
@@ -808,6 +932,7 @@ bool schematic_ui_message_filter(TigMessage* msg)
             // Handle tech discipline tab selection.
             for (tech = 0; tech < TECH_COUNT; tech++) {
                 if (msg->data.button.button_handle == schematic_ui_tabs[tech].button_handle) {
+                    schematic_ui_search[0] = '\0';
                     schematic_ui_cur_tech = tech;
                     schematic_ui_cur_page = 0;
                     schematic_ui_redraw();
@@ -818,6 +943,7 @@ bool schematic_ui_message_filter(TigMessage* msg)
 
             // Handle page navigation buttons.
             if (msg->data.button.button_handle == schematic_ui_buttons[SCHEMATIC_UI_BUTTON_PREV].button_handle) {
+                if (schematic_ui_search[0] != '\0') { schematic_ui_search_step(-1); schematic_ui_redraw(); return true; }
                 schematic_ui_cur_page--;
                 schematic_ui_redraw();
                 gsound_play_sfx(SND_INTERFACE_BOOK_PAGE_TURN, 1);
@@ -825,6 +951,7 @@ bool schematic_ui_message_filter(TigMessage* msg)
             }
 
             if (msg->data.button.button_handle == schematic_ui_buttons[SCHEMATIC_UI_BUTTON_NEXT].button_handle) {
+                if (schematic_ui_search[0] != '\0') { schematic_ui_search_step(1); schematic_ui_redraw(); return true; }
                 schematic_ui_cur_page++;
                 schematic_ui_redraw();
                 gsound_play_sfx(SND_INTERFACE_BOOK_PAGE_TURN, 1);
@@ -833,6 +960,7 @@ bool schematic_ui_message_filter(TigMessage* msg)
 
             // Switch to "Learned schematics" view.
             if (msg->data.button.button_handle == schematic_ui_buttons[SCHEMATIC_UI_BUTTON_LEARNED].button_handle) {
+                schematic_ui_search[0] = '\0';
                 if (schematic_ui_view == SCHEMATIC_UI_VIEW_FOUND) {
                     tig_button_state_change(schematic_ui_tabs[schematic_ui_cur_tech].button_handle, TIG_BUTTON_STATE_RELEASED);
 
@@ -864,6 +992,7 @@ bool schematic_ui_message_filter(TigMessage* msg)
 
             // Switch to "Found schematics" view.
             if (msg->data.button.button_handle == schematic_ui_buttons[SCHEMATIC_UI_BUTTON_FOUND].button_handle) {
+                schematic_ui_search[0] = '\0';
                 if (schematic_ui_view == SCHEMATIC_UI_VIEW_LEARNED) {
                     tig_button_state_change(schematic_ui_tabs[schematic_ui_cur_tech].button_handle, TIG_BUTTON_STATE_RELEASED);
 
@@ -897,9 +1026,36 @@ bool schematic_ui_message_filter(TigMessage* msg)
         case TIG_BUTTON_STATE_RELEASED:
             // Handle "Combine" button.
             if (msg->data.button.button_handle == schematic_ui_buttons[SCHEMATIC_UI_BUTTON_COMBINE].button_handle) {
+                if (schematic_ui_search[0] != '\0' && !schematic_ui_search_matches(schematic_ui_current_id())) {
+                    ui_message.type = UI_MSG_TYPE_EXCLAMATION;
+                    ui_message.str = (char*)mes_localized_get("crafting_ui", 2);
+                    intgame_message_window_display_msg(&ui_message);
+                    return true;
+                }
                 switch (schematic_ui_readiness) {
                 case SCHEMATIC_UI_READINESS_OK:
-                    schematic_ui_process(schematic_ui_current_id(), schematic_ui_primary_obj, schematic_ui_secondary_obj);
+                    {
+                        int made = 0;
+                        schematic_ui_batch_processing = true;
+                        for (; made < schematic_ui_batch_size; made++) {
+                            if (!schematic_ui_process(schematic_ui_current_id(), schematic_ui_primary_obj, schematic_ui_secondary_obj)) break;
+                            if (crafting_products_dropped()) { made++; break; }
+                        }
+                        schematic_ui_batch_processing = false;
+                        if (made > 0) ui_schematic_feedback(true, schematic_ui_primary_obj, schematic_ui_secondary_obj);
+                        if (schematic_ui_batch_size > 1) {
+                            char text[128];
+                            snprintf(text, sizeof(text), mes_localized_get("crafting_ui", 8), made, schematic_ui_batch_size);
+                            ui_message.type = UI_MSG_TYPE_EXCLAMATION;
+                            ui_message.str = text;
+                            intgame_message_window_display_msg(&ui_message);
+                        }
+                        if (crafting_products_dropped()) {
+                            ui_message.type = UI_MSG_TYPE_EXCLAMATION;
+                            ui_message.str = (char*)mes_localized_get("crafting_ui", 9);
+                            intgame_message_window_display_msg(&ui_message);
+                        }
+                    }
                     schematic_ui_redraw();
                     break;
                 case SCHEMATIC_UI_READINESS_NO_ITEMS:
@@ -930,6 +1086,172 @@ bool schematic_ui_message_filter(TigMessage* msg)
     }
 
     return false;
+}
+
+static bool schematic_ui_search_matches(int schematic)
+{
+    if (schematic == -1) return false;
+    if (schematic_ui_view == SCHEMATIC_UI_VIEW_LEARNED
+        && !crafting_learned_schematic_known(schematic, tech_degree_get(schematic_ui_primary_obj, tech_from_schematic(schematic)))) return false;
+    if (schematic_ui_search[0] == '\0') return true;
+    SchematicInfo info;
+    schematic_ui_info_get(schematic, &info);
+    MesFileEntry entry = { info.name, NULL };
+    mes_get_msg(schematic_ui_text_mes_file, &entry);
+    if (language_text_contains(entry.str, schematic_ui_search, gamelib_current_language_get())) return true;
+    for (int component = 0; component < 2; component++) {
+        const int* alternatives = component == 0 ? info.item1 : info.item2;
+        for (int i = 0; i < 3; i++) {
+            int64_t prototype = alternatives[i] > 0 ? sub_4685A0(alternatives[i]) : OBJ_HANDLE_NULL;
+            if (prototype != OBJ_HANDLE_NULL
+                && language_text_contains(description_get(obj_field_int32_get(prototype, OBJ_F_DESCRIPTION)), schematic_ui_search, gamelib_current_language_get())) return true;
+        }
+    }
+    return false;
+}
+
+static bool schematic_ui_search_predicate(int index, void* context)
+{
+    (void)context;
+    return schematic_ui_search_matches(schematic_ui_cur_schematics[index]);
+}
+
+static bool schematic_ui_search_update(void)
+{
+    uint64_t key = UI_CACHE_KEY_INIT;
+    GameLanguage language = gamelib_current_language_get();
+    ui_cache_key_bytes(&key, &language, sizeof(language));
+    ui_cache_key_bytes(&key, &schematic_ui_primary_obj, sizeof(schematic_ui_primary_obj));
+    ui_cache_key_bytes(&key, &schematic_ui_view, sizeof(schematic_ui_view));
+    if (schematic_ui_cur_num_schematics > 0) {
+        ui_cache_key_bytes(&key, schematic_ui_cur_schematics,
+            (size_t)schematic_ui_cur_num_schematics * sizeof(*schematic_ui_cur_schematics));
+    }
+    for (int tech = 0; tech < TECH_COUNT; tech++) {
+        int degree = tech_degree_get(schematic_ui_primary_obj, tech);
+        ui_cache_key_bytes(&key, &degree, sizeof(degree));
+    }
+    bool rebuilt;
+    if (!ui_search_cache_update(&schematic_ui_search_cache, key, schematic_ui_search,
+            schematic_ui_cur_num_schematics, schematic_ui_search_predicate, NULL, &rebuilt)) return false;
+    tig_performance_count(rebuilt ? TIG_PERF_SEARCH_CACHE_BUILDS : TIG_PERF_SEARCH_CACHE_HITS, 1);
+    schematic_ui_search_count = schematic_ui_search_cache.count;
+    return true;
+}
+
+static bool schematic_ui_search_step(int step)
+{
+    if (!schematic_ui_search_update()) return false;
+    int current = schematic_ui_current_id();
+    int current_index = -1;
+    for (int i = 0; i < schematic_ui_search_cache.count; i++) {
+        int index = schematic_ui_search_cache.indices[i];
+        if (schematic_ui_cur_schematics[index] == current) current_index = index;
+    }
+    int index = ui_search_cache_select(&schematic_ui_search_cache, current_index, step);
+    if (index == -1) return false;
+    int tech = tech_from_schematic(schematic_ui_cur_schematics[index]);
+    int page = 0;
+    for (int i = 0; i < index; i++) if (tech_from_schematic(schematic_ui_cur_schematics[i]) == tech) page++;
+    tig_button_state_change(schematic_ui_tabs[schematic_ui_cur_tech].button_handle, TIG_BUTTON_STATE_RELEASED);
+    schematic_ui_cur_tech = tech;
+    schematic_ui_cur_page = page;
+    tig_button_state_change(schematic_ui_tabs[tech].button_handle, TIG_BUTTON_STATE_PRESSED);
+    return true;
+}
+
+static void schematic_ui_search_changed(TextEdit* edit)
+{
+    (void)edit;
+    if (schematic_ui_search[0] != '\0') schematic_ui_search_step(0);
+    else schematic_ui_search_count = 0;
+    schematic_ui_redraw();
+}
+
+static void schematic_ui_search_finished(TextEdit* edit)
+{
+    textedit_ui_unfocus(edit);
+    schematic_ui_search_focused = false;
+    schematic_ui_redraw();
+}
+
+void schematic_ui_toolbar_visible(bool visible)
+{
+    if (!visible && schematic_ui_search_focused) {
+        textedit_ui_unfocus(&schematic_ui_search_edit);
+        schematic_ui_search_focused = false;
+    }
+    if (schematic_ui_toolbar_window != TIG_WINDOW_HANDLE_INVALID) {
+        if (visible && schematic_ui_created && settings_get_value(&settings, SCHEMATIC_TOOLBAR_KEY)) tig_window_show(schematic_ui_toolbar_window);
+        else tig_window_hide(schematic_ui_toolbar_window);
+    }
+}
+
+bool schematic_ui_is_created(void) { return schematic_ui_created; }
+
+void schematic_ui_turn_page(int step)
+{
+    if (!schematic_ui_created || step == 0) return;
+    if (schematic_ui_search[0] != '\0') {
+        schematic_ui_search_step(step > 0 ? 1 : -1);
+    } else {
+        int pages = schematic_ui_cur_num_schematics_by_tech[schematic_ui_cur_tech];
+        if (pages <= 0) return;
+        schematic_ui_cur_page = SDL_clamp(schematic_ui_cur_page + (step > 0 ? 1 : -1), 0, pages - 1);
+    }
+    schematic_ui_redraw();
+}
+
+static void schematic_ui_toolbar_text(TigRect rect, const char* text)
+{
+    tig_window_handle_t window = schematic_ui_window;
+    if (rect.y >= schematic_ui_party_rect.y) {
+        window = schematic_ui_toolbar_window;
+        rect.x -= schematic_ui_party_rect.x;
+        rect.y -= schematic_ui_party_rect.y;
+    }
+    ui_search_bar_cell(window, rect,
+        window == schematic_ui_toolbar_window ? logbook_ui_toolbar_font() : schematic_ui_description_font,
+        text, false);
+}
+
+static void schematic_ui_draw_toolbar(const CraftingPreview* preview)
+{
+    if (!settings_get_value(&settings, SCHEMATIC_TOOLBAR_KEY)) {
+        ui_search_bar_close(&schematic_ui_toolbar_window);
+        if (schematic_ui_search_focused) textedit_ui_unfocus(&schematic_ui_search_edit);
+        schematic_ui_search_focused = false;
+        schematic_ui_search[0] = '\0';
+        schematic_ui_batch_size = 1;
+        return;
+    }
+    if (!ui_search_bar_open(&schematic_ui_toolbar_window, schematic_ui_window,
+            (TigRect){ 220, 393, 473, 47 }, schematic_ui_message_filter)) return;
+    char text[256];
+    schematic_ui_search_count = 0;
+    if (schematic_ui_search[0] != '\0') {
+        schematic_ui_search_update();
+    }
+    snprintf(text, sizeof(text), "%s: %s%s", mes_localized_get("crafting_ui", 0), schematic_ui_search,
+        schematic_ui_search_focused ? "_" : "");
+    if (schematic_ui_search[0] != '\0' && !schematic_ui_search_focused) {
+        size_t len = strlen(text);
+        snprintf(text + len, sizeof(text) - len, " (%d)", schematic_ui_search_count);
+    }
+    schematic_ui_toolbar_text(schematic_ui_search_rect, text);
+    schematic_ui_toolbar_text(schematic_ui_quantity_rects[0], "-");
+    snprintf(text, sizeof(text), "%s: %d", mes_localized_get("crafting_ui", 3), schematic_ui_batch_size);
+    schematic_ui_toolbar_text(schematic_ui_quantity_rects[1], text);
+    schematic_ui_toolbar_text(schematic_ui_quantity_rects[2], "+");
+    snprintf(text, sizeof(text), "%s: %s", mes_localized_get("crafting_ui", 4),
+        mes_localized_get("crafting_ui", settings_get_value(&settings, CRAFTING_PARTY_COMPONENTS_KEY) != 0 ? 5 : 6));
+    schematic_ui_toolbar_text(schematic_ui_party_rect, text);
+    if (schematic_ui_current_id() != -1) {
+        for (int i = 0; i < 2; i++) {
+            snprintf(text, sizeof(text), "%s: %d/%d", mes_localized_get("crafting_ui", 7), preview->stock[i], schematic_ui_batch_size);
+            schematic_ui_toolbar_text((TigRect){ 579, 161 + i * 96, 99, 18 }, text);
+        }
+    }
 }
 
 /**
@@ -1088,42 +1410,29 @@ void schematic_ui_redraw(void)
     SchematicInfo schematic_info;
     int64_t obj;
     char icon[2];
-    bool have_item1;
-    bool have_expertise1;
-    bool have_item2;
-    bool have_expertise2;
+    CraftingPreview preview;
 
     // Show or hide navigation buttons based on page availability.
-    if (schematic_ui_cur_page != 0) {
+    if (schematic_ui_cur_page != 0 || schematic_ui_search[0] != '\0') {
         tig_button_show(schematic_ui_buttons[SCHEMATIC_UI_BUTTON_PREV].button_handle);
     } else {
         tig_button_hide(schematic_ui_buttons[SCHEMATIC_UI_BUTTON_PREV].button_handle);
     }
 
-    if (schematic_ui_cur_page < schematic_ui_cur_num_schematics_by_tech[schematic_ui_cur_tech] - 1) {
+    if (schematic_ui_cur_page < schematic_ui_cur_num_schematics_by_tech[schematic_ui_cur_tech] - 1 || schematic_ui_search[0] != '\0') {
         tig_button_show(schematic_ui_buttons[SCHEMATIC_UI_BUTTON_NEXT].button_handle);
     } else {
         tig_button_hide(schematic_ui_buttons[SCHEMATIC_UI_BUTTON_NEXT].button_handle);
     }
 
-    // Draw background.
-    blit_info.flags = 0;
-    tig_art_interface_id_create(365, 0, 0, 0, &(blit_info.art_id));
-
-    src_rect.x = 0;
-    src_rect.y = 0;
-    src_rect.width = schematic_ui_window_rect.width;
-    src_rect.height = schematic_ui_window_rect.height;
-    blit_info.src_rect = &src_rect;
-
-    dst_rect = src_rect;
-    blit_info.dst_rect = &dst_rect;
-
-    tig_window_blit_art(schematic_ui_window, &blit_info);
+    // XL extends downward only; controls retain their original coordinates.
+    ui_panel_background_draw(schematic_ui_window,
+        settings_get_value(&settings, SCHEMATIC_TOOLBAR_KEY) ? NAME_SCHEMATIC_BASE_XL : 365, 0, 0);
 
     // Obtain current schematic info.
     schematic = schematic_ui_current_id();
     schematic_ui_info_get(schematic, &schematic_info);
+    crafting_preview(schematic_ui_primary_obj, &schematic_info, &preview);
 
     // Draw schematic image.
     blit_info.flags = 0;
@@ -1194,13 +1503,12 @@ void schematic_ui_redraw(void)
     tig_font_pop();
 
     // Draw schematic components.
-    schematic_ui_draw_component(0, &schematic_info, &have_item1, &have_expertise1);
-    schematic_ui_draw_component(1, &schematic_info, &have_item2, &have_expertise2);
-
+    schematic_ui_draw_component(0, &preview);
+    schematic_ui_draw_component(1, &preview);
     // Determine readiness state based on component checks.
-    if (!have_expertise1 || !have_expertise2) {
+    if (!preview.expertise_available[0] || !preview.expertise_available[1]) {
         schematic_ui_readiness = SCHEMATIC_UI_READINESS_NO_EXPERTISE;
-    } else if (!have_item1 || !have_item2) {
+    } else if (!preview.component_available[0] || !preview.component_available[1] || !preview.pair_available) {
         schematic_ui_readiness = SCHEMATIC_UI_READINESS_NO_ITEMS;
     } else {
         schematic_ui_readiness = SCHEMATIC_UI_READINESS_OK;
@@ -1224,6 +1532,7 @@ void schematic_ui_redraw(void)
     blit_info.dst_rect = &dst_rect;
 
     tig_window_blit_art(schematic_ui_window, &blit_info);
+    schematic_ui_draw_toolbar(&preview);
 }
 
 /**
@@ -1231,66 +1540,30 @@ void schematic_ui_redraw(void)
  *
  * 0x56E190
  */
-void schematic_ui_draw_component(int ingr, SchematicInfo* schematic_info, bool* have_item, bool* have_expertise)
+void schematic_ui_draw_component(int ingr, const CraftingPreview* preview)
 {
-    int index;
+    int tech = preview->discipline[ingr];
+    int complexity = preview->complexity[ingr];
     TigArtAnimData art_anim_data;
     TigArtFrameData art_frame_data;
     TigArtBlitInfo art_blit_info;
     TigRect dst_rect;
     TigRect src_rect;
     int64_t item_obj;
-    int tech;
-    int complexity;
     TigPalette* palette;
     TigPaletteModifyInfo palette_modify_info;
     char str[80];
     float width_ratio;
     float height_ratio;
 
-    // Check availability of the required item.
-    if (ingr == 0) {
-        for (index = 0; index < 3; index++) {
-            item_obj = sub_4685A0(schematic_info->item1[index]);
-            if (sub_462540(schematic_ui_primary_obj, item_obj, 0x7) != OBJ_HANDLE_NULL) {
-                break;
-            }
-        }
-
-        if (index == 3) {
-            item_obj = sub_4685A0(schematic_info->item1[0]);
-            *have_item = false;
-        } else {
-            *have_item = true;
-        }
-
-        schematic_ui_component1_obj = item_obj;
-    } else {
-        for (index = 0; index < 3; index++) {
-            item_obj = sub_4685A0(schematic_info->item2[index]);
-            if (sub_462540(schematic_ui_primary_obj, item_obj, 0x7) != OBJ_HANDLE_NULL) {
-                break;
-            }
-        }
-
-        if (index == 3) {
-            item_obj = sub_4685A0(schematic_info->item2[0]);
-            *have_item = false;
-        } else {
-            *have_item = true;
-        }
-
-        schematic_ui_component2_obj = item_obj;
-    }
-
-    // Check expertise for the component's tech discipline.
-    tech = obj_field_int32_get(item_obj, OBJ_F_ITEM_DISCIPLINE);
-    complexity = -obj_field_int32_get(item_obj, OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY);
-    *have_expertise = tech_degree_level_get(schematic_ui_primary_obj, tech) >= complexity;
+    item_obj = preview->prototypes[ingr];
+    if (item_obj == OBJ_HANDLE_NULL) return;
+    if (ingr == 0) schematic_ui_component1_obj = item_obj;
+    else schematic_ui_component2_obj = item_obj;
 
     // Draw component background based on expertise and item availability.
-    if (*have_expertise) {
-        if (*have_item) {
+    if (preview->expertise_available[ingr]) {
+        if (preview->component_available[ingr]) {
             // "schem_have_item.art"
             tig_art_interface_id_create(831, 0, 0, 0, &(art_blit_info.art_id));
         } else {
@@ -1377,7 +1650,7 @@ void schematic_ui_draw_component(int ingr, SchematicInfo* schematic_info, bool* 
     art_blit_info.dst_rect = &dst_rect;
 
     // Apply grayscale effect if expertise is lacking.
-    if (!*have_expertise && tig_art_anim_data(art_blit_info.art_id, &art_anim_data) == TIG_OK) {
+    if (!preview->expertise_available[ingr] && tig_art_anim_data(art_blit_info.art_id, &art_anim_data) == TIG_OK) {
         palette = tig_palette_create();
 
         palette_modify_info.flags = TIG_PALETTE_MODIFY_GRAYSCALE;
@@ -1425,90 +1698,11 @@ void schematic_ui_draw_component(int ingr, SchematicInfo* schematic_info, bool* 
  */
 bool schematic_ui_process(int schematic, int64_t primary_obj, int64_t secondary_obj)
 {
+    if (schematic == -1) return false;
     SchematicInfo info;
-    int64_t obj;
-    int ingridient1;
-    int ingridient2;
-    int64_t ingridient1_obj;
-    int64_t ingridient2_obj;
-    int prod;
-    int64_t loc;
-    int qty;
-    int64_t prod_obj;
-
-    // Check for title page.
-    if (schematic == -1) {
-        return false;
-    }
-
-    // Retrieve schematic information.
     schematic_ui_info_get(schematic, &info);
-
-    // Find available item for component 1.
-    for (ingridient1 = 0; ingridient1 < 3; ingridient1++) {
-        obj = sub_4685A0(info.item1[ingridient1]);
-        ingridient1_obj = sub_462540(primary_obj, obj, 0x7);
-        if (ingridient1_obj != OBJ_HANDLE_NULL) {
-            break;
-        }
-    }
-    if (ingridient1 == 3) {
-        return false;
-    }
-
-    // Find available item for component 2.
-    for (ingridient2 = 0; ingridient2 < 3; ingridient2++) {
-        obj = sub_4685A0(info.item2[ingridient2]);
-        ingridient2_obj = sub_462540(primary_obj, obj, 0x7);
-        if (ingridient2_obj != OBJ_HANDLE_NULL) {
-            break;
-        }
-    }
-    if (ingridient2 == 3) {
-        return false;
-    }
-
-    if (ingridient1 != 0) {
-        prod = info.prod[ingridient1];
-    } else {
-        prod = info.prod[ingridient2];
-    }
-
-    loc = obj_field_int64_get(primary_obj, OBJ_F_LOCATION);
-
-    // Consume component 1 item.
-    if (obj_field_int32_get(ingridient1_obj, OBJ_F_TYPE) == OBJ_TYPE_AMMO) {
-        item_ammo_transfer(primary_obj,
-            OBJ_HANDLE_NULL,
-            1,
-            obj_field_int32_get(ingridient1_obj, OBJ_F_AMMO_QUANTITY),
-            ingridient1_obj);
-    } else {
-        object_destroy(ingridient1_obj);
-    }
-
-    // Consume component 2 item.
-    if (obj_field_int32_get(ingridient2_obj, OBJ_F_TYPE) == OBJ_TYPE_AMMO) {
-        item_ammo_transfer(primary_obj,
-            OBJ_HANDLE_NULL,
-            1,
-            obj_field_int32_get(ingridient2_obj, OBJ_F_AMMO_QUANTITY),
-            ingridient2_obj);
-    } else {
-        object_destroy(ingridient2_obj);
-    }
-
-    // Create final product items.
-    for (qty = 0; qty < info.qty; qty++) {
-        if (!object_create(sub_4685A0(prod), loc, &prod_obj)) {
-            return false;
-        }
-
-        item_transfer(prod_obj, primary_obj);
-    }
-
-    ui_schematic_feedback(true, primary_obj, secondary_obj);
-
+    if (!crafting_process(primary_obj, &info)) return false;
+    if (!schematic_ui_batch_processing) ui_schematic_feedback(true, primary_obj, secondary_obj);
     return true;
 }
 

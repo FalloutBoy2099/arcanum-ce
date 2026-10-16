@@ -185,6 +185,8 @@ bool cyclic_ui_handle_button_pressed(tig_button_handle_t button_handle)
  */
 void cyclic_ui_control_init(CyclicUiControlInfo* info)
 {
+    info->value_font = TIG_FONT_HANDLE_INVALID;
+    info->value_font_index = -1;
     info->x = 0;
     info->y = 0;
     info->type = 0;
@@ -933,7 +935,9 @@ bool cyclic_ui_draw_text(CyclicUiControl* ctrl)
     text_rect.height = art_frame_data.height;
 
     // Draw text value.
-    tig_font_push(cyclic_ui_flare12_red_font);
+    tig_font_push(ctrl->info.value_font != TIG_FONT_HANDLE_INVALID
+        && (ctrl->info.value_font_index < 0 || ctrl->value == ctrl->info.value_font_index)
+        ? ctrl->info.value_font : cyclic_ui_flare12_red_font);
     if (tig_window_text_write(ctrl->info.window_handle, str, &text_rect) != TIG_OK) {
         tig_debug_println("Error, cyclic_ui_draw_text:  Text write failed");
         tig_font_pop();

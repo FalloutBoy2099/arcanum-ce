@@ -17,6 +17,8 @@ static void settings_trim(char* str);
 static const char* const arcanum_ini_global_save_order[] = {
     "language",
     "show_version",
+    "performance_logging",
+    "benchmark_autorun",
     NULL,
 };
 
@@ -32,6 +34,10 @@ static const char* const arcanum_ini_game_save_order[] = {
     "followers_manually_level_up",
     "autosave_travel",
     "autosave_sleep",
+    "action_tooltips",
+    "window_close_mode",
+    "random_encounters",
+    "crafting_party_components",
     NULL,
 };
 
@@ -45,12 +51,11 @@ static const char* const arcanum_ini_video_save_order[] = {
     "zoom_max",
     "zoom_filter",
     "brightness",
+    "lighting",
     "text_duration",
     "text_floaters",
     "float_speed",
     "combat_taunts",
-    "dialog_font",
-    "logbook_font",
     "main_menu_art",
     "menu_borders",
     "object_lighting",
@@ -72,6 +77,9 @@ static const char* const arcanum_ini_audio_save_order[] = {
 };
 
 static const char* const arcanum_ini_ui_save_order[] = {
+    "schematic_toolbar",
+    "logbook_toolbar",
+    "worldmap_toolbar",
     "dialogue_camera_mode",
     "dialogue_camera_zoom_to_fit",
     "dialogue_camera_tween_back",
@@ -83,14 +91,20 @@ static const char* const arcanum_ini_ui_save_order[] = {
     "dialogue_emote_dim_percent",
     "dialog_options_min",
     "dialog_options_max",
+    "dialog_margin_horizontal",
+    "dialog_margin_vertical",
+    "dialog_background_opacity",
+    NULL,
+};
+
+static const char* const arcanum_ini_fonts_save_order[] = {
+    "dialog_font",
+    "logbook_font",
     "modern_fonts",
     "modern_font_path",
     "modern_font_size",
     "dialog_font_path",
     "dialog_font_size",
-    "dialog_margin_horizontal",
-    "dialog_margin_vertical",
-    "dialog_background_opacity",
     "floating_font_path",
     "floating_font_size",
     "floating_shadow_color",
@@ -154,11 +168,32 @@ static const char* const arcanum_ini_bindings_save_order[] = {
     "follower_spread_out",
     "follower_stop",
     "",
+    "logbook_previous",
+    "logbook_next",
+    "logbook_page_previous",
+    "logbook_page_next",
+    "schematics_previous",
+    "schematics_next",
+    "schematics_page_previous",
+    "schematics_page_next",
+    "",
     "scroll_up",
     "scroll_down",
     "scroll_left",
     "scroll_right",
     NULL,
+};
+
+static const char* const arcanum_ini_controller_save_order[] = {
+    "controller_enabled",
+    "controller_cursor_speed", "controller_cursor_deadzone",
+    "controller_camera_deadzone", "controller_precision_percent", "controller_trigger_threshold",
+    "controller_swap_sticks", "",
+    "controller_mouse_left", "controller_mouse_right", "controller_toggle_combat", "controller_combat_mode",
+    "controller_end_turn", "controller_map", "controller_main_menu", "controller_inventory",
+    "controller_character", "controller_logbook", "controller_center_camera", "controller_zoom_reset", "",
+    "controller_quick_save", "controller_sleep", "controller_spells", "controller_schematics",
+    "controller_zoom_in", "controller_zoom_out", NULL,
 };
 
 static const char* const arcanum_ini_section_names[] = {
@@ -167,7 +202,9 @@ static const char* const arcanum_ini_section_names[] = {
     "video",
     "audio",
     "ui",
+    "fonts",
     "bindings",
+    "xbox_controller",
     NULL,
 };
 
@@ -177,7 +214,9 @@ static const char* const* const arcanum_ini_save_order[] = {
     arcanum_ini_video_save_order,
     arcanum_ini_audio_save_order,
     arcanum_ini_ui_save_order,
+    arcanum_ini_fonts_save_order,
     arcanum_ini_bindings_save_order,
+    arcanum_ini_controller_save_order,
     NULL,
 };
 
@@ -571,6 +610,12 @@ const char* settings_normalize_key(const char* key)
 
 const char* settings_normalize_section_key(const char* section, const char* key)
 {
+    if ((SDL_strcasecmp(section, "xbox_controller") == 0 || SDL_strcasecmp(section, "controller") == 0)
+        && SDL_strncasecmp(key, "controller_", 11) != 0) {
+        static char controller_key[256];
+        snprintf(controller_key, sizeof(controller_key), "controller_%s", key);
+        return controller_key;
+    }
     if (SDL_strcasecmp(section, "bindings") == 0
         && SDL_strcasecmp(key, "always_run") == 0) {
         return "binding_always_run";
@@ -581,6 +626,7 @@ const char* settings_normalize_section_key(const char* section, const char* key)
 
 const char* settings_output_key(const char* key)
 {
+    if (SDL_strncasecmp(key, "controller_", 11) == 0) return key + 11;
     if (SDL_strcasecmp(key, "binding_always_run") == 0) {
         return "always_run";
     }

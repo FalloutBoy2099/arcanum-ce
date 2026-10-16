@@ -605,8 +605,7 @@ int sub_460BB0(void)
 // 0x460BC0
 int sub_460BC0(void)
 {
-    // FIXME: Checks the wrong callback for NULL.
-    if (ui_callbacks.field_11C != NULL) {
+    if (ui_callbacks.field_120 != NULL) {
         return ui_callbacks.field_120();
     } else {
         return 0;

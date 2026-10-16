@@ -1458,7 +1458,7 @@ void ai_npc_wait(int64_t obj)
 {
     int wait;
     int64_t leader_obj;
-    TimeEvent timeevent;
+    TimeEvent timeevent = { 0 };
     DateTime datetime;
     unsigned int npc_flags;
 
@@ -1472,6 +1472,9 @@ void ai_npc_wait(int64_t obj)
 
     wait = obj_field_int32_get(obj, OBJ_F_NPC_WAIT);
     leader_obj = critter_leader_get(obj);
+    if (leader_obj == OBJ_HANDLE_NULL) {
+        return;
+    }
 
     // NOTE: The original code (0x4AA818) skips the "become jilted" timer when the leader's
     // charisma IS extraordinary - such followers wait indefinitely.
@@ -1481,9 +1484,10 @@ void ai_npc_wait(int64_t obj)
             wait++;
         }
 
-        if (wait < 6) {
+        if (wait >= 0 && wait < SDL_arraysize(stru_5B5088)) {
             datetime = stru_5B5088[wait];
             timeevent.type = TIMEEVENT_TYPE_NPC_WAIT_HERE;
+            timeevent.params[0].object_value = obj;
             timeevent_add_delay(&timeevent, &datetime);
         }
     }
