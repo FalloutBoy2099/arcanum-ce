@@ -155,3 +155,12 @@ glyph positions in the original NewTimes16 bitmap font used by the world map.
 The ASCII glyphs, original glyph artwork, metrics, palette and font style are
 preserved. Install it at the same path inside the French language pack.
 The y-diaeresis glyph uses the font's existing y and diaeresis pixels.
+
+## Automaton Gunner
+
+`automaton_gunner/` contains the seven binary resources and English/French
+description patches for the CE port of TechErrorCode's Automaton Gunner 1.0.4.
+Use `tools/install_automaton_gunner.py` to merge the text into existing catalogs
+and back up replaced resources. See [CE integration instructions](automaton_gunner/CE-INTEGRATION.md).
+The original executable patcher targets the classic engine and must not be
+applied to CE.

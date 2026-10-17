@@ -60,3 +60,7 @@ round trips, localized captions, accented matching offsets, underline clipping
 and unchanged font measurements, wrapped text, filtered pagination, and an
 attached toolbar extending below its parent's buffer. In-game visual validation
 of the final positions and the native-font underline remains required.
+
+Schematic component stock labels are plain text on the existing parchment, without added backgrounds or borders: their 18-pixel text regions reserve 16 pixels for the original 15-pixel bitmap font. The previous general toolbar padding left only 12 pixels and silently suppressed all text. A bitmap rendering regression checks that the old padding draws no glyphs while compact label padding produces visible stock text while leaving the surrounding parchment intact. Search and quantity toolbar padding is unchanged.
+
+Component labels display required units (`Qty: N`) and available stock (`Stock: N`) in two separate columns. Quantity and Produced start at x=583; Stock starts at x=633, exactly 50 logical pixels to the right. Beneath the second component, `Produced: N` previews the selected recipe yield multiplied by the requested crafting lots, including prototype quantities for ammunition and gold. This is the requested result, not a guarantee that all lots can be crafted with the current stock. Labels are localized in `crafting_ui.mes` IDs 10–12 and share the same fixed left alignment.

@@ -1,5 +1,6 @@
 #include "tig/font.h"
 #include "tig/performance.h"
+#include "tig/text_cache.h"
 
 #include "tig/art.h"
 #include "tig/color.h"
@@ -10,6 +11,8 @@
 #include <SDL3_ttf/SDL_ttf.h>
 
 #define FONT_STACK_SIZE 20
+
+static TigTextCache tig_font_text_cache;
 
 static int sub_535850(TigVideoBuffer* video_buffer, const char* str, int length, TigArtBlitInfo* blit_info, bool shadow, bool* in_bracket);
 static int sub_535C40(tig_art_id_t font_art_id, const char* str, int max_width, int* width_ptr);
@@ -68,6 +71,7 @@ void tig_font_exit(void)
 {
     tig_font_pop();
     tig_font_destroy(tig_font_default_font);
+    tig_text_cache_clear(&tig_font_text_cache, NULL);
 }
 
 // 0x5352E0
@@ -756,6 +760,7 @@ bool tig_font_modern_open(TigFont* font)
 void tig_font_modern_close(TigFont* font)
 {
     if (font->modern_font != NULL) {
+        tig_text_cache_clear(&tig_font_text_cache, font->modern_font);
         TTF_CloseFont((TTF_Font*)font->modern_font);
         font->modern_font = NULL;
         TTF_Quit();
@@ -803,6 +808,26 @@ static bool tig_font_modern_measure_impl(TigFont* font)
     return true;
 }
 
+static TigTextLease tig_font_modern_cached(TigFont* font, const char* str, int width, bool shadow)
+{
+    TigTextCacheKey key = { 0 };
+    key.font = font->modern_font;
+    key.flags = font->flags & (TIG_FONT_UTF8 | TIG_FONT_UNDERLINE | TIG_FONT_STRIKE_THROUGH);
+    if (!shadow) key.flags |= font->flags & TIG_FONT_DIM_BRACKETS;
+    key.width = width;
+    key.color = shadow ? tig_font_modern_shadow_color(font) : tig_font_modern_color(font->color);
+    key.dim_percent = (key.flags & TIG_FONT_DIM_BRACKETS) != 0 ? font->bracket_dim_percent : 100;
+    TigTextLease lease = tig_text_cache_get(&tig_font_text_cache, &key, str);
+    tig_performance_count(lease.surface != NULL ? TIG_PERF_TEXT_CACHE_HITS : TIG_PERF_TEXT_CACHE_MISSES, 1);
+    if (lease.surface == NULL) {
+        SDL_Surface* surface = shadow
+            ? tig_font_modern_render_color(font, str, width, key.color)
+            : tig_font_modern_render(font, str, width, font->color);
+        lease = tig_text_cache_put(&tig_font_text_cache, &key, str, surface);
+    }
+    return lease;
+}
+
 int tig_font_modern_write(TigVideoBuffer* video_buffer, const char* str, const TigRect* rect, TigRect* dirty_rect)
 {
     TigFont* font;
@@ -818,7 +843,8 @@ int tig_font_modern_write(TigVideoBuffer* video_buffer, const char* str, const T
     }
 
     font = tig_font_stack[tig_font_stack_index];
-    text_surface = tig_font_modern_render(font, str, rect->width, font->color);
+    TigTextLease text_lease = tig_font_modern_cached(font, str, rect->width, false);
+    text_surface = text_lease.surface;
     if (text_surface == NULL) {
         return TIG_ERR_GENERIC;
     }
@@ -842,22 +868,23 @@ int tig_font_modern_write(TigVideoBuffer* video_buffer, const char* str, const T
 
     // SDL_ttf treats a zero foreground alpha as opaque, so skip hidden shadows.
     if ((font->flags & TIG_FONT_SHADOW) != 0 && font->modern_shadow_opacity > 0) {
-        shadow_surface = tig_font_modern_render_color(font, str, rect->width, tig_font_modern_shadow_color(font));
+        TigTextLease shadow_lease = tig_font_modern_cached(font, str, rect->width, true);
+        shadow_surface = shadow_lease.surface;
         if (shadow_surface != NULL) {
             TigRect shadow_rect = dst_rect;
             shadow_rect.x += font->modern_shadow_distance;
             shadow_rect.y += font->modern_shadow_distance;
             rc = tig_video_buffer_blit_sdl_surface(shadow_surface, &src_rect, video_buffer, &shadow_rect);
-            SDL_DestroySurface(shadow_surface);
+            tig_text_cache_release(shadow_lease);
             if (rc != TIG_OK) {
-                SDL_DestroySurface(text_surface);
+                tig_text_cache_release(text_lease);
                 return rc;
             }
         }
     }
 
     rc = tig_video_buffer_blit_sdl_surface(text_surface, &src_rect, video_buffer, &dst_rect);
-    SDL_DestroySurface(text_surface);
+    tig_text_cache_release(text_lease);
     if (rc != TIG_OK) {
         return rc;
     }

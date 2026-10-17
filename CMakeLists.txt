@@ -174,12 +174,20 @@ set(SRCS
     "src/game/object_node.c"
     "src/game/object_node.h"
     "src/game/object.c"
+    "src/game/object_query.c"
+    "src/game/object_query.h"
     "src/game/object.h"
     "src/game/oname.c"
     "src/game/oname.h"
     "src/game/party.c"
     "src/game/party.h"
     "src/game/path.c"
+    "src/game/path_open_set.c"
+    "src/game/path_open_set.h"
+    "src/game/movement_turn.c"
+    "src/game/movement_turn.h"
+    "src/game/follower_navigation.c"
+    "src/game/follower_navigation.h"
     "src/game/path.h"
     "src/game/player.c"
     "src/game/player.h"
@@ -266,6 +274,9 @@ set(SRCS
     "src/game/tile.c"
     "src/game/tile.h"
     "src/game/timeevent.c"
+    "src/game/timeevent_node.h"
+    "src/game/timeevent_pool.c"
+    "src/game/timeevent_pool.h"
     "src/game/timeevent.h"
     "src/game/townmap.c"
     "src/game/townmap.h"
@@ -336,6 +347,10 @@ set(SRCS
     "src/ui/search_cache.c"
     "src/ui/search_cache.h"
     "src/ui/search_bar.c"
+    "src/ui/status_panel.c"
+    "src/ui/status_panel.h"
+    "src/ui/journal_index.c"
+    "src/ui/journal_index.h"
     "src/ui/search_bar.h"
     "src/ui/skill_ui.c"
     "src/ui/skill_ui.h"
@@ -385,6 +400,10 @@ target_link_libraries(arcanum-ce PUBLIC
 option(ARCANUM_BUILD_TESTS "Build headless community-feature regression tests" OFF)
 if(ARCANUM_BUILD_TESTS)
     enable_testing()
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME automaton_gunner COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/automaton_gunner_test.py")
+    endif()
     add_executable(community_features_test
         tests/community_features_test.c
         src/game/highres_config.c
@@ -397,6 +416,8 @@ if(ARCANUM_BUILD_TESTS)
         src/game/input_bindings.c
         src/game/controller.c
         src/game/settings.c
+        src/game/modern_font.c
+        src/ui/search_bar.c
         src/game/iso_zoom.c
     )
     target_include_directories(community_features_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -405,10 +426,15 @@ if(ARCANUM_BUILD_TESTS)
     target_include_directories(quality_of_life_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(quality_of_life_test PRIVATE ${TIG_LIBRARY})
     add_test(NAME quality_of_life COMMAND quality_of_life_test)
+    add_executable(pathfinding_test tests/pathfinding_test.c tests/path_reference.c src/game/path.c src/game/path_open_set.c src/game/movement_turn.c src/game/follower_navigation.c)
+    target_compile_definitions(pathfinding_test PRIVATE ARCANUM_PATH_TEST)
+    target_include_directories(pathfinding_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(pathfinding_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME pathfinding COMMAND pathfinding_test)
     add_executable(performance_test tests/performance_test.c)
     target_link_libraries(performance_test PRIVATE ${TIG_LIBRARY})
     add_test(NAME performance COMMAND performance_test)
-    add_executable(window_visibility_test tests/window_visibility_test.c src/ui/search_bar.c)
+    add_executable(window_visibility_test tests/window_visibility_test.c src/ui/search_bar.c src/ui/status_panel.c)
     target_include_directories(window_visibility_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(window_visibility_test PRIVATE ${TIG_LIBRARY})
     add_test(NAME window_visibility COMMAND window_visibility_test)
@@ -422,15 +448,34 @@ if(ARCANUM_BUILD_TESTS)
     add_executable(controller_test tests/controller_test.c)
     target_link_libraries(controller_test PRIVATE ${TIG_LIBRARY})
     add_test(NAME controller COMMAND controller_test)
-    add_executable(ui_cache_test tests/ui_cache_test.c src/ui/search_cache.c src/ui/text_pagination.c)
+    add_executable(ui_cache_test tests/ui_cache_test.c src/ui/search_cache.c src/ui/text_pagination.c src/ui/journal_index.c)
     target_include_directories(ui_cache_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     add_test(NAME ui_cache COMMAND ui_cache_test)
+
+    add_executable(text_cache_test tests/text_cache_test.c)
+    target_link_libraries(text_cache_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME text_cache COMMAND text_cache_test)
+
+    add_executable(video_upload_test tests/video_upload_test.c)
+    target_link_libraries(video_upload_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME video_upload COMMAND video_upload_test)
+
+    add_executable(object_query_test tests/object_query_test.c tests/object_query_reference.c src/game/object_query.c)
+    target_include_directories(object_query_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(object_query_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME object_query COMMAND object_query_test)
+
+    add_executable(timeevent_pool_test tests/timeevent_pool_test.c src/game/timeevent_pool.c)
+    target_include_directories(timeevent_pool_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(timeevent_pool_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME timeevent_pool COMMAND timeevent_pool_test)
     add_executable(ui_mode_test tests/ui_mode_test.c src/ui/intgame_mode.c src/ui/mainmenu_history.c)
     target_include_directories(ui_mode_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     add_test(NAME ui_mode COMMAND ui_mode_test)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/performance-test-runtime")
     set_tests_properties(performance PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/performance-test-runtime")
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-runtime")
+    set_tests_properties(pathfinding PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-runtime")
     if(WIN32)
         set(ARCANUM_TEST_FONT "$ENV{WINDIR}/Fonts/calibri.ttf" CACHE FILEPATH "TrueType font for headless rendering tests")
     else()

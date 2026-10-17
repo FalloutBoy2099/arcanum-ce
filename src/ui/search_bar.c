@@ -54,13 +54,28 @@ void ui_search_bar_close(tig_window_handle_t* handle)
     *handle = TIG_WINDOW_HANDLE_INVALID;
 }
 
-void ui_search_bar_cell(tig_window_handle_t handle, TigRect rect, tig_font_handle_t font,
-    const char* text, bool selected)
+static void ui_search_bar_cell_draw(tig_window_handle_t handle, TigRect rect, tig_font_handle_t font,
+    const char* text, bool selected, int vertical_padding)
 {
     tig_window_fill(handle, &rect, tig_color_make(105, 76, 35));
     rect.x++; rect.y++; rect.width -= 2; rect.height -= 2;
     tig_window_fill(handle, &rect, selected ? tig_color_make(180, 155, 105) : tig_color_make(210, 190, 145));
-    rect.x += 3; rect.y += 2; rect.width -= 6; rect.height -= 4;
+    rect.x += 3; rect.y += vertical_padding; rect.width -= 6; rect.height -= vertical_padding * 2;
+    tig_font_push(font);
+    tig_window_text_write(handle, text, &rect);
+    tig_font_pop();
+}
+
+void ui_search_bar_cell(tig_window_handle_t handle, TigRect rect, tig_font_handle_t font,
+    const char* text, bool selected)
+{
+    ui_search_bar_cell_draw(handle, rect, font, text, selected, 2);
+}
+
+void ui_search_bar_label(tig_window_handle_t handle, TigRect rect, tig_font_handle_t font,
+    const char* text)
+{
+    rect.x += 4; rect.y++; rect.width -= 8; rect.height -= 2;
     tig_font_push(font);
     tig_window_text_write(handle, text, &rect);
     tig_font_pop();

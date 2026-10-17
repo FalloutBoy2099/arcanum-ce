@@ -61,6 +61,7 @@
 #include "ui/roller_ui.h"
 #include "ui/schematic_ui.h"
 #include "ui/search_bar.h"
+#include "ui/status_panel.h"
 #include "ui/scrollbar_ui.h"
 #include "ui/skill_ui.h"
 #include "ui/sleep_ui.h"
@@ -9676,40 +9677,25 @@ void intgame_apply_translucent_black(tig_window_handle_t window_handle, bool ena
 #define ACTION_INFO_FRAME_WIDTH 210
 #define ACTION_INFO_FRAME_HEIGHT 24
 
-static tig_window_handle_t intgame_action_info_windows[2] = {
-    TIG_WINDOW_HANDLE_INVALID, TIG_WINDOW_HANDLE_INVALID,
+static UiStatusPanel intgame_action_info_panels[2] = {
+    { .window = TIG_WINDOW_HANDLE_INVALID }, { .window = TIG_WINDOW_HANDLE_INVALID },
 };
 static tig_timestamp_t intgame_action_tooltips_last_tick;
 
 static void intgame_action_info_hide(void)
 {
-    for (int side = 0; side < 2; side++) {
-        if (intgame_action_info_windows[side] != TIG_WINDOW_HANDLE_INVALID) {
-            tig_window_hide(intgame_action_info_windows[side]);
-        }
-    }
+    for (int side = 0; side < 2; side++) ui_status_panel_hide(&intgame_action_info_panels[side]);
 }
 
 static void intgame_action_tooltips_reset(void)
 {
     intgame_action_tooltips_last_tick = 0;
-    for (int side = 0; side < 2; side++) {
-        if (intgame_action_info_windows[side] != TIG_WINDOW_HANDLE_INVALID) {
-            tig_window_destroy(intgame_action_info_windows[side]);
-            intgame_action_info_windows[side] = TIG_WINDOW_HANDLE_INVALID;
-        }
-    }
+    for (int side = 0; side < 2; side++) ui_status_panel_destroy(&intgame_action_info_panels[side]);
 }
 
 static void intgame_action_info_draw(int side, const char* text)
 {
-    TigWindowData data = { 0 };
-    TigWindowData previous;
-    TigRect rect = { 0, 0, ACTION_INFO_FRAME_WIDTH, ACTION_INFO_FRAME_HEIGHT };
-    TigRect body = { 6, 0, ACTION_INFO_FRAME_WIDTH - 11, ACTION_INFO_FRAME_HEIGHT };
     TigRect anchor = intgame_interface_window_frames[1];
-    tig_window_handle_t* handle = &intgame_action_info_windows[side];
-    TigFont measure = { 0 };
 
     hrp_apply(&anchor, GRAVITY_CENTER_HORIZONTAL | GRAVITY_BOTTOM);
     if (intgame_hud_stage == INTGAME_HUD_STAGE_MEDIUM || intgame_hud_stage == INTGAME_HUD_STAGE_MINI) {
@@ -9730,29 +9716,9 @@ static void intgame_action_info_draw(int side, const char* text)
     // Leave the central turn-based action-point bar unobstructed.
     int x = side == 0 ? anchor.x + 6 : anchor.x + anchor.width - ACTION_INFO_FRAME_WIDTH - 6;
     int y = anchor.y - ACTION_INFO_FRAME_HEIGHT - 2;
-    if (*handle == TIG_WINDOW_HANDLE_INVALID) {
-        data.flags = TIG_WINDOW_ALWAYS_ON_TOP;
-        data.rect = rect;
-        data.rect.x = x;
-        data.rect.y = y;
-        data.background_color = tig_color_make(0, 0, 0);
-        if (tig_window_create(&data, handle) != TIG_OK) return;
-    } else {
-        tig_window_data(*handle, &previous);
-        if (previous.rect.x != x || previous.rect.y != y) tig_window_move(*handle, x, y);
-    }
-    tig_window_fill(*handle, &rect, tig_color_make(0, 0, 0));
-    tig_window_box(*handle, &rect, tig_color_make(144, 112, 48));
-    if (text[0] != '\0') {
-        tig_font_push(intgame_flare12_white_font);
-        measure.str = text;
-        tig_font_measure(&measure);
-        body.y = (body.height - measure.height) / 2;
-        body.height = measure.height;
-        tig_window_text_write(*handle, text, &body);
-        tig_font_pop();
-    }
-    tig_window_show(*handle);
+    ui_status_panel_draw(&intgame_action_info_panels[side],
+        (TigRect){ x, y, ACTION_INFO_FRAME_WIDTH, ACTION_INFO_FRAME_HEIGHT }, text,
+        intgame_flare12_white_font, tig_color_make(0, 0, 0), tig_color_make(144, 112, 48));
 }
 
 static const char* intgame_action_info_label(int id)

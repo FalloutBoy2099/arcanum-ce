@@ -402,7 +402,6 @@ bool gamelib_init(GameInitInfo* init_info)
     settings_register(&settings, LOGBOOK_COLOR_ACTIVE_KEY, "#000096", NULL);
     settings_register(&settings, LOGBOOK_COLOR_CURSE_KEY, "#960000", NULL);
     settings_register(&settings, MAIN_MENU_ART_KEY, "0", NULL);
-    settings_register(&settings, MENU_BORDERS_KEY, "0", NULL);
     settings_register(&settings, DIALOG_OPTIONS_MIN_KEY, "5", NULL);
     settings_register(&settings, DIALOG_OPTIONS_MAX_KEY, "5", NULL);
     settings_register(&settings, SHOW_VERSION_KEY, "0", NULL);
@@ -427,6 +426,10 @@ bool gamelib_init(GameInitInfo* init_info)
     settings_register(&settings, SCHEMATIC_TOOLBAR_KEY, "1", NULL);
     settings_register(&settings, LOGBOOK_TOOLBAR_KEY, "1", NULL);
     settings_register(&settings, WORLDMAP_TOOLBAR_KEY, "1", NULL);
+    settings_register(&settings, SCHEMATIC_COLOR_AVAILABLE_KEY, "original", NULL);
+    settings_register(&settings, SCHEMATIC_COLOR_MISSING_KEY, "original", NULL);
+    settings_register(&settings, SCHEMATIC_OPACITY_AVAILABLE_KEY, "100", NULL);
+    settings_register(&settings, SCHEMATIC_OPACITY_MISSING_KEY, "100", NULL);
     settings_register(&settings, HUD_STAGE_KEY, "0", NULL);
     tig_window_modal_translucent_black_set(
         settings_get_value(&settings, TRANSLUCENT_BLACK_UI_KEY) != 0, 8, 128);
@@ -2278,10 +2281,14 @@ static void vsync_mode_changed(void)
 void gamelib_draw_game(GameDrawInfo* draw_info)
 {
     if (tig_video_3d_begin_scene() == TIG_OK) {
+        Uint64 start = tig_performance_begin();
         light_draw(draw_info);
+        tig_performance_end(TIG_PERF_LIGHTING, start);
         tile_draw(draw_info);
         sub_43C690(draw_info);
+        start = tig_performance_begin();
         object_draw(draw_info);
+        tig_performance_end(TIG_PERF_OBJECTS, start);
         roof_draw(draw_info);
         if (!gamelib_zoom_world_pass_active) {
             tb_draw(draw_info);

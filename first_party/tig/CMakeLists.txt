@@ -27,9 +27,11 @@ set(HDRS
     "include/tig/rect.h"
     "include/tig/sound.h"
     "include/tig/str_parse.h"
+    "include/tig/text_cache.h"
     "include/tig/tig.h"
     "include/tig/timer.h"
     "include/tig/video.h"
+    "include/tig/video_upload.h"
     "include/tig/window.h"
 )
 
@@ -62,8 +64,10 @@ set(SRCS
     "src/rect.c"
     "src/sound.c"
     "src/str_parse.c"
+    "src/text_cache.c"
     "src/timer.c"
     "src/video.c"
+    "src/video_upload.c"
     "src/window.c"
 )
 

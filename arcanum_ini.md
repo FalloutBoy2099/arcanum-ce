@@ -10,7 +10,7 @@ Use `key=value` entries under the sections below. Boolean settings use `0`
 settings, not the values in your existing file. Paths can be absolute or relative
 to the game directory; do not quote them. Decimal values use a dot (`0.5`).
 Empty values are ignored. Supported legacy names are imported and saved using
-the current names below.
+the current names below. Font settings formerly stored in `[ui]` or `[video]`, and `lighting` formerly stored in `[game]`, remain readable; saving writes them into their new sections.
 
 ## [global]
 
@@ -39,7 +39,6 @@ the current names below.
 | `action_tooltips` | `0` | Boolean. Enable experimental combat information in two fixed frames above the HUD (real-time or turn-based): movement AP from the current path, estimated attack hit chance, attack AP, distance and weapon range, and the selected spell's fatigue cost and range. One switch controls all hints. |
 | `window_close_mode` | `1` | `0` = Group: mouse closure through the circular portrait only. `1` = Modal: also allow clicking outside the panel, excluding HUD strips. Applies immediately to Inventory (including its trade/loot/service variants), Character Sheet outside character creation, World Map, Schematics and Journal. Keyboard close shortcuts remain available in either mode. |
 | `random_encounters` | `0` | `0` = Normal (original behavior), `1` = Interesting (skip trivial ordinary fights), `2` = Less frequent (divide the original encounter probability by 2.7). Applies immediately to the random encounter system during travel and resting. Unknown values use Normal. |
-| `lighting` | `0` | `0` = Normal, `25` = 25% less ambient darkness, `50` = 50% less ambient darkness. Applies indoors and outdoors. Each RGB channel moves toward full light by the selected fraction; full light is unchanged. Changes in Game options apply immediately. Other values use Normal. |
 | `crafting_party_components` | `0` | Boolean. Allow crafting to consume unequipped components carried by nearby conscious companions. Expertise always belongs to the selected crafter. Also available at the end of Game options and in the schematic toolbar. |
 
 Interesting mode leaves the original encounter roll and selection intact, then
@@ -87,22 +86,19 @@ not included in the initial casting cost.
 | `zoom_max` | `1.75` | Decimal `1.0`–`3.0`. Maximum zoom (`1.75` = 175%). Invalid values are ignored. |
 | `zoom_filter` | `linear` | `linear` = smooth scaling, `nearest` = sharp pixel scaling. Applies to world zoom. |
 | `brightness` | `0` | Integer `0`–`9`. Higher values increase gamma/brightness. |
+| `lighting` | `0` | `0` = Normal, `25` = 25% less ambient darkness, `50` = 50% less ambient darkness. Applies indoors and outdoors. Each RGB channel moves toward full light by the selected fraction; full light is unchanged. Changes in Video options apply immediately. Other values use Normal. |
 | `text_duration` | `6` | Integer `0`–`10`, seconds. Ordinary floating text bubble duration; scripts may override it. |
 | `text_floaters` | `1` | `0` = never, `1` = minimal, `2` = verbose. Gameplay text floaters. |
 | `float_speed` | `2` | Integer `0`–`10`. Higher values make gameplay text floaters rise faster. |
 | `combat_taunts` | `0` | Boolean. Enable combat taunts. |
-| `dialog_font` | `0` | Bitmap dialogue preset: `0` = 12, `1` = 14, `2` = 16. Custom font rendering uses `[ui]` settings. |
-| `logbook_font` | `0` | Bitmap logbook preset: `0` = 12, `1` = 14. Custom font rendering uses `[ui]` settings. |
 | `main_menu_art` | `0` | `0` = black, `1` = fade to black, `2` = wood background. For out-of-game menus, mode `2` uses `art/interface/wood_mask.art` around the centered 800x600 interface. Its center is aligned without scaling. |
-| `menu_borders` | `0` | Boolean. Enable UAP-style menu borders. |
 | `object_lighting` | `1` | Boolean. Enable object lighting. |
 | `shadows` | `0` | Boolean. Enable world object shadows. Text shadows use separate `[ui]` settings. |
 
 Ctrl + mouse wheel zooms the world view. Keyboard zoom shortcuts are listed
 under `[bindings]`. The world map retains its own navigation behavior.
 
-The options menu exposes VSync as an off/on switch; adaptive VSync remains
-available through `vsync_mode=2` in this file. The Language control offers
+The options menu exposes all three VSync modes: Off, On and Adaptive. Adaptive falls back to On if unsupported by the driver. The Language control offers
 English, Français, Español, Italiano, and Русский. Western language names use
 the same bitmap font as other option values. Russian uses a Unicode TrueType
 fallback because the bitmap font does not contain Cyrillic characters.
@@ -133,10 +129,14 @@ Volume levels are integers `0`–`10`: `0` mutes the category, `10` is its maxim
 | --- | --- | --- |
 | `dialogue_camera_mode` | `0` | `0` = minimal movement to keep the speaker visible, `1` = midpoint between player and NPC, `2` = NPC, `3` = player while keeping the NPC visible. |
 | `schematic_toolbar` | `1` | Boolean. Show the schematic search, batch quantity and companion-component toolbar, including stock labels, using `Schematic_Base_Xl.art` (50 pixels taller, aligned at the original top). `0` uses the original background, hides these controls, disables their search shortcut and uses one crafting batch per click. The companion-component setting remains independent. Restart after editing. |
+| `schematic_color_available` | `original` | Component-slot background when the item is available (green in the original artwork). Set a color such as `#70A050` to tint the original texture. `original`, missing or invalid values preserve the artwork. Applies independently of modern fonts and the schematic toolbar. Restart after editing. |
+| `schematic_color_missing` | `original` | Component-slot background when the item is missing (red in the original artwork). Set a color such as `#B05050` to tint the original texture. `original`, missing or invalid values preserve the artwork. Expertise requirements and item icons are unchanged. Restart after editing. |
+| `schematic_opacity_available` | `100` | Opacity percentage for the available-component background, from `0` (hidden) to `100` (opaque). Works with both original artwork and custom colors. Does not affect the component icon or text. Values outside the range are clamped. Restart after editing. |
+| `schematic_opacity_missing` | `100` | Opacity percentage for the missing-component background, from `0` (hidden) to `100` (opaque). Independent of the available-component background. Does not affect the component icon or text. Restart after editing. |
 | `logbook_toolbar` | `1` | Boolean. Show the journal search bar and Filter/Underline controls, using `Book_Main_Xl.art` and `Book_Side_Xl.art`. `0` uses the original backgrounds and disables the bar, Ctrl+F, filtering and search underlines. Independent of `schematic_toolbar`. XL artwork adds 50 pixels below the original top position. Restart after editing. |
 | `worldmap_toolbar` | `1` | Boolean. Enable personal markers on world and town maps using `art/interface/MapMain_Xl.art` (50 pixels taller, aligned at the original top): Ctrl + right-click opens the description field with OK; Alt + right-click deletes a marker; hover shows its description in the lower message panel. `0` uses `MapMain.art`, disables these controls and hides personal markers while preserving them in saved games. If the XL artwork is unavailable, the original background is used. Built-in locations remain available. Restart after editing. |
 | `dialogue_camera_zoom_to_fit` | `1` | Boolean. Allow zooming out to fit dialogue participants. Previous zoom is restored after dialogue. Requires zoom availability. |
-| `dialogue_camera_tween_back` | `0` | Boolean. Smoothly recenter on the player after dialogue. |
+| `dialogue_camera_tween_back` | `0` | Boolean. Smoothly recenter on the player after dialogue. Also available in Interface options, after Dialogue Auto Zoom. |
 | `hud_stage` | `0` | `0` = full, `1` = medium, `2` = mini, `3` = hidden. The HUD shortcut cycles and saves the selected mode. Panels can temporarily reveal controls. |
 | `translucent_black_ui` | `1` | `0` = opaque interface, `1` = translucent near-black areas in supported HUD/panels. |
 | `dialogue_option_numbers` | `1` | Boolean. Number choices and enable `1`–`9` for the first nine choices, `0` for the tenth. |
@@ -146,7 +146,18 @@ Volume levels are integers `0`–`10`: `0` mutes the category, `10` is its maxim
 | `dialog_options_min` | `5` | Integer `1`–`10`. Minimum dialogue rows reserved in the choice box. |
 | `dialog_options_max` | `5` | Integer `1`–`10`. Maximum dialogue choices offered. Use `10` to permit ten choices. |
 
-### Custom fonts and dialogue layout
+### Dialogue layout
+
+| Setting | Default | Values and purpose |
+| --- | --- | --- |
+| `dialog_margin_horizontal` | `16` | Integer `6`–`80`, pixels. Inner horizontal padding of the choice box. |
+| `dialog_margin_vertical` | `8` | Integer `0`–`80`, pixels. Inner vertical padding of the choice box. |
+| `dialog_background_opacity` | `18` | Integer `0`–`255`: `0` = transparent, `255` = opaque dialogue backdrop. Available as the Dialogue Opacity slider in Interface options; applies to modern-font dialogue choices. |
+
+## [fonts]
+
+### Custom fonts
+
 
 Custom rendering uses SDL_ttf/FreeType for dialogue choices, floating text bubbles
 and logbook body text. A readable font file must exist on disk. If no usable file
@@ -155,20 +166,19 @@ bundled-font paths and common Windows font paths.
 
 | Setting | Default | Values and purpose |
 | --- | --- | --- |
+| `dialog_font` | `0` | Bitmap dialogue preset: `0` = 12, `1` = 14, `2` = 16. Custom font rendering uses `[fonts]` settings. |
+| `logbook_font` | `0` | Bitmap logbook preset: `0` = 12, `1` = 14. Custom font rendering uses `[fonts]` settings. |
 | `modern_fonts` | `0` | `0` = bitmap fonts, `1` = custom font rendering where supported. |
 | `modern_font_path` | `fonts\modern.ttf` | Global font-file fallback, for example `C:\Windows\Fonts\calibri.ttf`. |
 | `modern_font_size` | `16` | Integer `6`–`72`. Global custom font size. |
 | `dialog_font_path` | Empty; global path | Font file for dialogue choices. |
 | `dialog_font_size` | `16` | Integer `6`–`72`; `0` uses `modern_font_size`. |
-| `dialog_margin_horizontal` | `16` | Integer `6`–`80`, pixels. Inner horizontal padding of the choice box. |
-| `dialog_margin_vertical` | `8` | Integer `0`–`80`, pixels. Inner vertical padding of the choice box. |
-| `dialog_background_opacity` | `18` | Integer `0`–`255`: `0` = transparent, `255` = opaque dialogue backdrop. |
 | `floating_font_path` | Empty; global path | Font file for floating text bubbles, including NPC dialogue. |
 | `floating_font_size` | `16` | Integer `6`–`72`; `0` uses `modern_font_size`. |
 | `logbook_font_path` | Empty; global path | Font file for logbook body text. |
 | `logbook_font_size` | `16` | Integer `6`–`72`; `0` uses `modern_font_size`. |
 
-Font sizes and numeric layout values are clamped to the ranges above.
+Font sizes are clamped to the ranges above. Dialogue layout settings remain in `[ui]`.
 The bitmap dialogue preset and `DialogScale` in `HighRes/config.ini` can also
 increase dialogue layout spacing.
 

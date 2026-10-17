@@ -118,7 +118,7 @@ static int dword_5B384C[OBJ_TYPE_COUNT] = {
     /*       OBJ_TYPE_SCENERY */ 4051,
     /*    OBJ_TYPE_PROJECTILE */ 5029,
     /*        OBJ_TYPE_WEAPON */ 6179,
-    /*          OBJ_TYPE_AMMO */ 7042,
+    /*          OBJ_TYPE_AMMO */ 7043, // Includes Automaton Gunner's ammunition prototype.
     /*         OBJ_TYPE_ARMOR */ 8293,
     /*          OBJ_TYPE_GOLD */ 9057,
     /*          OBJ_TYPE_FOOD */ 10145,
@@ -131,7 +131,7 @@ static int dword_5B384C[OBJ_TYPE_COUNT] = {
     /*           OBJ_TYPE_NPC */ 17317,
     /*          OBJ_TYPE_TRAP */ 26008,
     /*       OBJ_TYPE_MONSTER */ 27394,
-    /*    OBJ_TYPE_UNIQUE_NPC */ 28472,
+    /*    OBJ_TYPE_UNIQUE_NPC */ 28473, // Includes the deployed Automaton Gunner.
 };
 
 // 0x5B389C
@@ -15109,7 +15109,7 @@ void sub_468930(int64_t obj, int description)
             obj_field_int32_set(obj, OBJ_F_ITEM_WORTH, 4500);
             obj_field_int32_set(obj, OBJ_F_HP_PTS, 350);
             obj_field_int32_set(obj, OBJ_F_ITEM_WEIGHT, 2200);
-            scr.num = 30008;
+            scr.num = 39990;
             obj_arrayfield_script_set(obj, OBJ_F_SCRIPTS_IDX, SAP_HIT, &scr);
             obj_arrayfield_script_set(obj, OBJ_F_SCRIPTS_IDX, SAP_MISS, &scr);
             obj_field_int32_set(obj, OBJ_F_ITEM_FLAGS, obj_field_int32_get(obj, OBJ_F_ITEM_FLAGS) | 0x80000);

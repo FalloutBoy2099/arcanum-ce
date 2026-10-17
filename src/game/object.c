@@ -1,4 +1,5 @@
 #include "game/object.h"
+#include <tig/performance.h>
 
 #include <inttypes.h>
 #include <math.h>
@@ -3010,7 +3011,10 @@ bool object_traversal_is_blocked(int64_t obj, int64_t loc, int rot, unsigned int
 // 0x43FDC0
 int object_calc_traversal_cost(int64_t obj, int64_t loc, int rot, unsigned int flags, int64_t* block_obj_ptr, int* block_obj_type_ptr, bool* is_window_ptr)
 {
-    return object_calc_traversal_cost_func(obj, loc, rot, rot, flags, block_obj_ptr, block_obj_type_ptr, is_window_ptr);
+    Uint64 start = tig_performance_begin();
+    int cost = object_calc_traversal_cost_func(obj, loc, rot, rot, flags, block_obj_ptr, block_obj_type_ptr, is_window_ptr);
+    tig_performance_end(TIG_PERF_COLLISION, start);
+    return cost;
 }
 
 // 0x43FE00
@@ -3337,6 +3341,11 @@ bool object_traversal_check_blocking_door(int64_t obj, int64_t loc, int rot, uns
     }
 
     return true;
+}
+
+int64_t object_find_first_at_location(int64_t loc, unsigned int flags, ObjectQueryPredicate predicate, void* context)
+{
+    return object_query_first(loc, flags, dword_5E2F88, predicate, context);
 }
 
 // 0x4407C0
@@ -5308,28 +5317,17 @@ void sub_444270(int64_t obj, int a2)
     object_iso_invalidate_rect(&rect);
 }
 
+static bool object_is_damaging_fire(int64_t obj, void* context)
+{
+    (void)context;
+    return anim_is_current_goal_type(obj, AG_EYE_CANDY_FIRE_DMG, NULL)
+        || anim_is_current_goal_type(obj, AG_ANIMATE_LOOP_FIRE_DMG, NULL);
+}
+
 // 0x444500
 int64_t get_fire_at_location(int64_t loc)
 {
-    ObjectList objects;
-    ObjectNode* node;
-    int64_t obj = OBJ_HANDLE_NULL;
-
-    object_list_location(loc, OBJ_TM_SCENERY, &objects);
-
-    node = objects.head;
-    while (node != NULL) {
-        obj = node->obj;
-        if (anim_is_current_goal_type(obj, AG_EYE_CANDY_FIRE_DMG, NULL)
-            || anim_is_current_goal_type(obj, AG_ANIMATE_LOOP_FIRE_DMG, NULL)) {
-            break;
-        }
-        node = node->next;
-    }
-
-    object_list_destroy(&objects);
-
-    return node != NULL ? obj : OBJ_HANDLE_NULL;
+    return object_find_first_at_location(loc, OBJ_TM_SCENERY, object_is_damaging_fire, NULL);
 }
 
 // 0x4445A0

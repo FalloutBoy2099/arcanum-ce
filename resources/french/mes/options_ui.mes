@@ -1,5 +1,5 @@
-// Arcanum CE options catalog v4 - Windows-1252
-{1}{4}
+// Arcanum CE options catalog v6 - Windows-1252
+{1}{6}
 
 // Menu
 {10}{Partie}
@@ -29,7 +29,7 @@
 {112}{Indications au survol}
 {113}{Mode de fermeture}
 {114}{Rencontres aléatoires}
-{115}{Éclairage}
+{115}{Progression manuelle}
 {116}{Composants des compagnons}
 
 // Audio - settings
@@ -47,23 +47,31 @@
 {301}{Résolution}
 {302}{Synchronisation verticale}
 {303}{Luminosité}
-{304}{Durée d'affichage du texte}
-{305}{Messages flottants}
-{306}{Vitesse des messages}
-{307}{Commentaires}
-{308}{Défilement bordures}
-{309}{Caméra suit le joueur}
-{310}{Utilisation du zoom}
-{311}{Filtre du zoom}
+{304}{Éclairage}
+{305}{Durée d'affichage du texte}
+{306}{Messages flottants}
+{307}{Vitesse des messages}
+{308}{Commentaires}
+{309}{Défilement bordures}
+{310}{Caméra suit le joueur}
+{311}{Utilisation du zoom}
+{312}{Filtre du zoom}
+{313}{Fond menu}
+
 
 // Interface - settings
-{401}{Fond menu}
-{402}{Type d'interface}
-{403}{Transparence fenêtre}
-{404}{Police moderne}
-{405}{Numéroter les dialogues}
-{406}{Paramétrage caméra}
-{407}{Caméra zoom progressif}
+{401}{Type d'interface}
+{402}{Transparence fenêtre}
+{403}{Police moderne}
+{404}{Numéroter les dialogues}
+{405}{Paramétrage caméra}
+{406}{Caméra zoom progressif}
+{407}{Retour caméra progressif}
+{408}{Opacité du dialogue}
+{409}{Barre du journal}
+{410}{Repères sur la carte}
+{411}{Barre des schématiques}
+
 
 // Shortcuts - settings
 
@@ -82,7 +90,7 @@
 {1112}{Affiche le coût en PA, la distance, les chances de toucher estimées, la portée et la fatigue des sorts dans deux cadres fixes au-dessus de l'interface, uniquement en mode combat.}
 {1113}{Groupe : ferme les fenêtres par leur cercle. Modale : autorise aussi le clic extérieur. Concerne Inventaire, Fiche de personnage, Carte du monde, Schématique et Journal.}
 {1114}{Normal : fonctionnement habituel. Intéressante : évite les combats ordinaires trop faibles, en conservant les rencontres spéciales. Peu fréquente : divise la fréquence des rencontres par 2,7.}
-{1115}{Normal : éclairage ambiant d'origine. 25% ou 50% : réduit d'autant l'obscurité ambiante, en intérieur comme en extérieur. Effet immédiat.}
+{1115}{Permet de répartir manuellement les points des compagnons sous votre contrôle dans leur fiche de personnage, au lieu de leur progression automatique.}
 {1116}{Autorise la fabrication à utiliser les composants non équipés des compagnons proches et conscients. Le fabricant doit toujours posséder les connaissances techniques requises.}
 
 // Audio - descriptions
@@ -98,25 +106,33 @@
 
 // Video - descriptions
 {1301}{Choisit la résolution du jeu. Redémarrez le jeu pour appliquer le changement.}
-{1302}{Synchronise l'affichage avec l'écran pour réduire les déchirures de l'image.}
+{1302}{Désactivée : aucune synchronisation. Activée : synchronise l'affichage avec l'écran. Adaptative : adapte la synchronisation ; utilise le mode activé si le pilote ne la prend pas en charge.}
 {1303}{Règle la luminosité de l'image pour rendre les zones sombres plus lisibles.}
-{1304}{Règle la durée d'affichage des textes flottants ordinaires. Certains messages scénarisés ont leur propre durée.}
-{1305}{Choisit la quantité de messages flottants affichés pendant le jeu : jamais, minimum ou détaillé.}
-{1306}{Règle la vitesse à laquelle les messages flottants montent au-dessus des personnages.}
-{1307}{Active les commentaires et provocations des personnages pendant les combats.}
-{1308}{Déplace la caméra lorsque le pointeur atteint un bord de la fenêtre. Le clavier et le glissement au bouton droit restent disponibles.}
-{1309}{Permet à la caméra de suivre le joueur en mouvement. Un déplacement manuel de la caméra suspend temporairement le suivi.}
-{1310}{Active le zoom de la vue de jeu avec ses raccourcis ou Ctrl + molette. Désactiver rétablit le zoom normal.}
-{1311}{Pixels nets conserve les contours des pixels. Lisse adoucit l'image lors du zoom.}
+{1304}{Normal : éclairage ambiant d'origine. 25% ou 50% : réduit d'autant l'obscurité ambiante, en intérieur comme en extérieur. Effet immédiat.}
+{1305}{Règle la durée d'affichage des textes flottants ordinaires. Certains messages scénarisés ont leur propre durée.}
+{1306}{Choisit la quantité de messages flottants affichés pendant le jeu : jamais, minimum ou détaillé.}
+{1307}{Règle la vitesse à laquelle les messages flottants montent au-dessus des personnages.}
+{1308}{Active les commentaires et provocations des personnages pendant les combats.}
+{1309}{Déplace la caméra lorsque le pointeur atteint un bord de la fenêtre. Le clavier et le glissement au bouton droit restent disponibles.}
+{1310}{Permet à la caméra de suivre le joueur en mouvement. Un déplacement manuel de la caméra suspend temporairement le suivi.}
+{1311}{Active le zoom de la vue de jeu avec ses raccourcis ou Ctrl + molette. Désactiver rétablit le zoom normal.}
+{1312}{Pixels nets conserve les contours des pixels. Lisse adoucit l'image lors du zoom.}
+{1313}{Choisit le fond des menus : noir, fondu au noir ou bois.}
+
 
 // Interface - descriptions
-{1401}{Choisit le fond des menus : noir, fondu au noir ou bois.}
-{1402}{Choisit la quantité d'interface visible : complet, moyen, mini ou masqué. Certains panneaux peuvent révéler temporairement les commandes.}
-{1403}{Rend translucides les zones noires des interfaces compatibles pour laisser apparaître le jeu derrière elles.}
-{1404}{Utilise des polices TrueType pour les dialogues, textes flottants et le journal. Redémarrez le jeu pour appliquer les changements de police.}
-{1405}{Numérote les réponses des dialogues et permet de les choisir au clavier : 1 à 9 pour les neuf premières, 0 pour la dixième.}
-{1406}{Choisit le cadrage des dialogues : déplacement minimal, milieu entre les interlocuteurs, centrage sur le PNJ ou sur le joueur.}
-{1407}{Autorise la caméra de dialogue à dézoomer pour cadrer les deux interlocuteurs. Le zoom précédent est rétabli à la fin du dialogue.}
+{1401}{Choisit la quantité d'interface visible : complet, moyen, mini ou masqué. Certains panneaux peuvent révéler temporairement les commandes.}
+{1402}{Rend translucides les zones noires des interfaces compatibles pour laisser apparaître le jeu derrière elles.}
+{1403}{Utilise des polices TrueType pour les dialogues, textes flottants et le journal. Redémarrez le jeu pour appliquer les changements de police.}
+{1404}{Numérote les réponses des dialogues et permet de les choisir au clavier : 1 à 9 pour les neuf premières, 0 pour la dixième.}
+{1405}{Choisit le cadrage des dialogues : déplacement minimal, milieu entre les interlocuteurs, centrage sur le PNJ ou sur le joueur.}
+{1406}{Autorise la caméra de dialogue à dézoomer pour cadrer les deux interlocuteurs. Le zoom précédent est rétabli à la fin du dialogue.}
+{1407}{Recentre progressivement la caméra sur le joueur à la fin du dialogue, au lieu de revenir immédiatement.}
+{1408}{Règle le fond des choix de dialogue avec la police moderne : 0 est entièrement transparent, 255 est entièrement opaque. Ce réglage conserve la précision de la valeur INI.}
+{1409}{Active la barre de recherche du journal et ses modes Filtrer et Souligner, avec les fonds Book_Main_Xl et Book_Side_Xl. Redémarrez le jeu après modification.}
+{1410}{Active les repères personnels sur les cartes et le fond MapMain_Xl. Ctrl + clic droit : saisir une description. Alt + clic droit : supprimer. Le survol affiche le texte en bas. Désactiver conserve les repères sauvegardés.}
+{1411}{Active la recherche, le nombre de lots et les composants des compagnons dans la barre des schématiques, avec le fond Schematic_Base_Xl. Désactiver revient à un lot par fabrication. Redémarrez le jeu après modification.}
+
 
 // Shortcuts - descriptions
 
@@ -153,3 +169,8 @@
 {2060}{Normal}
 {2061}{25%}
 {2062}{50%}
+
+// VSync - values
+{2070}{Désactivée}
+{2071}{Activée}
+{2072}{Adaptative}

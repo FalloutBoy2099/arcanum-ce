@@ -1,0 +1,16 @@
+AUTOMATON GUNNER CREDITS
+========================
+
+Mod assembly, stock-engine adaptation, and release packaging:
+TechErrorCode
+
+Testing and bug discovery:
+Barbarbrick
+
+Unofficial Arcanum Patch 2.0.2:
+Drog Black Tooth and UAP contributors
+
+Arcanum: Of Steamworks and Magick Obscura was developed by Troika Games and
+published by Sierra On-Line. Original game data and artwork remain the property
+of their respective rights holders. This mod requires a legally owned copy of
+Arcanum and does not include the game executable.

@@ -1,0 +1,83 @@
+{
+  "name": "Automaton Gunner",
+  "version": "1.0.4",
+  "author": "TechErrorCode",
+  "target": "GOG Arcanum 1.0.7.4 with UAP 2.0.2",
+  "requirements": {
+    "executable_compatibility_policy": "structural UAP 2.0.2 validation",
+    "supported_arcanum_exe_size": 2048000,
+    "uap_core_file": "Arcanum5.dat",
+    "uap_core_sha256": "65CE42516FA618A8A1C879B9947470D58CDA7281BC2ED776EBA0F859F0B29089",
+    "reference_clean_arcanum_exe_sha256": "41B5A24A04E546EF455D84BDF9ED237F02E456B3BBDCF4710B7AF526E70D5BF4",
+    "reference_patched_arcanum_exe_sha256": "F572CA1138C0AE05CB812062D8971670373CAF3428689DFB9DE32CB43F66FE59",
+    "reported_uap_variant_sha256": "BD2CD6AFBDA853341F805A7CA197B57358DE95A743D5DA9A4ACB74DC472DC4DE",
+    "manual_installation": true
+  },
+  "executable_patch": {
+    "accepted_state": "all five values unpatched or all five values already patched",
+    "patches": [
+      {
+        "offset": "0x99F04",
+        "before": 28472,
+        "after": 28473
+      },
+      {
+        "offset": "0x9B354",
+        "before": 28472,
+        "after": 28473
+      },
+      {
+        "offset": "0x9BFBA",
+        "before": 28472,
+        "after": 28473
+      },
+      {
+        "offset": "0x1B3898",
+        "before": 28472,
+        "after": 28473
+      },
+      {
+        "offset": "0x1B3864",
+        "before": 7042,
+        "after": 7043
+      }
+    ],
+    "allows_non_overlapping_executable_changes": true
+  },
+  "ids": {
+    "schematic": 14116,
+    "folded_result": 15172,
+    "deployed_gunner": 28472,
+    "internal_ammo": 7042,
+    "deploy_script": 39990,
+    "collapse_script": 39991
+  },
+  "loadout": {
+    "weapon": "Elephant Gun",
+    "weapon_basic_id": 6039,
+    "ammo_type": "Bullet",
+    "starting_bullets": 300,
+    "stock_uap_attacks": 150,
+    "considerate_weapon_mod_1_6_attacks": 300
+  },
+  "runtime_qa": {
+    "core_mod_status": "passed on the 1.0.3 reference executable",
+    "core_mod_date": "2026-07-26",
+    "compatibility_update_status": "manual variant testing pending",
+    "previous_checks": [
+      "schematic 14116 displayed as Automaton Gunner",
+      "schematic 14116 was learned",
+      "folded object 15172 deployed when thrown"
+    ]
+  },
+  "payload_files": {
+    "data/art/monster/aut/AUTUWxku.ART": "919D930915B3EC0C47B66D360DB611A3CD3C92C75984EEE5C2E5332DEF85804D",
+    "data/mes/description.mes": "7AB3FCAC2DF5216298128623BDF707DA3A36994746EEE58614041648D451E8F1",
+    "data/proto/007062 - Ammo.pro": "1752341E6C0D2BF973B4294210055C9860D5A9FFD2994E247692E912238CFB1A",
+    "data/proto/014136 - Written.pro": "1A71754F43848851A1345810B95BBECA66D952E3EE57AA1A2B8002848B0A853C",
+    "data/proto/015192 - Generic.pro": "4F77E447F74F889D0D7A952916359D672CF9EE9FD2936767EE3CC5313A0B98D9",
+    "data/proto/028492 - NPC.pro": "3B1A1687AE48AB6D6EA51FBB1D90FCEE1017CD26CEEC9BB2231BA8BDC2FD7B1F",
+    "data/scr/39990AutomatonGunnerStock_deploy.scr": "AF5167751EAD1E817E86539FE9BBA78F40B4FBC7D4C45FF2D1FD1A93CEFE69EF",
+    "data/scr/39991AutomatonGunnerStock_collapse.scr": "E1ADE5DC4DF984D1FCCD83F6E7C200354C432F56797F0DFD0122ED6532428F4A"
+  }
+}

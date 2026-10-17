@@ -1,4 +1,6 @@
 #include "game/timeevent.h"
+#include "game/timeevent_pool.h"
+#include <tig/performance.h>
 
 #include <stdio.h>
 
@@ -41,12 +43,7 @@ typedef unsigned int TimeEventParamTypeFlags;
 #define P2_FLOAT 0x4000u
 #define P3_FLOAT 0x8000u
 
-typedef struct TimeEventNode {
-    TimeEvent te;
-    Ryan field_30[TIMEEVENT_PARAM_TYPE_COUNT];
-    struct TimeEventNode* next;
-    int field_D4;
-} TimeEventNode;
+static TimeEventPool timeevent_pool;
 
 typedef void (*TimeEventExitFunc)(TimeEvent* timeevent);
 typedef bool (*TimeEventShouldSaveFunc)(TimeEvent* timeevent);
@@ -564,6 +561,7 @@ void timeevent_exit(void)
 {
     timeevent_initialized = false;
     timeevent_clear();
+    timeevent_pool_clear(&timeevent_pool);
 }
 
 // 0x45AED0
@@ -798,7 +796,16 @@ void sub_45B360(void)
 }
 
 // 0x45B370
+static void timeevent_ping_impl(tig_timestamp_t timestamp);
+
 void timeevent_ping(tig_timestamp_t timestamp)
+{
+    Uint64 start = tig_performance_begin();
+    timeevent_ping_impl(timestamp);
+    tig_performance_end(TIG_PERF_EVENTS, start);
+}
+
+static void timeevent_ping_impl(tig_timestamp_t timestamp)
 {
     tig_duration_t delta;
     int time_type;
@@ -917,7 +924,7 @@ void timeevent_ping(tig_timestamp_t timestamp)
 // 0x45B600
 void timeevent_node_destroy(TimeEventNode* node)
 {
-    FREE(node);
+    timeevent_pool_release(&timeevent_pool, node);
 }
 
 // 0x45B610
@@ -1088,6 +1095,7 @@ bool timeevent_add_base_at_func(TimeEvent* timeevent, DateTime* base, DateTime* 
         }
 
         node_ptr = &((*node_ptr)->next);
+        tig_performance_count(TIG_PERF_EVENT_INSERT_STEPS, 1);
     }
 
     node->next = *node_ptr;
@@ -1113,7 +1121,7 @@ bool timeevent_add_base_at_func(TimeEvent* timeevent, DateTime* base, DateTime* 
 // 0x45BA20
 TimeEventNode* timeevent_node_create(void)
 {
-    return (TimeEventNode*)MALLOC(sizeof(TimeEventNode));
+    return timeevent_pool_acquire(&timeevent_pool);
 }
 
 // 0x45BA30
@@ -1197,6 +1205,7 @@ bool sub_45BB40(TimeEventNode* node)
             break;
         }
         node_ptr = &((*node_ptr)->next);
+        tig_performance_count(TIG_PERF_EVENT_INSERT_STEPS, 1);
     }
 
     node->next = *node_ptr;

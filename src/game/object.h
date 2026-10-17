@@ -6,6 +6,7 @@
 #include "game/obj.h"
 #include "game/object.h"
 #include "game/object_node.h"
+#include "game/object_query.h"
 #include "game/timeevent.h"
 
 #define OBJ_TM_WALL 0x00000001
@@ -160,6 +161,8 @@ bool object_traversal_is_blocked(int64_t obj, int64_t loc, int rot, unsigned int
 int object_calc_traversal_cost(int64_t obj, int64_t loc, int rot, unsigned int flags, int64_t* block_obj_ptr, int* block_obj_type_ptr, bool* is_window_ptr);
 bool object_traversal_check_blocking_door(int64_t obj, int64_t loc, int rot, unsigned int flags, int64_t* block_obj_ptr);
 void object_list_location(int64_t loc, unsigned int flags, ObjectList* objects);
+// No temporary ObjectList. Predicate must only inspect objects; NULL accepts all.
+int64_t object_find_first_at_location(int64_t loc, unsigned int flags, ObjectQueryPredicate predicate, void* context);
 void object_list_rect(LocRect* loc_rect, unsigned int flags, ObjectList* objects);
 void object_list_vicinity(int64_t obj, unsigned int flags, ObjectList* objects);
 void object_list_destroy(ObjectList* objects);

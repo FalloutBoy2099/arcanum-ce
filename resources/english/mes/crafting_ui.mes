@@ -8,3 +8,6 @@
 {7}{Stock}
 {8}{Crafted %d of %d lots.}
 {9}{Inventory full: crafted items are at the crafter's feet.}
+{10}{Qty: %d}
+{11}{Produced: %lld}
+{12}{Stock: %d}

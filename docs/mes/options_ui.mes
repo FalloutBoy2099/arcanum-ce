@@ -1,5 +1,5 @@
-// Arcanum CE options catalog v4 - Windows-1252
-{1}{4}
+// Arcanum CE options catalog v6 - Windows-1252
+{1}{6}
 
 // Menu
 {10}{Game}
@@ -29,7 +29,7 @@
 {112}{Action Tooltips}
 {113}{Window Close Mode}
 {114}{Random Encounters}
-{115}{Lighting}
+{115}{Manual Follower Levels}
 {116}{Companion components}
 
 // Audio - settings
@@ -47,23 +47,31 @@
 {301}{Resolution}
 {302}{Vertical Sync}
 {303}{Brightness}
-{304}{Text Duration}
-{305}{Floating Messages}
-{306}{Message Speed}
-{307}{Combat Taunts}
-{308}{Edge Scrolling}
-{309}{Follow Player}
-{310}{Enable Zoom}
-{311}{Zoom Filter}
+{304}{Lighting}
+{305}{Text Duration}
+{306}{Floating Messages}
+{307}{Message Speed}
+{308}{Combat Taunts}
+{309}{Edge Scrolling}
+{310}{Follow Player}
+{311}{Enable Zoom}
+{312}{Zoom Filter}
+{313}{Menu Background}
+
 
 // Interface - settings
-{401}{Menu Background}
-{402}{Interface Type}
-{403}{Window Transparency}
-{404}{Modern Fonts}
-{405}{Number Dialogue Choices}
-{406}{Dialogue Camera}
-{407}{Dialogue Auto Zoom}
+{401}{Interface Type}
+{402}{Window Transparency}
+{403}{Modern Fonts}
+{404}{Number Dialogue Choices}
+{405}{Dialogue Camera}
+{406}{Dialogue Auto Zoom}
+{407}{Smooth Camera Return}
+{408}{Dialogue Opacity}
+{409}{Journal Toolbar}
+{410}{Map Markers}
+{411}{Schematic Toolbar}
+
 
 // Shortcuts - settings
 
@@ -82,7 +90,7 @@
 {1112}{Displays movement and attack AP, distance, estimated hit chance, range and spell fatigue in two fixed frames above the HUD. Available only in combat mode.}
 {1113}{Group: close panels through their circular portrait. Modal: also close by clicking outside. Applies to Inventory, Character Sheet, World Map, Schematics and Journal.}
 {1114}{Normal: original behavior. Interesting: skips weak ordinary fights while keeping special encounters. Less frequent: divides random encounter frequency by 2.7.}
-{1115}{Normal: original ambient lighting. 25% or 50%: reduces ambient darkness by that amount, indoors and outdoors. Applies immediately.}
+{1115}{Allows manually allocating level-up points for companions under your control in their character sheet, instead of their automatic leveling scheme.}
 {1116}{Allow crafting to use unequipped components carried by nearby conscious companions. The crafter must still have the required technical expertise.}
 
 // Audio - descriptions
@@ -98,25 +106,33 @@
 
 // Video - descriptions
 {1301}{Selects the game resolution. Restart the game to apply the change.}
-{1302}{Synchronizes display updates with the monitor to reduce screen tearing.}
+{1302}{Off: no synchronization. On: synchronizes display updates with the monitor. Adaptive: adapts synchronization; falls back to On if unsupported by the driver.}
 {1303}{Adjusts image brightness to make dark areas easier to see.}
-{1304}{Adjusts how long ordinary floating text remains visible. Some scripted messages use their own duration.}
-{1305}{Chooses how many floating gameplay messages are shown: Never, Minimal or Verbose.}
-{1306}{Adjusts how quickly floating gameplay messages rise above characters.}
-{1307}{Enables character comments and taunts during combat.}
-{1308}{Moves the camera when the pointer reaches a window edge. Keyboard scrolling and right-button dragging remain available.}
-{1309}{Allows the camera to follow the moving player. Manual scrolling temporarily suspends following.}
-{1310}{Enables world-view zoom with its shortcuts or Ctrl + mouse wheel. Disabling restores normal zoom.}
-{1311}{Sharp pixels preserves pixel edges. Smooth softens the image when zooming.}
+{1304}{Normal: original ambient lighting. 25% or 50%: reduces ambient darkness by that amount, indoors and outdoors. Applies immediately.}
+{1305}{Adjusts how long ordinary floating text remains visible. Some scripted messages use their own duration.}
+{1306}{Chooses how many floating gameplay messages are shown: Never, Minimal or Verbose.}
+{1307}{Adjusts how quickly floating gameplay messages rise above characters.}
+{1308}{Enables character comments and taunts during combat.}
+{1309}{Moves the camera when the pointer reaches a window edge. Keyboard scrolling and right-button dragging remain available.}
+{1310}{Allows the camera to follow the moving player. Manual scrolling temporarily suspends following.}
+{1311}{Enables world-view zoom with its shortcuts or Ctrl + mouse wheel. Disabling restores normal zoom.}
+{1312}{Sharp pixels preserves pixel edges. Smooth softens the image when zooming.}
+{1313}{Chooses the menu background: Black, Fade to Black or Wood.}
+
 
 // Interface - descriptions
-{1401}{Chooses the menu background: Black, Fade to Black or Wood.}
-{1402}{Chooses how much of the HUD is visible: Full, Medium, Mini or Hidden. Panels can temporarily reveal controls.}
-{1403}{Makes supported black interface areas translucent so the world remains visible behind them.}
-{1404}{Uses TrueType fonts for dialogue, floating text and the journal. Restart the game to apply font changes.}
-{1405}{Numbers dialogue choices and enables number-key selection. Keys 1 to 9 select the first nine choices; 0 selects the tenth.}
-{1406}{Chooses dialogue framing: minimal movement, midpoint between speakers, focus on the NPC, or focus on the player.}
-{1407}{Allows the dialogue camera to zoom out to fit both speakers. Restores the previous zoom when dialogue ends.}
+{1401}{Chooses how much of the HUD is visible: Full, Medium, Mini or Hidden. Panels can temporarily reveal controls.}
+{1402}{Makes supported black interface areas translucent so the world remains visible behind them.}
+{1403}{Uses TrueType fonts for dialogue, floating text and the journal. Restart the game to apply font changes.}
+{1404}{Numbers dialogue choices and enables number-key selection. Keys 1 to 9 select the first nine choices; 0 selects the tenth.}
+{1405}{Chooses dialogue framing: minimal movement, midpoint between speakers, focus on the NPC, or focus on the player.}
+{1406}{Allows the dialogue camera to zoom out to fit both speakers. Restores the previous zoom when dialogue ends.}
+{1407}{Smoothly recenters the camera on the player when dialogue ends, instead of returning immediately.}
+{1408}{Adjusts the dialogue-choice background when modern fonts are enabled: 0 is fully transparent, 255 is fully opaque. Preserves the precision of the INI value.}
+{1409}{Enables journal search with Filter and Underline modes, using Book_Main_Xl and Book_Side_Xl backgrounds. Restart the game after changing this setting.}
+{1410}{Enables personal map markers and the MapMain_Xl background. Ctrl + right-click: enter a description. Alt + right-click: delete. Hover shows the text below. Disabling preserves saved markers.}
+{1411}{Enables schematic search, batch quantity and companion-component controls, using Schematic_Base_Xl. Disabling uses one crafting batch per click. Restart the game after changing this setting.}
+
 
 // Shortcuts - descriptions
 
@@ -153,3 +169,8 @@
 {2060}{Normal}
 {2061}{25%}
 {2062}{50%}
+
+// VSync - values
+{2070}{Off}
+{2071}{On}
+{2072}{Adaptive}

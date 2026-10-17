@@ -8,6 +8,7 @@
 #include "game/companion_movement.h"
 #include "game/descriptions.h"
 #include "game/gamelib.h"
+#include "game/follower_navigation.h"
 #include "game/gsound.h"
 #include "game/input_bindings.h"
 #include "game/item.h"
@@ -18,6 +19,7 @@
 #include "game/mp_utils.h"
 #include "game/mt_item.h"
 #include "game/multiplayer.h"
+#include "game/movement_turn.h"
 #include "game/object.h"
 #include "game/path.h"
 #include "game/player.h"
@@ -34,6 +36,15 @@
 #include "game/timeevent.h"
 #include "game/trap.h"
 #include "game/ui.h"
+
+// Runtime-only pivot state: never changes the serialized AnimRunInfo layout.
+static struct {
+    MovementTurn turn;
+    int unique_id;
+    int goal;
+    int path_step;
+    int64_t location;
+} companion_turns[216];
 
 static bool sub_421CE0(AnimID* anim_id, AnimRunInfo* run_info);
 static void violence_filter_changed(void);
@@ -2725,6 +2736,7 @@ static int dword_5DE6E4;
 // 0x421B00
 bool anim_init(GameInitInfo* init_info)
 {
+    memset(companion_turns, 0, sizeof(companion_turns));
     anim_editor = init_info->editor;
 
     if (!anim_editor) {
@@ -2772,6 +2784,7 @@ void anim_exit(void)
 // 0x421C20
 void anim_reset(void)
 {
+    memset(companion_turns, 0, sizeof(companion_turns));
     dword_5E3500 = 0;
 }
 
@@ -3040,6 +3053,7 @@ bool anim_run_info_param_save(AnimRunInfoParam* param, Ryan* a2, int type, TigFi
 // 0x4224E0
 bool anim_load(GameLoadInfo* load_info)
 {
+    memset(companion_turns, 0, sizeof(companion_turns));
     bool loaded;
 
     in_anim_load = true;
@@ -4480,6 +4494,66 @@ bool sub_424E00(AnimRunInfo* run_info)
     return false;
 }
 
+static bool anim_following_leader(AnimRunInfo* run_info, int64_t leader)
+{
+    if (combat_turn_based_is_active() || combat_critter_is_combat_mode_active(run_info->params[0].obj)) return false;
+    return follower_navigation_is_following(run_info, leader);
+}
+
+static void anim_follow_repath(AnimRunInfo* run_info)
+{
+    int64_t leader = run_info->cur_stack_data->params[AGDATA_TARGET_OBJ].obj;
+    if (leader != OBJ_HANDLE_NULL && anim_following_leader(run_info, leader)
+        && companion_movement_repath_needed(run_info->cur_stack_data->params[AGDATA_TARGET_TILE].loc,
+            obj_field_int64_get(leader, OBJ_F_LOCATION), run_info->path.max - run_info->path.curr)) {
+        run_info->path.flags |= 0x4;
+    }
+}
+
+static bool anim_companion_can_pivot(int64_t obj)
+{
+    return critter_pc_leader_get(obj) != OBJ_HANDLE_NULL
+        && !combat_turn_based_is_active() && !combat_critter_is_combat_mode_active(obj)
+        && (obj_field_int32_get(obj, OBJ_F_SPELL_FLAGS) & (OSF_FLOATING | OSF_BODY_OF_AIR)) == 0;
+}
+
+static bool anim_companion_pivot_step(AnimRunInfo* run_info, int64_t obj)
+{
+    int slot = run_info->id.slot_num;
+    MovementTurn* turn = &companion_turns[slot].turn;
+    if (!turn->active) return false;
+    if (companion_turns[slot].unique_id != run_info->id.unique_id
+        || companion_turns[slot].goal != run_info->current_goal
+        || companion_turns[slot].path_step != run_info->path.curr
+        || companion_turns[slot].location != obj_field_int64_get(obj, OBJ_F_LOCATION)
+        || run_info->path.curr >= run_info->path.max || (run_info->path.flags & 1) != 0
+        || turn->target_rotation != run_info->path.rotations[run_info->path.curr]
+        || !anim_companion_can_pivot(obj)) {
+        turn->active = false;
+        return false;
+    }
+    tig_art_id_t art_id = obj_field_int32_get(obj, OBJ_F_CURRENT_AID);
+    int x = obj_field_int32_get(obj, OBJ_F_OFFSET_X);
+    int y = obj_field_int32_get(obj, OBJ_F_OFFSET_Y);
+    movement_turn_step(turn, &art_id, &x, &y);
+    object_set_offset(obj, x, y);
+    object_set_current_aid(obj, art_id);
+    // Even the last pivot tick must yield before movement resumes next tick.
+    follower_navigation_turn_flags(run_info, true);
+    return true;
+}
+
+static void anim_companion_pivot_begin(AnimRunInfo* run_info, int64_t obj, int rotation)
+{
+    int slot = run_info->id.slot_num;
+    companion_turns[slot].unique_id = run_info->id.unique_id;
+    companion_turns[slot].goal = run_info->current_goal;
+    companion_turns[slot].path_step = run_info->path.curr;
+    companion_turns[slot].location = obj_field_int64_get(obj, OBJ_F_LOCATION);
+    movement_turn_begin(&companion_turns[slot].turn, rotation);
+    anim_companion_pivot_step(run_info, obj);
+}
+
 // Ask an idle companion to clear the next step before overlapping it.
 static void anim_request_companion_passage(int64_t obj, int64_t loc, int rotation)
 {
@@ -4537,6 +4611,23 @@ bool sub_425130(AnimRunInfo* run_info)
 
     if (location_dist(source_loc, target_loc) > range) {
         return false;
+    }
+
+    // Reaching the leader's radius is not arrival at a clear formation slot.
+    // Probe only a direct, short route; occupied slots/doors use the old stop rule.
+    int64_t destination;
+    if (anim_following_leader(run_info, target_obj)
+        && companion_movement_follow_destination(source_obj, target_obj, &destination)
+        && destination != source_loc) {
+        int8_t rotations[16];
+        PathCreateInfo probe = { 0 };
+        probe.obj = source_obj;
+        probe.from = source_loc;
+        probe.to = destination;
+        probe.rotations = rotations;
+        probe.max_rotations = 16;
+        probe.flags = PATH_FLAG_0x0020;
+        if (sub_425BF0(&probe, false) && path_make(&probe) > 0) return false;
     }
 
     rot = location_rot(source_loc, target_loc);
@@ -4615,6 +4706,7 @@ bool sub_425340(AnimRunInfo* run_info)
 // 0x425430
 bool sub_425430(AnimRunInfo* run_info)
 {
+    anim_follow_repath(run_info);
     if ((run_info->path.flags & 0xC) == 0) {
         return false;
     }
@@ -4642,9 +4734,14 @@ bool sub_425430(AnimRunInfo* run_info)
 // 0x4254C0
 bool sub_4254C0(AnimRunInfo* run_info)
 {
+    anim_follow_repath(run_info);
     if (run_info->params[1].obj != OBJ_HANDLE_NULL
         && run_info->cur_stack_data->params[AGDATA_TARGET_TILE].loc != obj_field_int64_get(run_info->params[1].obj, OBJ_F_LOCATION)) {
-        run_info->path.flags |= 0x4;
+        if (!anim_following_leader(run_info, run_info->params[1].obj)
+            || companion_movement_repath_needed(run_info->cur_stack_data->params[AGDATA_TARGET_TILE].loc,
+                obj_field_int64_get(run_info->params[1].obj, OBJ_F_LOCATION), run_info->path.max - run_info->path.curr)) {
+            run_info->path.flags |= 0x4;
+        }
     }
 
     if ((run_info->path.flags & 0xC) == 0) {
@@ -5988,6 +6085,32 @@ bool sub_427990(AnimRunInfo* run_info)
 
     range = run_info->cur_stack_data->params[AGDATA_RANGE_DATA].data;
     orig_range = range;
+
+    // Prefer a distinct, stable slot when directly reachable. If blocked, use
+    // the original obstacle-aware route toward the leader (doors/corridors).
+    int64_t formation_destination;
+    if (anim_following_leader(run_info, target_obj)
+        && companion_movement_follow_destination(source_obj, target_obj, &formation_destination)) {
+        PathCreateInfo formation_path = { 0 };
+        formation_path.obj = source_obj;
+        formation_path.from = obj_field_int64_get(source_obj, OBJ_F_LOCATION);
+        formation_path.to = formation_destination;
+        formation_path.max_rotations = sub_426320(&run_info->path, formation_path.from, formation_path.to, source_obj);
+        formation_path.rotations = run_info->path.rotations;
+        formation_path.flags = PATH_FLAG_0x0020;
+        if (sub_425BF0(&formation_path, false)) {
+            int steps = path_make(&formation_path);
+            if (steps > 0) {
+                run_info->path.max = steps;
+                run_info->path.curr = 0;
+                run_info->path.flags &= ~0x03;
+                run_info->path.field_E8 = formation_path.from;
+                run_info->path.field_F0 = formation_path.to;
+                run_info->cur_stack_data->params[AGDATA_TARGET_TILE].loc = obj_field_int64_get(target_obj, OBJ_F_LOCATION);
+                return true;
+            }
+        }
+    }
 
     switch (obj_field_int32_get(target_obj, OBJ_F_TYPE)) {
     case OBJ_TYPE_CONTAINER:
@@ -10460,7 +10583,10 @@ bool sub_42E9B0(AnimRunInfo* run_info)
         return false;
     }
 
-    art_id = tig_art_id_rotation_set(art_id, run_info->path.rotations[0]);
+    bool turn_before_moving = anim_companion_can_pivot(obj)
+        && movement_rotation_distance(tig_art_id_rotation_get(art_id), run_info->path.rotations[0]) > 1;
+    companion_turns[run_info->id.slot_num].turn.active = false;
+    if (!turn_before_moving) art_id = tig_art_id_rotation_set(art_id, run_info->path.rotations[0]);
     if (anim != tig_art_id_anim_get(art_id)) {
         art_id = tig_art_id_frame_set(art_id, 0);
     }
@@ -10506,6 +10632,8 @@ bool sub_42E9B0(AnimRunInfo* run_info)
     run_info->path.curr = 0;
     run_info->path.flags &= ~0x03;
     run_info->flags |= 0x30;
+
+    if (turn_before_moving) anim_companion_pivot_begin(run_info, obj, run_info->path.rotations[0]);
 
     return true;
 }
@@ -11406,6 +11534,8 @@ bool sub_4305D0(AnimRunInfo* run_info)
         return false;
     }
 
+    if (anim_companion_pivot_step(run_info, obj)) return true;
+
     // FIXME: Useless.
     player_is_local_pc_obj(obj);
 
@@ -11480,6 +11610,8 @@ bool sub_4305D0(AnimRunInfo* run_info)
 
     new_loc = loc;
     object_inc_current_aid(obj);
+    // Use the advanced frame when rotating; the old local AID rewound the gait.
+    art_id = obj_field_int32_get(obj, OBJ_F_CURRENT_AID);
 
     offset_x = obj_field_int32_get(obj, OBJ_F_OFFSET_X);
     offset_y = obj_field_int32_get(obj, OBJ_F_OFFSET_Y);
@@ -11505,11 +11637,13 @@ bool sub_4305D0(AnimRunInfo* run_info)
 
                 v3 = false;
 
-                rot = run_info->path.rotations[run_info->path.curr];
-                if ((rot & 1) != 0) {
-                    run_info->extra_target_tile = 0;
-                } else if (!location_in_dir(loc, rot, &(run_info->extra_target_tile))) {
-                    run_info->path.curr = run_info->path.max + 1;
+                if (run_info->path.curr < run_info->path.max) {
+                    rot = run_info->path.rotations[run_info->path.curr];
+                    if ((rot & 1) != 0) {
+                        run_info->extra_target_tile = 0;
+                    } else if (!location_in_dir(loc, rot, &(run_info->extra_target_tile))) {
+                        run_info->path.curr = run_info->path.max + 1;
+                    }
                 }
 
                 if ((spell_flags & OSF_FLOATING) != 0) {
@@ -11544,11 +11678,20 @@ bool sub_4305D0(AnimRunInfo* run_info)
                 }
 
                 if (run_info->path.curr >= run_info->path.max) {
-                    anim = tig_art_id_anim_get(run_info->cur_stack_data->params[AGDATA_ANIM_ID_PREVIOUS].data);
-                    art_id = tig_art_id_anim_set(art_id, anim);
-                    art_id = tig_art_id_frame_set(art_id, 0);
-                    object_set_current_aid(obj, art_id);
-                    sub_430490(obj, 0, 0);
+                    int64_t leader = run_info->cur_stack_data->params[AGDATA_TARGET_OBJ].obj;
+                    bool continuing_follow = !v3 && (run_info->path.flags & 0x08) == 0
+                        && leader != OBJ_HANDLE_NULL && anim_following_leader(run_info, leader)
+                        && location_dist(new_loc, obj_field_int64_get(leader, OBJ_F_LOCATION))
+                            > run_info->cur_stack_data->params[AGDATA_RANGE_DATA].data;
+                    // A truncated path is not an arrival. Preserve the gait and
+                    // residual displacement while the next follow segment is built.
+                    if (!continuing_follow) {
+                        anim = tig_art_id_anim_get(run_info->cur_stack_data->params[AGDATA_ANIM_ID_PREVIOUS].data);
+                        art_id = tig_art_id_anim_set(art_id, anim);
+                        art_id = tig_art_id_frame_set(art_id, 0);
+                        object_set_current_aid(obj, art_id);
+                        sub_430490(obj, 0, 0);
+                    }
 
                     run_info->flags &= ~0x30;
 
@@ -11563,12 +11706,17 @@ bool sub_4305D0(AnimRunInfo* run_info)
 
                 rot = run_info->path.rotations[run_info->path.curr];
                 if (rot != run_info->path.rotations[run_info->path.curr - 1]) {
-                    sub_430490(obj, 0, 0);
-                    art_id = tig_art_id_rotation_set(art_id, rot);
-                    object_set_current_aid(obj, art_id);
+                    if (anim_companion_can_pivot(obj)
+                        && movement_rotation_distance(tig_art_id_rotation_get(art_id), rot) > 1) {
+                        anim_companion_pivot_begin(run_info, obj, rot);
+                    } else {
+                        sub_430490(obj, 0, 0);
+                        art_id = tig_art_id_rotation_set(art_id, rot);
+                        object_set_current_aid(obj, art_id);
+                    }
                 }
 
-                run_info->flags &= ~0x10;
+                follower_navigation_turn_flags(run_info, companion_turns[run_info->id.slot_num].turn.active);
 
                 v3 = 2;
                 if (run_info->current_goal > 0
@@ -13805,7 +13953,7 @@ bool anim_goal_follow_obj(int64_t source_obj, int64_t target_obj)
 
     if (sub_423300(source_obj, &anim_id)) {
         run_info = &(anim_run_info[anim_id.slot_num]);
-        if ((run_info->cur_stack_data->params[AGDATA_FLAGS_DATA].data & 0x1000) == 0) {
+        if ((run_info->cur_stack_data->params[AGDATA_FLAGS_DATA].data & AG_FLAG_FOLLOWING_LEADER) == 0) {
             if (run_info->cur_stack_data->type != AG_ANIM_FIDGET) {
                 return false;
             }
@@ -13866,7 +14014,7 @@ bool anim_goal_follow_obj(int64_t source_obj, int64_t target_obj)
         return false;
     }
 
-    goal_data.params[AGDATA_FLAGS_DATA].data |= 0x1000;
+    goal_data.params[AGDATA_FLAGS_DATA].data |= AG_FLAG_FOLLOWING_LEADER;
 
     if (!anim_goal_add(&goal_data, &stru_5A1908)) {
         return false;

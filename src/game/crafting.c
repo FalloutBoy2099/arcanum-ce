@@ -179,6 +179,15 @@ void crafting_preview(int64_t crafter, const SchematicInfo* schematic, CraftingP
     }
     CraftingIngredient pair[2];
     preview->pair_available = crafting_pair_from_items(items, count, resolved, pair);
+    int alternative = preview->pair_available
+        ? (pair[0].alternative != 0 ? pair[0].alternative : pair[1].alternative) : 0;
+    int64_t product = sub_4685A0(schematic->prod[alternative]);
+    if (product != OBJ_HANDLE_NULL && schematic->qty >= 1 && schematic->qty <= 100) {
+        int type = obj_field_int32_get(product, OBJ_F_TYPE);
+        int units = type == OBJ_TYPE_AMMO ? obj_field_int32_get(product, OBJ_F_AMMO_QUANTITY)
+            : type == OBJ_TYPE_GOLD ? obj_field_int32_get(product, OBJ_F_GOLD_QUANTITY) : 1;
+        preview->produced_per_lot = (int64_t)schematic->qty * SDL_max(0, units);
+    }
     FREE(items);
 }
 

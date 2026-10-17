@@ -83,17 +83,27 @@ float modern_font_size_for(const char* key)
 
 tig_color_t modern_font_color_for(const char* key, int default_red, int default_green, int default_blue)
 {
+    tig_color_t color;
+    if (modern_font_color_read(key, &color)) return color;
+    return tig_color_make(default_red, default_green, default_blue);
+}
+
+bool modern_font_color_read(const char* key, tig_color_t* color)
+{
     const char* str;
     int red;
     int green;
     int blue;
 
+    if (color == NULL) return false;
+
     str = settings_get_str_value(&settings, key);
     if (str != NULL && modern_font_parse_color(str, &red, &green, &blue)) {
-        return tig_color_make(red, green, blue);
+        *color = tig_color_make(red, green, blue);
+        return true;
     }
 
-    return tig_color_make(default_red, default_green, default_blue);
+    return false;
 }
 
 int modern_font_int_for(const char* key, int default_value, int min_value, int max_value)
@@ -129,14 +139,17 @@ bool modern_font_parse_color(const char* str, int* red, int* green, int* blue)
         str += 2;
     }
 
-    if (SDL_strlen(str) == 6 && sscanf(str, "%x", &value) == 1) {
+    bool hex = SDL_strlen(str) == 6;
+    for (int i = 0; hex && i < 6; i++) hex = SDL_isxdigit((unsigned char)str[i]) != 0;
+    if (hex && sscanf(str, "%x", &value) == 1) {
         *red = (value >> 16) & 0xFF;
         *green = (value >> 8) & 0xFF;
         *blue = value & 0xFF;
         return true;
     }
 
-    if (sscanf(str, "%d,%d,%d", &r, &g, &b) == 3
+    char trailing;
+    if (sscanf(str, "%d,%d,%d %c", &r, &g, &b, &trailing) == 3
         && r >= 0 && r <= 255
         && g >= 0 && g <= 255
         && b >= 0 && b <= 255) {

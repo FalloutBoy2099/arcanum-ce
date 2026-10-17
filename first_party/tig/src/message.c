@@ -186,6 +186,10 @@ void tig_message_ping(void)
         case SDL_EVENT_GAMEPAD_REMOVED:
             tig_controller_devices_changed();
             break;
+        case SDL_EVENT_RENDER_TARGETS_RESET:
+        case SDL_EVENT_RENDER_DEVICE_RESET:
+            tig_video_invalidate_texture();
+            break;
         case SDL_EVENT_QUIT:
             tig_message_post_quit(0);
             break;

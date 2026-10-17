@@ -4,6 +4,7 @@
 #include <tig/rect.h>
 #include <tig/window.h>
 #include "ui/search_bar.h"
+#include "ui/status_panel.h"
 
 static int failures;
 #define CHECK(expr) do { if (!(expr)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #expr); failures++; } } while (0)
@@ -99,6 +100,27 @@ int main(void)
     CHECK(!ui_panel_window_height(&hud, 0) && hud == original_toolbar);
     CHECK(tig_window_destroy(hud) == TIG_OK);
     CHECK(!tig_window_translucent_underlay_rect(hud, world, &rect));
+    UiStatusPanel panel = { .window = TIG_WINDOW_HANDLE_INVALID };
+    TigRect panel_frame = { 15, 15, 210, 24 };
+    CHECK(ui_status_panel_draw(&panel, panel_frame, "", TIG_FONT_HANDLE_INVALID, 0, 1));
+    CHECK(!ui_status_panel_draw(&panel, panel_frame, "", TIG_FONT_HANDLE_INVALID, 0, 1));
+    tig_window_handle_t original_panel = panel.window;
+    ui_status_panel_hide(&panel);
+    CHECK(tig_window_is_hidden(panel.window));
+    ui_status_panel_hide(&panel);
+    CHECK(!ui_status_panel_draw(&panel, panel_frame, "", TIG_FONT_HANDLE_INVALID, 0, 1));
+    CHECK(!tig_window_is_hidden(panel.window));
+    panel_frame.x++;
+    CHECK(!ui_status_panel_draw(&panel, panel_frame, "", TIG_FONT_HANDLE_INVALID, 0, 1));
+    CHECK(panel.window == original_panel);
+    CHECK(tig_window_data(panel.window, &toolbar_data) == TIG_OK && toolbar_data.rect.x == 16);
+    CHECK(ui_status_panel_draw(&panel, panel_frame, "", TIG_FONT_HANDLE_INVALID, 0, 2));
+    panel_frame.width++;
+    CHECK(ui_status_panel_draw(&panel, panel_frame, "", TIG_FONT_HANDLE_INVALID, 0, 2));
+    ui_status_panel_destroy(&panel);
+    CHECK(panel.window == TIG_WINDOW_HANDLE_INVALID && !panel.valid);
+    CHECK(ui_status_panel_draw(&panel, panel_frame, "", TIG_FONT_HANDLE_INVALID, 0, 2));
+    ui_status_panel_destroy(&panel);
     tig_window_exit();
     tig_rect_exit();
     tig_memory_exit();

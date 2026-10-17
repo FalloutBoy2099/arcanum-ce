@@ -8,6 +8,9 @@ bool ui_search_bar_open(tig_window_handle_t* handle, tig_window_handle_t parent,
 void ui_search_bar_close(tig_window_handle_t* handle);
 void ui_search_bar_cell(tig_window_handle_t handle, TigRect rect, tig_font_handle_t font,
     const char* text, bool selected);
+// Plain text on the existing panel artwork, with compact text padding.
+void ui_search_bar_label(tig_window_handle_t handle, TigRect rect, tig_font_handle_t font,
+    const char* text);
 bool ui_search_bar_contains(const TigRect* rect, int x, int y);
 // Recreate an unowned panel buffer, keeping its top-left fixed. Contents and
 // buttons are intentionally not retained; use only before locking a panel.

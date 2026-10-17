@@ -1,4 +1,6 @@
 #include "tig/video.h"
+#include "tig/video_upload.h"
+#include "tig/performance.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -50,6 +52,7 @@ static int tig_video_screenshot_key = -1;
 
 // 0x60F250
 static TigVideoState tig_video_state;
+static TigVideoUpload tig_video_upload;
 
 // 0x60FEF8
 static float tig_video_gamma;
@@ -215,6 +218,7 @@ int tig_video_blit(TigVideoBuffer* src_video_buffer, TigRect* src_rect, TigRect*
         &native_src_rect,
         tig_video_state.surface,
         &native_dst_rect);
+    tig_video_upload_mark(&tig_video_upload, native_dst_rect);
 
     return TIG_OK;
 }
@@ -337,6 +341,8 @@ int tig_video_blit_near_black_alpha(TigVideoBuffer* src_video_buffer,
     SDL_UnlockSurface(dst);
     SDL_UnlockSurface(src);
 
+    tig_video_upload_mark(&tig_video_upload, (SDL_Rect){ clamped_dst.x, clamped_dst.y, clamped_dst.width, clamped_dst.height });
+
     return TIG_OK;
 }
 
@@ -367,13 +373,27 @@ int tig_video_fill(const TigRect* rect, tig_color_t color)
         return TIG_ERR_GENERIC;
     }
 
+    tig_video_upload_mark(&tig_video_upload, native_rect);
+
     return TIG_OK;
 }
 
 // 0x51F8F0
+void tig_video_invalidate_texture(void)
+{
+    if (tig_video_state.surface != NULL) {
+        tig_video_upload_reset(&tig_video_upload, tig_video_state.surface->w, tig_video_state.surface->h);
+    }
+}
+
 int tig_video_flip(void)
 {
-    SDL_UpdateTexture(tig_video_state.texture, NULL, tig_video_state.surface->pixels, tig_video_state.surface->pitch);
+    Uint64 start = tig_performance_begin();
+    Uint64 bytes;
+    bool uploaded = tig_video_upload_flush(&tig_video_upload, tig_video_state.texture, tig_video_state.surface, &bytes);
+    tig_performance_end(TIG_PERF_TEXTURE_UPLOAD, start);
+    tig_performance_count(TIG_PERF_UPLOAD_BYTES, bytes);
+    if (!uploaded) return TIG_ERR_GENERIC;
 
     SDL_RenderClear(tig_video_state.renderer);
     SDL_RenderTexture(tig_video_state.renderer, tig_video_state.texture, NULL, NULL);
@@ -396,7 +416,9 @@ int tig_video_flip(void)
         SDL_RenderDebugTextFormat(tig_video_state.renderer, 0, 0, "%d", tig_video_state.fps);
     }
 
+    start = tig_performance_begin();
     SDL_RenderPresent(tig_video_state.renderer);
+    tig_performance_end(TIG_PERF_RENDER_PRESENT, start);
 
     return TIG_OK;
 }
@@ -1586,6 +1608,7 @@ bool tig_video_window_create(TigInitInfo* init_info)
     tig_video_state.renderer = renderer;
     tig_video_state.texture = texture;
     tig_video_state.surface = surface;
+    tig_video_upload_reset(&tig_video_upload, surface->w, surface->h);
 
     stru_610388.x = 0;
     stru_610388.y = 0;

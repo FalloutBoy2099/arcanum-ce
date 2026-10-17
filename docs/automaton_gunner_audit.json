@@ -1,0 +1,2853 @@
+{
+  "date": "2026-10-17",
+  "status": "audit_only_not_integrated",
+  "package": "C:\\Users\\michael\\Downloads\\arcanum\\Automaton Gunner 1.0.3",
+  "manifest": {
+    "name": "Automaton Gunner",
+    "version": "1.0.4",
+    "author": "TechErrorCode",
+    "target": "GOG Arcanum 1.0.7.4 with UAP 2.0.2",
+    "requirements": {
+      "executable_compatibility_policy": "structural UAP 2.0.2 validation",
+      "supported_arcanum_exe_size": 2048000,
+      "uap_core_file": "Arcanum5.dat",
+      "uap_core_sha256": "65CE42516FA618A8A1C879B9947470D58CDA7281BC2ED776EBA0F859F0B29089",
+      "reference_clean_arcanum_exe_sha256": "41B5A24A04E546EF455D84BDF9ED237F02E456B3BBDCF4710B7AF526E70D5BF4",
+      "reference_patched_arcanum_exe_sha256": "F572CA1138C0AE05CB812062D8971670373CAF3428689DFB9DE32CB43F66FE59",
+      "reported_uap_variant_sha256": "BD2CD6AFBDA853341F805A7CA197B57358DE95A743D5DA9A4ACB74DC472DC4DE",
+      "manual_installation": true
+    },
+    "executable_patch": {
+      "accepted_state": "all five values unpatched or all five values already patched",
+      "patches": [
+        {
+          "offset": "0x99F04",
+          "before": 28472,
+          "after": 28473
+        },
+        {
+          "offset": "0x9B354",
+          "before": 28472,
+          "after": 28473
+        },
+        {
+          "offset": "0x9BFBA",
+          "before": 28472,
+          "after": 28473
+        },
+        {
+          "offset": "0x1B3898",
+          "before": 28472,
+          "after": 28473
+        },
+        {
+          "offset": "0x1B3864",
+          "before": 7042,
+          "after": 7043
+        }
+      ],
+      "allows_non_overlapping_executable_changes": true
+    },
+    "ids": {
+      "schematic": 14116,
+      "folded_result": 15172,
+      "deployed_gunner": 28472,
+      "internal_ammo": 7042,
+      "deploy_script": 39990,
+      "collapse_script": 39991
+    },
+    "loadout": {
+      "weapon": "Elephant Gun",
+      "weapon_basic_id": 6039,
+      "ammo_type": "Bullet",
+      "starting_bullets": 300,
+      "stock_uap_attacks": 150,
+      "considerate_weapon_mod_1_6_attacks": 300
+    },
+    "runtime_qa": {
+      "core_mod_status": "passed on the 1.0.3 reference executable",
+      "core_mod_date": "2026-07-26",
+      "compatibility_update_status": "manual variant testing pending",
+      "previous_checks": [
+        "schematic 14116 displayed as Automaton Gunner",
+        "schematic 14116 was learned",
+        "folded object 15172 deployed when thrown"
+      ]
+    },
+    "payload_files": {
+      "data/art/monster/aut/AUTUWxku.ART": "919D930915B3EC0C47B66D360DB611A3CD3C92C75984EEE5C2E5332DEF85804D",
+      "data/mes/description.mes": "7AB3FCAC2DF5216298128623BDF707DA3A36994746EEE58614041648D451E8F1",
+      "data/proto/007062 - Ammo.pro": "1752341E6C0D2BF973B4294210055C9860D5A9FFD2994E247692E912238CFB1A",
+      "data/proto/014136 - Written.pro": "1A71754F43848851A1345810B95BBECA66D952E3EE57AA1A2B8002848B0A853C",
+      "data/proto/015192 - Generic.pro": "4F77E447F74F889D0D7A952916359D672CF9EE9FD2936767EE3CC5313A0B98D9",
+      "data/proto/028492 - NPC.pro": "3B1A1687AE48AB6D6EA51FBB1D90FCEE1017CD26CEEC9BB2231BA8BDC2FD7B1F",
+      "data/scr/39990AutomatonGunnerStock_deploy.scr": "AF5167751EAD1E817E86539FE9BBA78F40B4FBC7D4C45FF2D1FD1A93CEFE69EF",
+      "data/scr/39991AutomatonGunnerStock_collapse.scr": "E1ADE5DC4DF984D1FCCD83F6E7C200354C432F56797F0DFD0122ED6532428F4A"
+    }
+  },
+  "hashes_match_manifest": true,
+  "analysis": {
+    "description_changes": [
+      {
+        "id": 15172,
+        "before": "UNUSED",
+        "after": "Automaton Gunner"
+      },
+      {
+        "id": 28472,
+        "before": null,
+        "after": "Automaton Gunner"
+      }
+    ],
+    "description_removed": [],
+    "scripts": [
+      {
+        "file": "39990AutomatonGunnerStock_deploy.scr",
+        "description": "",
+        "entries": [
+          {
+            "condition": {
+              "type": "SCT_TRUE",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            },
+            "then": {
+              "type": "SAT_TRANSFORM_ATTACHEE_INTO_BASIC_PROTOTYPE",
+              "operands": [
+                {
+                  "type": 3,
+                  "value": 28472
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            },
+            "else": {
+              "type": "SAT_DO_NOTHING",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            }
+          },
+          {
+            "condition": {
+              "type": "SCT_TRUE",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            },
+            "then": {
+              "type": "SAT_CREATE_ITEM",
+              "operands": [
+                {
+                  "type": 3,
+                  "value": 6039
+                },
+                {
+                  "type": 1,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            },
+            "else": {
+              "type": "SAT_DO_NOTHING",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            }
+          },
+          {
+            "condition": {
+              "type": "SCT_TRUE",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            },
+            "then": {
+              "type": "SAT_CREATE_ITEM",
+              "operands": [
+                {
+                  "type": 3,
+                  "value": 7042
+                },
+                {
+                  "type": 1,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            },
+            "else": {
+              "type": "SAT_DO_NOTHING",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            }
+          },
+          {
+            "condition": {
+              "type": "SCT_TRUE",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            },
+            "then": {
+              "type": "SAT_CRITTER_FOLLOW",
+              "operands": [
+                {
+                  "type": 1,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            },
+            "else": {
+              "type": "SAT_DO_NOTHING",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            }
+          },
+          {
+            "condition": {
+              "type": "SCT_TRUE",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            },
+            "then": {
+              "type": "SAT_RETURN_AND_RUN_DEFAULT",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            },
+            "else": {
+              "type": "SAT_DO_NOTHING",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "file": "39991AutomatonGunnerStock_collapse.scr",
+        "description": "",
+        "entries": [
+          {
+            "condition": {
+              "type": "SCT_TRUE",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            },
+            "then": {
+              "type": "SAT_CRITTER_DISBAND",
+              "operands": [
+                {
+                  "type": 1,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            },
+            "else": {
+              "type": "SAT_DO_NOTHING",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            }
+          },
+          {
+            "condition": {
+              "type": "SCT_TRUE",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            },
+            "then": {
+              "type": "SAT_TRANSFORM_ATTACHEE_INTO_BASIC_PROTOTYPE",
+              "operands": [
+                {
+                  "type": 3,
+                  "value": 15172
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            },
+            "else": {
+              "type": "SAT_DO_NOTHING",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            }
+          },
+          {
+            "condition": {
+              "type": "SCT_TRUE",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            },
+            "then": {
+              "type": "SAT_RETURN_AND_SKIP_DEFAULT",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            },
+            "else": {
+              "type": "SAT_DO_NOTHING",
+              "operands": [
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                },
+                {
+                  "type": 0,
+                  "value": 0
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "payload_hashes": {
+      "data/mes/description.mes": "7AB3FCAC2DF5216298128623BDF707DA3A36994746EEE58614041648D451E8F1",
+      "data/proto/007062 - Ammo.pro": "1752341E6C0D2BF973B4294210055C9860D5A9FFD2994E247692E912238CFB1A",
+      "data/proto/014136 - Written.pro": "1A71754F43848851A1345810B95BBECA66D952E3EE57AA1A2B8002848B0A853C",
+      "data/proto/015192 - Generic.pro": "4F77E447F74F889D0D7A952916359D672CF9EE9FD2936767EE3CC5313A0B98D9",
+      "data/proto/028492 - NPC.pro": "3B1A1687AE48AB6D6EA51FBB1D90FCEE1017CD26CEEC9BB2231BA8BDC2FD7B1F",
+      "data/scr/39990AutomatonGunnerStock_deploy.scr": "AF5167751EAD1E817E86539FE9BBA78F40B4FBC7D4C45FF2D1FD1A93CEFE69EF",
+      "data/scr/39991AutomatonGunnerStock_collapse.scr": "E1ADE5DC4DF984D1FCCD83F6E7C200354C432F56797F0DFD0122ED6532428F4A",
+      "data/art/monster/aut/AUTUWxku.ART": "919D930915B3EC0C47B66D360DB611A3CD3C92C75984EEE5C2E5332DEF85804D"
+    }
+  },
+  "prototypes": [
+    {
+      "file": "C:\\Users\\michael\\Downloads\\arcanum\\Automaton Gunner 1.0.3\\data\\proto\\007062 - Ammo.pro",
+      "type": 6,
+      "bitmap_bytes": 16,
+      "fields": {
+        "OBJ_F_CURRENT_AID": 1610612801,
+        "OBJ_F_LOCATION": null,
+        "OBJ_F_OFFSET_X": 0,
+        "OBJ_F_OFFSET_Y": 0,
+        "OBJ_F_SHADOW": -1,
+        "OBJ_F_OVERLAY_FORE": {
+          "size": 4,
+          "entries": {
+            "0": "ffffffff",
+            "1": "ffffffff",
+            "2": "ffffffff",
+            "3": "ffffffff",
+            "4": "ffffffff",
+            "5": "ffffffff",
+            "6": "ffffffff"
+          }
+        },
+        "OBJ_F_OVERLAY_BACK": {
+          "size": 4,
+          "entries": {
+            "0": "ffffffff",
+            "1": "ffffffff",
+            "2": "ffffffff",
+            "3": "ffffffff",
+            "4": "ffffffff",
+            "5": "ffffffff",
+            "6": "ffffffff"
+          }
+        },
+        "OBJ_F_UNDERLAY": {
+          "size": 4,
+          "entries": {
+            "0": "ffffffff",
+            "1": "ffffffff",
+            "2": "ffffffff",
+            "3": "ffffffff"
+          }
+        },
+        "OBJ_F_BLIT_FLAGS": 0,
+        "OBJ_F_BLIT_COLOR": 16777215,
+        "OBJ_F_BLIT_ALPHA": 255,
+        "OBJ_F_BLIT_SCALE": 100,
+        "OBJ_F_LIGHT_FLAGS": 0,
+        "OBJ_F_LIGHT_AID": -1,
+        "OBJ_F_LIGHT_COLOR": 16777215,
+        "OBJ_F_OVERLAY_LIGHT_FLAGS": null,
+        "OBJ_F_OVERLAY_LIGHT_AID": {
+          "size": 4,
+          "entries": {
+            "0": "ffffffff",
+            "1": "ffffffff",
+            "2": "ffffffff",
+            "3": "ffffffff"
+          }
+        },
+        "OBJ_F_OVERLAY_LIGHT_COLOR": null,
+        "OBJ_F_FLAGS": 1076,
+        "OBJ_F_SPELL_FLAGS": 0,
+        "OBJ_F_BLOCKING_MASK": 0,
+        "OBJ_F_NAME": 2400,
+        "OBJ_F_DESCRIPTION": 7039,
+        "OBJ_F_AID": 1610612801,
+        "OBJ_F_DESTROYED_AID": -1,
+        "OBJ_F_AC": 0,
+        "OBJ_F_HP_PTS": 1,
+        "OBJ_F_HP_ADJ": 0,
+        "OBJ_F_HP_DAMAGE": 0,
+        "OBJ_F_MATERIAL": 5,
+        "OBJ_F_RESISTANCE_IDX": null,
+        "OBJ_F_SCRIPTS_IDX": null,
+        "OBJ_F_SOUND_EFFECT": 0,
+        "OBJ_F_CATEGORY": 2,
+        "OBJ_F_PAD_IAS_1": null,
+        "OBJ_F_PAD_I64AS_1": null,
+        "OBJ_F_ITEM_FLAGS": 0,
+        "OBJ_F_ITEM_PARENT": null,
+        "OBJ_F_ITEM_WEIGHT": 1,
+        "OBJ_F_ITEM_MAGIC_WEIGHT_ADJ": 0,
+        "OBJ_F_ITEM_WORTH": 3,
+        "OBJ_F_ITEM_MANA_STORE": 0,
+        "OBJ_F_ITEM_INV_AID": 1610616897,
+        "OBJ_F_ITEM_INV_LOCATION": 0,
+        "OBJ_F_ITEM_USE_AID_FRAGMENT": -1,
+        "OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY": -30,
+        "OBJ_F_ITEM_DISCIPLINE": 3,
+        "OBJ_F_ITEM_DESCRIPTION_UNKNOWN": 7039,
+        "OBJ_F_ITEM_DESCRIPTION_EFFECTS": 7039,
+        "OBJ_F_ITEM_SPELL_1": 10000,
+        "OBJ_F_ITEM_SPELL_2": 10000,
+        "OBJ_F_ITEM_SPELL_3": 10000,
+        "OBJ_F_ITEM_SPELL_4": 10000,
+        "OBJ_F_ITEM_SPELL_5": 10000,
+        "OBJ_F_ITEM_SPELL_MANA_STORE": 0,
+        "OBJ_F_ITEM_AI_ACTION": 0,
+        "OBJ_F_ITEM_PAD_I_1": 0,
+        "OBJ_F_ITEM_PAD_IAS_1": null,
+        "OBJ_F_ITEM_PAD_I64AS_1": null,
+        "OBJ_F_AMMO_FLAGS": 0,
+        "OBJ_F_AMMO_QUANTITY": 300,
+        "OBJ_F_AMMO_TYPE": 1,
+        "OBJ_F_AMMO_PAD_I_1": 0,
+        "OBJ_F_AMMO_PAD_I_2": 0,
+        "OBJ_F_AMMO_PAD_IAS_1": null,
+        "OBJ_F_AMMO_PAD_I64AS_1": null
+      },
+      "spans": {
+        "OBJ_F_CURRENT_AID": {
+          "offset": 72,
+          "length": 4
+        },
+        "OBJ_F_LOCATION": {
+          "offset": 76,
+          "length": 1
+        },
+        "OBJ_F_OFFSET_X": {
+          "offset": 77,
+          "length": 4
+        },
+        "OBJ_F_OFFSET_Y": {
+          "offset": 81,
+          "length": 4
+        },
+        "OBJ_F_SHADOW": {
+          "offset": 85,
+          "length": 4
+        },
+        "OBJ_F_OVERLAY_FORE": {
+          "offset": 89,
+          "length": 53
+        },
+        "OBJ_F_OVERLAY_BACK": {
+          "offset": 142,
+          "length": 53
+        },
+        "OBJ_F_UNDERLAY": {
+          "offset": 195,
+          "length": 41
+        },
+        "OBJ_F_BLIT_FLAGS": {
+          "offset": 236,
+          "length": 4
+        },
+        "OBJ_F_BLIT_COLOR": {
+          "offset": 240,
+          "length": 4
+        },
+        "OBJ_F_BLIT_ALPHA": {
+          "offset": 244,
+          "length": 4
+        },
+        "OBJ_F_BLIT_SCALE": {
+          "offset": 248,
+          "length": 4
+        },
+        "OBJ_F_LIGHT_FLAGS": {
+          "offset": 252,
+          "length": 4
+        },
+        "OBJ_F_LIGHT_AID": {
+          "offset": 256,
+          "length": 4
+        },
+        "OBJ_F_LIGHT_COLOR": {
+          "offset": 260,
+          "length": 4
+        },
+        "OBJ_F_OVERLAY_LIGHT_FLAGS": {
+          "offset": 264,
+          "length": 1
+        },
+        "OBJ_F_OVERLAY_LIGHT_AID": {
+          "offset": 265,
+          "length": 41
+        },
+        "OBJ_F_OVERLAY_LIGHT_COLOR": {
+          "offset": 306,
+          "length": 1
+        },
+        "OBJ_F_FLAGS": {
+          "offset": 307,
+          "length": 4
+        },
+        "OBJ_F_SPELL_FLAGS": {
+          "offset": 311,
+          "length": 4
+        },
+        "OBJ_F_BLOCKING_MASK": {
+          "offset": 315,
+          "length": 4
+        },
+        "OBJ_F_NAME": {
+          "offset": 319,
+          "length": 4
+        },
+        "OBJ_F_DESCRIPTION": {
+          "offset": 323,
+          "length": 4
+        },
+        "OBJ_F_AID": {
+          "offset": 327,
+          "length": 4
+        },
+        "OBJ_F_DESTROYED_AID": {
+          "offset": 331,
+          "length": 4
+        },
+        "OBJ_F_AC": {
+          "offset": 335,
+          "length": 4
+        },
+        "OBJ_F_HP_PTS": {
+          "offset": 339,
+          "length": 4
+        },
+        "OBJ_F_HP_ADJ": {
+          "offset": 343,
+          "length": 4
+        },
+        "OBJ_F_HP_DAMAGE": {
+          "offset": 347,
+          "length": 4
+        },
+        "OBJ_F_MATERIAL": {
+          "offset": 351,
+          "length": 4
+        },
+        "OBJ_F_RESISTANCE_IDX": {
+          "offset": 355,
+          "length": 1
+        },
+        "OBJ_F_SCRIPTS_IDX": {
+          "offset": 356,
+          "length": 1
+        },
+        "OBJ_F_SOUND_EFFECT": {
+          "offset": 357,
+          "length": 4
+        },
+        "OBJ_F_CATEGORY": {
+          "offset": 361,
+          "length": 4
+        },
+        "OBJ_F_PAD_IAS_1": {
+          "offset": 365,
+          "length": 1
+        },
+        "OBJ_F_PAD_I64AS_1": {
+          "offset": 366,
+          "length": 1
+        },
+        "OBJ_F_ITEM_FLAGS": {
+          "offset": 367,
+          "length": 4
+        },
+        "OBJ_F_ITEM_PARENT": {
+          "offset": 371,
+          "length": 1
+        },
+        "OBJ_F_ITEM_WEIGHT": {
+          "offset": 372,
+          "length": 4
+        },
+        "OBJ_F_ITEM_MAGIC_WEIGHT_ADJ": {
+          "offset": 376,
+          "length": 4
+        },
+        "OBJ_F_ITEM_WORTH": {
+          "offset": 380,
+          "length": 4
+        },
+        "OBJ_F_ITEM_MANA_STORE": {
+          "offset": 384,
+          "length": 4
+        },
+        "OBJ_F_ITEM_INV_AID": {
+          "offset": 388,
+          "length": 4
+        },
+        "OBJ_F_ITEM_INV_LOCATION": {
+          "offset": 392,
+          "length": 4
+        },
+        "OBJ_F_ITEM_USE_AID_FRAGMENT": {
+          "offset": 396,
+          "length": 4
+        },
+        "OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY": {
+          "offset": 400,
+          "length": 4
+        },
+        "OBJ_F_ITEM_DISCIPLINE": {
+          "offset": 404,
+          "length": 4
+        },
+        "OBJ_F_ITEM_DESCRIPTION_UNKNOWN": {
+          "offset": 408,
+          "length": 4
+        },
+        "OBJ_F_ITEM_DESCRIPTION_EFFECTS": {
+          "offset": 412,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_1": {
+          "offset": 416,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_2": {
+          "offset": 420,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_3": {
+          "offset": 424,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_4": {
+          "offset": 428,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_5": {
+          "offset": 432,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_MANA_STORE": {
+          "offset": 436,
+          "length": 4
+        },
+        "OBJ_F_ITEM_AI_ACTION": {
+          "offset": 440,
+          "length": 4
+        },
+        "OBJ_F_ITEM_PAD_I_1": {
+          "offset": 444,
+          "length": 4
+        },
+        "OBJ_F_ITEM_PAD_IAS_1": {
+          "offset": 448,
+          "length": 1
+        },
+        "OBJ_F_ITEM_PAD_I64AS_1": {
+          "offset": 449,
+          "length": 1
+        },
+        "OBJ_F_AMMO_FLAGS": {
+          "offset": 450,
+          "length": 4
+        },
+        "OBJ_F_AMMO_QUANTITY": {
+          "offset": 454,
+          "length": 4
+        },
+        "OBJ_F_AMMO_TYPE": {
+          "offset": 458,
+          "length": 4
+        },
+        "OBJ_F_AMMO_PAD_I_1": {
+          "offset": 462,
+          "length": 4
+        },
+        "OBJ_F_AMMO_PAD_I_2": {
+          "offset": 466,
+          "length": 4
+        },
+        "OBJ_F_AMMO_PAD_IAS_1": {
+          "offset": 470,
+          "length": 1
+        },
+        "OBJ_F_AMMO_PAD_I64AS_1": {
+          "offset": 471,
+          "length": 1
+        }
+      },
+      "baselines": [],
+      "sha256": "1752341E6C0D2BF973B4294210055C9860D5A9FFD2994E247692E912238CFB1A"
+    },
+    {
+      "file": "C:\\Users\\michael\\Downloads\\arcanum\\Automaton Gunner 1.0.3\\data\\proto\\014136 - Written.pro",
+      "type": 13,
+      "bitmap_bytes": 16,
+      "fields": {
+        "OBJ_F_CURRENT_AID": 1611530248,
+        "OBJ_F_LOCATION": null,
+        "OBJ_F_OFFSET_X": 0,
+        "OBJ_F_OFFSET_Y": 0,
+        "OBJ_F_SHADOW": -1,
+        "OBJ_F_OVERLAY_FORE": {
+          "size": 4,
+          "entries": {
+            "0": "ffffffff",
+            "1": "ffffffff",
+            "2": "ffffffff",
+            "3": "ffffffff",
+            "4": "ffffffff",
+            "5": "ffffffff",
+            "6": "ffffffff"
+          }
+        },
+        "OBJ_F_OVERLAY_BACK": {
+          "size": 4,
+          "entries": {
+            "0": "ffffffff",
+            "1": "ffffffff",
+            "2": "ffffffff",
+            "3": "ffffffff",
+            "4": "ffffffff",
+            "5": "ffffffff",
+            "6": "ffffffff"
+          }
+        },
+        "OBJ_F_UNDERLAY": {
+          "size": 4,
+          "entries": {
+            "0": "ffffffff",
+            "1": "ffffffff",
+            "2": "ffffffff",
+            "3": "ffffffff"
+          }
+        },
+        "OBJ_F_BLIT_FLAGS": 0,
+        "OBJ_F_BLIT_COLOR": 16777215,
+        "OBJ_F_BLIT_ALPHA": 255,
+        "OBJ_F_BLIT_SCALE": 100,
+        "OBJ_F_LIGHT_FLAGS": 0,
+        "OBJ_F_LIGHT_AID": -1,
+        "OBJ_F_LIGHT_COLOR": 16777215,
+        "OBJ_F_OVERLAY_LIGHT_FLAGS": null,
+        "OBJ_F_OVERLAY_LIGHT_AID": {
+          "size": 4,
+          "entries": {
+            "0": "ffffffff",
+            "1": "ffffffff",
+            "2": "ffffffff",
+            "3": "ffffffff"
+          }
+        },
+        "OBJ_F_OVERLAY_LIGHT_COLOR": null,
+        "OBJ_F_FLAGS": 1076,
+        "OBJ_F_SPELL_FLAGS": 0,
+        "OBJ_F_BLOCKING_MASK": 0,
+        "OBJ_F_NAME": 5200,
+        "OBJ_F_DESCRIPTION": 14116,
+        "OBJ_F_AID": 1611530248,
+        "OBJ_F_DESTROYED_AID": -1,
+        "OBJ_F_AC": 0,
+        "OBJ_F_HP_PTS": 1,
+        "OBJ_F_HP_ADJ": 0,
+        "OBJ_F_HP_DAMAGE": 0,
+        "OBJ_F_MATERIAL": 9,
+        "OBJ_F_RESISTANCE_IDX": null,
+        "OBJ_F_SCRIPTS_IDX": null,
+        "OBJ_F_SOUND_EFFECT": 0,
+        "OBJ_F_CATEGORY": 0,
+        "OBJ_F_PAD_IAS_1": null,
+        "OBJ_F_PAD_I64AS_1": null,
+        "OBJ_F_ITEM_FLAGS": 128,
+        "OBJ_F_ITEM_PARENT": null,
+        "OBJ_F_ITEM_WEIGHT": 1,
+        "OBJ_F_ITEM_MAGIC_WEIGHT_ADJ": 0,
+        "OBJ_F_ITEM_WORTH": 150,
+        "OBJ_F_ITEM_MANA_STORE": 0,
+        "OBJ_F_ITEM_INV_AID": 1611534344,
+        "OBJ_F_ITEM_INV_LOCATION": 0,
+        "OBJ_F_ITEM_USE_AID_FRAGMENT": -1,
+        "OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY": 0,
+        "OBJ_F_ITEM_DISCIPLINE": 0,
+        "OBJ_F_ITEM_DESCRIPTION_UNKNOWN": 14116,
+        "OBJ_F_ITEM_DESCRIPTION_EFFECTS": 14116,
+        "OBJ_F_ITEM_SPELL_1": 10000,
+        "OBJ_F_ITEM_SPELL_2": 10000,
+        "OBJ_F_ITEM_SPELL_3": 10000,
+        "OBJ_F_ITEM_SPELL_4": 10000,
+        "OBJ_F_ITEM_SPELL_5": 10000,
+        "OBJ_F_ITEM_SPELL_MANA_STORE": 0,
+        "OBJ_F_ITEM_AI_ACTION": 0,
+        "OBJ_F_ITEM_PAD_I_1": 0,
+        "OBJ_F_ITEM_PAD_IAS_1": null,
+        "OBJ_F_ITEM_PAD_I64AS_1": null,
+        "OBJ_F_WRITTEN_FLAGS": 0,
+        "OBJ_F_WRITTEN_SUBTYPE": 5,
+        "OBJ_F_WRITTEN_TEXT_START_LINE": 5070,
+        "OBJ_F_WRITTEN_TEXT_END_LINE": 0,
+        "OBJ_F_WRITTEN_PAD_I_1": 0,
+        "OBJ_F_WRITTEN_PAD_I_2": 0,
+        "OBJ_F_WRITTEN_PAD_IAS_1": null,
+        "OBJ_F_WRITTEN_PAD_I64AS_1": null
+      },
+      "spans": {
+        "OBJ_F_CURRENT_AID": {
+          "offset": 72,
+          "length": 4
+        },
+        "OBJ_F_LOCATION": {
+          "offset": 76,
+          "length": 1
+        },
+        "OBJ_F_OFFSET_X": {
+          "offset": 77,
+          "length": 4
+        },
+        "OBJ_F_OFFSET_Y": {
+          "offset": 81,
+          "length": 4
+        },
+        "OBJ_F_SHADOW": {
+          "offset": 85,
+          "length": 4
+        },
+        "OBJ_F_OVERLAY_FORE": {
+          "offset": 89,
+          "length": 53
+        },
+        "OBJ_F_OVERLAY_BACK": {
+          "offset": 142,
+          "length": 53
+        },
+        "OBJ_F_UNDERLAY": {
+          "offset": 195,
+          "length": 41
+        },
+        "OBJ_F_BLIT_FLAGS": {
+          "offset": 236,
+          "length": 4
+        },
+        "OBJ_F_BLIT_COLOR": {
+          "offset": 240,
+          "length": 4
+        },
+        "OBJ_F_BLIT_ALPHA": {
+          "offset": 244,
+          "length": 4
+        },
+        "OBJ_F_BLIT_SCALE": {
+          "offset": 248,
+          "length": 4
+        },
+        "OBJ_F_LIGHT_FLAGS": {
+          "offset": 252,
+          "length": 4
+        },
+        "OBJ_F_LIGHT_AID": {
+          "offset": 256,
+          "length": 4
+        },
+        "OBJ_F_LIGHT_COLOR": {
+          "offset": 260,
+          "length": 4
+        },
+        "OBJ_F_OVERLAY_LIGHT_FLAGS": {
+          "offset": 264,
+          "length": 1
+        },
+        "OBJ_F_OVERLAY_LIGHT_AID": {
+          "offset": 265,
+          "length": 41
+        },
+        "OBJ_F_OVERLAY_LIGHT_COLOR": {
+          "offset": 306,
+          "length": 1
+        },
+        "OBJ_F_FLAGS": {
+          "offset": 307,
+          "length": 4
+        },
+        "OBJ_F_SPELL_FLAGS": {
+          "offset": 311,
+          "length": 4
+        },
+        "OBJ_F_BLOCKING_MASK": {
+          "offset": 315,
+          "length": 4
+        },
+        "OBJ_F_NAME": {
+          "offset": 319,
+          "length": 4
+        },
+        "OBJ_F_DESCRIPTION": {
+          "offset": 323,
+          "length": 4
+        },
+        "OBJ_F_AID": {
+          "offset": 327,
+          "length": 4
+        },
+        "OBJ_F_DESTROYED_AID": {
+          "offset": 331,
+          "length": 4
+        },
+        "OBJ_F_AC": {
+          "offset": 335,
+          "length": 4
+        },
+        "OBJ_F_HP_PTS": {
+          "offset": 339,
+          "length": 4
+        },
+        "OBJ_F_HP_ADJ": {
+          "offset": 343,
+          "length": 4
+        },
+        "OBJ_F_HP_DAMAGE": {
+          "offset": 347,
+          "length": 4
+        },
+        "OBJ_F_MATERIAL": {
+          "offset": 351,
+          "length": 4
+        },
+        "OBJ_F_RESISTANCE_IDX": {
+          "offset": 355,
+          "length": 1
+        },
+        "OBJ_F_SCRIPTS_IDX": {
+          "offset": 356,
+          "length": 1
+        },
+        "OBJ_F_SOUND_EFFECT": {
+          "offset": 357,
+          "length": 4
+        },
+        "OBJ_F_CATEGORY": {
+          "offset": 361,
+          "length": 4
+        },
+        "OBJ_F_PAD_IAS_1": {
+          "offset": 365,
+          "length": 1
+        },
+        "OBJ_F_PAD_I64AS_1": {
+          "offset": 366,
+          "length": 1
+        },
+        "OBJ_F_ITEM_FLAGS": {
+          "offset": 367,
+          "length": 4
+        },
+        "OBJ_F_ITEM_PARENT": {
+          "offset": 371,
+          "length": 1
+        },
+        "OBJ_F_ITEM_WEIGHT": {
+          "offset": 372,
+          "length": 4
+        },
+        "OBJ_F_ITEM_MAGIC_WEIGHT_ADJ": {
+          "offset": 376,
+          "length": 4
+        },
+        "OBJ_F_ITEM_WORTH": {
+          "offset": 380,
+          "length": 4
+        },
+        "OBJ_F_ITEM_MANA_STORE": {
+          "offset": 384,
+          "length": 4
+        },
+        "OBJ_F_ITEM_INV_AID": {
+          "offset": 388,
+          "length": 4
+        },
+        "OBJ_F_ITEM_INV_LOCATION": {
+          "offset": 392,
+          "length": 4
+        },
+        "OBJ_F_ITEM_USE_AID_FRAGMENT": {
+          "offset": 396,
+          "length": 4
+        },
+        "OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY": {
+          "offset": 400,
+          "length": 4
+        },
+        "OBJ_F_ITEM_DISCIPLINE": {
+          "offset": 404,
+          "length": 4
+        },
+        "OBJ_F_ITEM_DESCRIPTION_UNKNOWN": {
+          "offset": 408,
+          "length": 4
+        },
+        "OBJ_F_ITEM_DESCRIPTION_EFFECTS": {
+          "offset": 412,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_1": {
+          "offset": 416,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_2": {
+          "offset": 420,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_3": {
+          "offset": 424,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_4": {
+          "offset": 428,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_5": {
+          "offset": 432,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_MANA_STORE": {
+          "offset": 436,
+          "length": 4
+        },
+        "OBJ_F_ITEM_AI_ACTION": {
+          "offset": 440,
+          "length": 4
+        },
+        "OBJ_F_ITEM_PAD_I_1": {
+          "offset": 444,
+          "length": 4
+        },
+        "OBJ_F_ITEM_PAD_IAS_1": {
+          "offset": 448,
+          "length": 1
+        },
+        "OBJ_F_ITEM_PAD_I64AS_1": {
+          "offset": 449,
+          "length": 1
+        },
+        "OBJ_F_WRITTEN_FLAGS": {
+          "offset": 450,
+          "length": 4
+        },
+        "OBJ_F_WRITTEN_SUBTYPE": {
+          "offset": 454,
+          "length": 4
+        },
+        "OBJ_F_WRITTEN_TEXT_START_LINE": {
+          "offset": 458,
+          "length": 4
+        },
+        "OBJ_F_WRITTEN_TEXT_END_LINE": {
+          "offset": 462,
+          "length": 4
+        },
+        "OBJ_F_WRITTEN_PAD_I_1": {
+          "offset": 466,
+          "length": 4
+        },
+        "OBJ_F_WRITTEN_PAD_I_2": {
+          "offset": 470,
+          "length": 4
+        },
+        "OBJ_F_WRITTEN_PAD_IAS_1": {
+          "offset": 474,
+          "length": 1
+        },
+        "OBJ_F_WRITTEN_PAD_I64AS_1": {
+          "offset": 475,
+          "length": 1
+        }
+      },
+      "baselines": [
+        {
+          "file": "C:\\Games\\Arcanum\\Arcanum5.dat\\proto\\014136 - Written.pro",
+          "changes": [
+            {
+              "field": "OBJ_F_DESCRIPTION",
+              "before": 6132,
+              "after": 14116
+            },
+            {
+              "field": "OBJ_F_CATEGORY",
+              "before": 2,
+              "after": 0
+            },
+            {
+              "field": "OBJ_F_ITEM_DESCRIPTION_UNKNOWN",
+              "before": 6132,
+              "after": 14116
+            },
+            {
+              "field": "OBJ_F_ITEM_DESCRIPTION_EFFECTS",
+              "before": 6132,
+              "after": 14116
+            },
+            {
+              "field": "OBJ_F_WRITTEN_TEXT_START_LINE",
+              "before": 4460,
+              "after": 5070
+            }
+          ],
+          "sha256": "A0901616342E9350338CE789B1FE87A86A7E77060298C2BD8B3AEAD7DCE9C1CC"
+        }
+      ],
+      "sha256": "1A71754F43848851A1345810B95BBECA66D952E3EE57AA1A2B8002848B0A853C"
+    },
+    {
+      "file": "C:\\Users\\michael\\Downloads\\arcanum\\Automaton Gunner 1.0.3\\data\\proto\\015192 - Generic.pro",
+      "type": 14,
+      "bitmap_bytes": 16,
+      "fields": {
+        "OBJ_F_CURRENT_AID": 1623195657,
+        "OBJ_F_LOCATION": null,
+        "OBJ_F_OFFSET_X": 0,
+        "OBJ_F_OFFSET_Y": 0,
+        "OBJ_F_SHADOW": -1,
+        "OBJ_F_OVERLAY_FORE": {
+          "size": 4,
+          "entries": {
+            "0": "ffffffff",
+            "1": "ffffffff",
+            "2": "ffffffff",
+            "3": "ffffffff",
+            "4": "ffffffff",
+            "5": "ffffffff",
+            "6": "ffffffff"
+          }
+        },
+        "OBJ_F_OVERLAY_BACK": {
+          "size": 4,
+          "entries": {
+            "0": "ffffffff",
+            "1": "ffffffff",
+            "2": "ffffffff",
+            "3": "ffffffff",
+            "4": "ffffffff",
+            "5": "ffffffff",
+            "6": "ffffffff"
+          }
+        },
+        "OBJ_F_UNDERLAY": {
+          "size": 4,
+          "entries": {
+            "0": "ffffffff",
+            "1": "ffffffff",
+            "2": "ffffffff",
+            "3": "ffffffff"
+          }
+        },
+        "OBJ_F_BLIT_FLAGS": 0,
+        "OBJ_F_BLIT_COLOR": 16777215,
+        "OBJ_F_BLIT_ALPHA": 255,
+        "OBJ_F_BLIT_SCALE": 100,
+        "OBJ_F_LIGHT_FLAGS": 0,
+        "OBJ_F_LIGHT_AID": -1,
+        "OBJ_F_LIGHT_COLOR": 16777215,
+        "OBJ_F_OVERLAY_LIGHT_FLAGS": null,
+        "OBJ_F_OVERLAY_LIGHT_AID": {
+          "size": 4,
+          "entries": {
+            "0": "ffffffff",
+            "1": "ffffffff",
+            "2": "ffffffff",
+            "3": "ffffffff"
+          }
+        },
+        "OBJ_F_OVERLAY_LIGHT_COLOR": null,
+        "OBJ_F_FLAGS": 1076,
+        "OBJ_F_SPELL_FLAGS": 0,
+        "OBJ_F_BLOCKING_MASK": 0,
+        "OBJ_F_NAME": 5600,
+        "OBJ_F_DESCRIPTION": 15172,
+        "OBJ_F_AID": 1623195657,
+        "OBJ_F_DESTROYED_AID": -1,
+        "OBJ_F_AC": 0,
+        "OBJ_F_HP_PTS": 350,
+        "OBJ_F_HP_ADJ": 0,
+        "OBJ_F_HP_DAMAGE": 0,
+        "OBJ_F_MATERIAL": 5,
+        "OBJ_F_RESISTANCE_IDX": null,
+        "OBJ_F_SCRIPTS_IDX": {
+          "size": 12,
+          "entries": {
+            "7": "0000000000000000369c0000",
+            "8": "0000000000000000369c0000"
+          }
+        },
+        "OBJ_F_SOUND_EFFECT": 0,
+        "OBJ_F_CATEGORY": 0,
+        "OBJ_F_PAD_IAS_1": null,
+        "OBJ_F_PAD_I64AS_1": null,
+        "OBJ_F_ITEM_FLAGS": 524288,
+        "OBJ_F_ITEM_PARENT": null,
+        "OBJ_F_ITEM_WEIGHT": 2200,
+        "OBJ_F_ITEM_MAGIC_WEIGHT_ADJ": 0,
+        "OBJ_F_ITEM_WORTH": 4500,
+        "OBJ_F_ITEM_MANA_STORE": 0,
+        "OBJ_F_ITEM_INV_AID": 1623199753,
+        "OBJ_F_ITEM_INV_LOCATION": 0,
+        "OBJ_F_ITEM_USE_AID_FRAGMENT": -1,
+        "OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY": -100,
+        "OBJ_F_ITEM_DISCIPLINE": 5,
+        "OBJ_F_ITEM_DESCRIPTION_UNKNOWN": 15172,
+        "OBJ_F_ITEM_DESCRIPTION_EFFECTS": 15172,
+        "OBJ_F_ITEM_SPELL_1": 10000,
+        "OBJ_F_ITEM_SPELL_2": 10000,
+        "OBJ_F_ITEM_SPELL_3": 10000,
+        "OBJ_F_ITEM_SPELL_4": 10000,
+        "OBJ_F_ITEM_SPELL_5": 10000,
+        "OBJ_F_ITEM_SPELL_MANA_STORE": 0,
+        "OBJ_F_ITEM_AI_ACTION": 0,
+        "OBJ_F_ITEM_PAD_I_1": 0,
+        "OBJ_F_ITEM_PAD_IAS_1": null,
+        "OBJ_F_ITEM_PAD_I64AS_1": null,
+        "OBJ_F_GENERIC_FLAGS": 32,
+        "OBJ_F_GENERIC_USAGE_BONUS": 0,
+        "OBJ_F_GENERIC_USAGE_COUNT_REMAINING": 0,
+        "OBJ_F_GENERIC_PAD_IAS_1": null,
+        "OBJ_F_GENERIC_PAD_I64AS_1": null
+      },
+      "spans": {
+        "OBJ_F_CURRENT_AID": {
+          "offset": 72,
+          "length": 4
+        },
+        "OBJ_F_LOCATION": {
+          "offset": 76,
+          "length": 1
+        },
+        "OBJ_F_OFFSET_X": {
+          "offset": 77,
+          "length": 4
+        },
+        "OBJ_F_OFFSET_Y": {
+          "offset": 81,
+          "length": 4
+        },
+        "OBJ_F_SHADOW": {
+          "offset": 85,
+          "length": 4
+        },
+        "OBJ_F_OVERLAY_FORE": {
+          "offset": 89,
+          "length": 53
+        },
+        "OBJ_F_OVERLAY_BACK": {
+          "offset": 142,
+          "length": 53
+        },
+        "OBJ_F_UNDERLAY": {
+          "offset": 195,
+          "length": 41
+        },
+        "OBJ_F_BLIT_FLAGS": {
+          "offset": 236,
+          "length": 4
+        },
+        "OBJ_F_BLIT_COLOR": {
+          "offset": 240,
+          "length": 4
+        },
+        "OBJ_F_BLIT_ALPHA": {
+          "offset": 244,
+          "length": 4
+        },
+        "OBJ_F_BLIT_SCALE": {
+          "offset": 248,
+          "length": 4
+        },
+        "OBJ_F_LIGHT_FLAGS": {
+          "offset": 252,
+          "length": 4
+        },
+        "OBJ_F_LIGHT_AID": {
+          "offset": 256,
+          "length": 4
+        },
+        "OBJ_F_LIGHT_COLOR": {
+          "offset": 260,
+          "length": 4
+        },
+        "OBJ_F_OVERLAY_LIGHT_FLAGS": {
+          "offset": 264,
+          "length": 1
+        },
+        "OBJ_F_OVERLAY_LIGHT_AID": {
+          "offset": 265,
+          "length": 41
+        },
+        "OBJ_F_OVERLAY_LIGHT_COLOR": {
+          "offset": 306,
+          "length": 1
+        },
+        "OBJ_F_FLAGS": {
+          "offset": 307,
+          "length": 4
+        },
+        "OBJ_F_SPELL_FLAGS": {
+          "offset": 311,
+          "length": 4
+        },
+        "OBJ_F_BLOCKING_MASK": {
+          "offset": 315,
+          "length": 4
+        },
+        "OBJ_F_NAME": {
+          "offset": 319,
+          "length": 4
+        },
+        "OBJ_F_DESCRIPTION": {
+          "offset": 323,
+          "length": 4
+        },
+        "OBJ_F_AID": {
+          "offset": 327,
+          "length": 4
+        },
+        "OBJ_F_DESTROYED_AID": {
+          "offset": 331,
+          "length": 4
+        },
+        "OBJ_F_AC": {
+          "offset": 335,
+          "length": 4
+        },
+        "OBJ_F_HP_PTS": {
+          "offset": 339,
+          "length": 4
+        },
+        "OBJ_F_HP_ADJ": {
+          "offset": 343,
+          "length": 4
+        },
+        "OBJ_F_HP_DAMAGE": {
+          "offset": 347,
+          "length": 4
+        },
+        "OBJ_F_MATERIAL": {
+          "offset": 351,
+          "length": 4
+        },
+        "OBJ_F_RESISTANCE_IDX": {
+          "offset": 355,
+          "length": 1
+        },
+        "OBJ_F_SCRIPTS_IDX": {
+          "offset": 356,
+          "length": 49
+        },
+        "OBJ_F_SOUND_EFFECT": {
+          "offset": 405,
+          "length": 4
+        },
+        "OBJ_F_CATEGORY": {
+          "offset": 409,
+          "length": 4
+        },
+        "OBJ_F_PAD_IAS_1": {
+          "offset": 413,
+          "length": 1
+        },
+        "OBJ_F_PAD_I64AS_1": {
+          "offset": 414,
+          "length": 1
+        },
+        "OBJ_F_ITEM_FLAGS": {
+          "offset": 415,
+          "length": 4
+        },
+        "OBJ_F_ITEM_PARENT": {
+          "offset": 419,
+          "length": 1
+        },
+        "OBJ_F_ITEM_WEIGHT": {
+          "offset": 420,
+          "length": 4
+        },
+        "OBJ_F_ITEM_MAGIC_WEIGHT_ADJ": {
+          "offset": 424,
+          "length": 4
+        },
+        "OBJ_F_ITEM_WORTH": {
+          "offset": 428,
+          "length": 4
+        },
+        "OBJ_F_ITEM_MANA_STORE": {
+          "offset": 432,
+          "length": 4
+        },
+        "OBJ_F_ITEM_INV_AID": {
+          "offset": 436,
+          "length": 4
+        },
+        "OBJ_F_ITEM_INV_LOCATION": {
+          "offset": 440,
+          "length": 4
+        },
+        "OBJ_F_ITEM_USE_AID_FRAGMENT": {
+          "offset": 444,
+          "length": 4
+        },
+        "OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY": {
+          "offset": 448,
+          "length": 4
+        },
+        "OBJ_F_ITEM_DISCIPLINE": {
+          "offset": 452,
+          "length": 4
+        },
+        "OBJ_F_ITEM_DESCRIPTION_UNKNOWN": {
+          "offset": 456,
+          "length": 4
+        },
+        "OBJ_F_ITEM_DESCRIPTION_EFFECTS": {
+          "offset": 460,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_1": {
+          "offset": 464,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_2": {
+          "offset": 468,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_3": {
+          "offset": 472,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_4": {
+          "offset": 476,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_5": {
+          "offset": 480,
+          "length": 4
+        },
+        "OBJ_F_ITEM_SPELL_MANA_STORE": {
+          "offset": 484,
+          "length": 4
+        },
+        "OBJ_F_ITEM_AI_ACTION": {
+          "offset": 488,
+          "length": 4
+        },
+        "OBJ_F_ITEM_PAD_I_1": {
+          "offset": 492,
+          "length": 4
+        },
+        "OBJ_F_ITEM_PAD_IAS_1": {
+          "offset": 496,
+          "length": 1
+        },
+        "OBJ_F_ITEM_PAD_I64AS_1": {
+          "offset": 497,
+          "length": 1
+        },
+        "OBJ_F_GENERIC_FLAGS": {
+          "offset": 498,
+          "length": 4
+        },
+        "OBJ_F_GENERIC_USAGE_BONUS": {
+          "offset": 502,
+          "length": 4
+        },
+        "OBJ_F_GENERIC_USAGE_COUNT_REMAINING": {
+          "offset": 506,
+          "length": 4
+        },
+        "OBJ_F_GENERIC_PAD_IAS_1": {
+          "offset": 510,
+          "length": 1
+        },
+        "OBJ_F_GENERIC_PAD_I64AS_1": {
+          "offset": 511,
+          "length": 1
+        }
+      },
+      "baselines": [
+        {
+          "file": "C:\\Games\\Arcanum\\data\\proto\\015192 - Generic.pro",
+          "changes": [
+            {
+              "field": "OBJ_F_SCRIPTS_IDX",
+              "before": {
+                "size": 12,
+                "entries": {
+                  "7": "000000000000000038750000",
+                  "8": "000000000000000038750000"
+                }
+              },
+              "after": {
+                "size": 12,
+                "entries": {
+                  "7": "0000000000000000369c0000",
+                  "8": "0000000000000000369c0000"
+                }
+              }
+            }
+          ],
+          "sha256": "162F12332D0ACD87346A025472F6933B613939E5B3BEE41B57C7A6331DD88309"
+        }
+      ],
+      "sha256": "4F77E447F74F889D0D7A952916359D672CF9EE9FD2936767EE3CC5313A0B98D9"
+    },
+    {
+      "file": "C:\\Users\\michael\\Downloads\\arcanum\\Automaton Gunner 1.0.3\\data\\proto\\028492 - NPC.pro",
+      "type": 16,
+      "bitmap_bytes": 20,
+      "fields": {
+        "OBJ_F_CURRENT_AID": -981458944,
+        "OBJ_F_LOCATION": null,
+        "OBJ_F_OFFSET_X": 0,
+        "OBJ_F_OFFSET_Y": 0,
+        "OBJ_F_SHADOW": -1875902463,
+        "OBJ_F_OVERLAY_FORE": {
+          "size": 4,
+          "entries": {
+            "0": "ffffffff",
+            "1": "ffffffff",
+            "2": "ffffffff",
+            "3": "ffffffff",
+            "4": "ffffffff",
+            "5": "ffffffff",
+            "6": "ffffffff"
+          }
+        },
+        "OBJ_F_OVERLAY_BACK": {
+          "size": 4,
+          "entries": {
+            "0": "ffffffff",
+            "1": "ffffffff",
+            "2": "ffffffff",
+            "3": "ffffffff",
+            "4": "ffffffff",
+            "5": "ffffffff",
+            "6": "ffffffff"
+          }
+        },
+        "OBJ_F_UNDERLAY": {
+          "size": 4,
+          "entries": {
+            "0": "ffffffff",
+            "1": "ffffffff",
+            "2": "ffffffff",
+            "3": "ffffffff"
+          }
+        },
+        "OBJ_F_BLIT_FLAGS": 0,
+        "OBJ_F_BLIT_COLOR": 16777215,
+        "OBJ_F_BLIT_ALPHA": 255,
+        "OBJ_F_BLIT_SCALE": 100,
+        "OBJ_F_LIGHT_FLAGS": 0,
+        "OBJ_F_LIGHT_AID": -1,
+        "OBJ_F_LIGHT_COLOR": 0,
+        "OBJ_F_OVERLAY_LIGHT_FLAGS": null,
+        "OBJ_F_OVERLAY_LIGHT_AID": {
+          "size": 4,
+          "entries": {
+            "0": "ffffffff",
+            "1": "ffffffff",
+            "2": "ffffffff",
+            "3": "ffffffff"
+          }
+        },
+        "OBJ_F_OVERLAY_LIGHT_COLOR": null,
+        "OBJ_F_FLAGS": 16432,
+        "OBJ_F_SPELL_FLAGS": 0,
+        "OBJ_F_BLOCKING_MASK": 0,
+        "OBJ_F_NAME": 6400,
+        "OBJ_F_DESCRIPTION": 28472,
+        "OBJ_F_AID": -981458944,
+        "OBJ_F_DESTROYED_AID": -1,
+        "OBJ_F_AC": 0,
+        "OBJ_F_HP_PTS": 0,
+        "OBJ_F_HP_ADJ": -6,
+        "OBJ_F_HP_DAMAGE": 0,
+        "OBJ_F_MATERIAL": 5,
+        "OBJ_F_RESISTANCE_IDX": {
+          "size": 4,
+          "entries": {
+            "0": "32000000",
+            "1": "32000000",
+            "2": "0a000000",
+            "3": "64000000",
+            "4": "5a000000"
+          }
+        },
+        "OBJ_F_SCRIPTS_IDX": {
+          "size": 12,
+          "entries": {
+            "9": "7036690572414100379c0000"
+          }
+        },
+        "OBJ_F_SOUND_EFFECT": 540,
+        "OBJ_F_CATEGORY": 0,
+        "OBJ_F_PAD_IAS_1": null,
+        "OBJ_F_PAD_I64AS_1": null,
+        "OBJ_F_CRITTER_FLAGS": 738205696,
+        "OBJ_F_CRITTER_FLAGS2": 0,
+        "OBJ_F_CRITTER_STAT_BASE_IDX": {
+          "size": 4,
+          "entries": {
+            "0": "14000000",
+            "1": "0d000000",
+            "2": "13000000",
+            "3": "05000000",
+            "4": "07000000",
+            "5": "0e000000",
+            "6": "02000000",
+            "7": "01000000",
+            "8": "00000000",
+            "9": "00000000",
+            "10": "00000000",
+            "11": "00000000",
+            "12": "00000000",
+            "13": "00000000",
+            "14": "00000000",
+            "15": "00000000",
+            "16": "00000000",
+            "17": "1e000000",
+            "18": "00000000",
+            "19": "00000000",
+            "20": "00000000",
+            "21": "05000000",
+            "22": "06000000",
+            "23": "14000000",
+            "24": "00000000",
+            "25": "14000000",
+            "26": "01000000",
+            "27": "00000000"
+          }
+        },
+        "OBJ_F_CRITTER_BASIC_SKILL_IDX": {
+          "size": 4,
+          "entries": {
+            "0": "00000000",
+            "1": "00000000",
+            "2": "00000000",
+            "3": "00000000",
+            "4": "00000000",
+            "5": "00000000",
+            "6": "00000000",
+            "7": "00000000",
+            "8": "00000000",
+            "9": "00000000",
+            "10": "00000000",
+            "11": "00000000"
+          }
+        },
+        "OBJ_F_CRITTER_TECH_SKILL_IDX": {
+          "size": 4,
+          "entries": {
+            "0": "00000000",
+            "1": "03000000",
+            "2": "00000000",
+            "3": "00000000"
+          }
+        },
+        "OBJ_F_CRITTER_SPELL_TECH_IDX": {
+          "size": 4,
+          "entries": {
+            "0": "00000000",
+            "1": "00000000",
+            "2": "00000000",
+            "3": "00000000",
+            "4": "00000000",
+            "5": "00000000",
+            "6": "00000000",
+            "7": "00000000",
+            "8": "00000000",
+            "9": "00000000",
+            "10": "00000000",
+            "11": "00000000",
+            "12": "00000000",
+            "13": "00000000",
+            "14": "00000000",
+            "15": "00000000",
+            "16": "ffffffff",
+            "17": "00000000",
+            "18": "00000000",
+            "19": "00000000",
+            "20": "00000000",
+            "21": "00000000",
+            "22": "00000000",
+            "23": "00000000",
+            "24": "00000000"
+          }
+        },
+        "OBJ_F_CRITTER_FATIGUE_PTS": 0,
+        "OBJ_F_CRITTER_FATIGUE_ADJ": 0,
+        "OBJ_F_CRITTER_FATIGUE_DAMAGE": 0,
+        "OBJ_F_CRITTER_CRIT_HIT_CHART": 0,
+        "OBJ_F_CRITTER_EFFECTS_IDX": null,
+        "OBJ_F_CRITTER_EFFECT_CAUSE_IDX": null,
+        "OBJ_F_CRITTER_FLEEING_FROM": null,
+        "OBJ_F_CRITTER_PORTRAIT": 0,
+        "OBJ_F_CRITTER_GOLD": null,
+        "OBJ_F_CRITTER_ARROWS": null,
+        "OBJ_F_CRITTER_BULLETS": null,
+        "OBJ_F_CRITTER_POWER_CELLS": null,
+        "OBJ_F_CRITTER_FUEL": null,
+        "OBJ_F_CRITTER_INVENTORY_NUM": 0,
+        "OBJ_F_CRITTER_INVENTORY_LIST_IDX": null,
+        "OBJ_F_CRITTER_INVENTORY_SOURCE": 0,
+        "OBJ_F_CRITTER_DESCRIPTION_UNKNOWN": 28472,
+        "OBJ_F_CRITTER_FOLLOWER_IDX": null,
+        "OBJ_F_CRITTER_TELEPORT_DEST": null,
+        "OBJ_F_CRITTER_TELEPORT_MAP": 0,
+        "OBJ_F_CRITTER_DEATH_TIME": 0,
+        "OBJ_F_CRITTER_AUTO_LEVEL_SCHEME": 0,
+        "OBJ_F_CRITTER_PAD_I_1": 0,
+        "OBJ_F_CRITTER_PAD_I_2": 0,
+        "OBJ_F_CRITTER_PAD_I_3": 0,
+        "OBJ_F_CRITTER_PAD_IAS_1": null,
+        "OBJ_F_CRITTER_PAD_I64AS_1": null,
+        "OBJ_F_NPC_FLAGS": 4096,
+        "OBJ_F_NPC_LEADER": null,
+        "OBJ_F_NPC_AI_DATA": 2,
+        "OBJ_F_NPC_COMBAT_FOCUS": null,
+        "OBJ_F_NPC_WHO_HIT_ME_LAST": null,
+        "OBJ_F_NPC_EXPERIENCE_WORTH": 2180,
+        "OBJ_F_NPC_EXPERIENCE_POOL": 2180,
+        "OBJ_F_NPC_WAYPOINTS_IDX": null,
+        "OBJ_F_NPC_WAYPOINT_CURRENT": 0,
+        "OBJ_F_NPC_STANDPOINT_DAY": null,
+        "OBJ_F_NPC_STANDPOINT_NIGHT": null,
+        "OBJ_F_NPC_ORIGIN": 0,
+        "OBJ_F_NPC_FACTION": 0,
+        "OBJ_F_NPC_RETAIL_PRICE_MULTIPLIER": 0,
+        "OBJ_F_NPC_SUBSTITUTE_INVENTORY": null,
+        "OBJ_F_NPC_REACTION_BASE": 50,
+        "OBJ_F_NPC_SOCIAL_CLASS": 0,
+        "OBJ_F_NPC_REACTION_PC_IDX": null,
+        "OBJ_F_NPC_REACTION_LEVEL_IDX": null,
+        "OBJ_F_NPC_REACTION_TIME_IDX": null,
+        "OBJ_F_NPC_WAIT": 2,
+        "OBJ_F_NPC_GENERATOR_DATA": 0,
+        "OBJ_F_NPC_PAD_I_1": 0,
+        "OBJ_F_NPC_DAMAGE_IDX": {
+          "size": 4,
+          "entries": {
+            "0": "0a000000",
+            "1": "1e000000"
+          }
+        },
+        "OBJ_F_NPC_SHIT_LIST_IDX": null
+      },
+      "spans": {
+        "OBJ_F_CURRENT_AID": {
+          "offset": 76,
+          "length": 4
+        },
+        "OBJ_F_LOCATION": {
+          "offset": 80,
+          "length": 1
+        },
+        "OBJ_F_OFFSET_X": {
+          "offset": 81,
+          "length": 4
+        },
+        "OBJ_F_OFFSET_Y": {
+          "offset": 85,
+          "length": 4
+        },
+        "OBJ_F_SHADOW": {
+          "offset": 89,
+          "length": 4
+        },
+        "OBJ_F_OVERLAY_FORE": {
+          "offset": 93,
+          "length": 53
+        },
+        "OBJ_F_OVERLAY_BACK": {
+          "offset": 146,
+          "length": 53
+        },
+        "OBJ_F_UNDERLAY": {
+          "offset": 199,
+          "length": 41
+        },
+        "OBJ_F_BLIT_FLAGS": {
+          "offset": 240,
+          "length": 4
+        },
+        "OBJ_F_BLIT_COLOR": {
+          "offset": 244,
+          "length": 4
+        },
+        "OBJ_F_BLIT_ALPHA": {
+          "offset": 248,
+          "length": 4
+        },
+        "OBJ_F_BLIT_SCALE": {
+          "offset": 252,
+          "length": 4
+        },
+        "OBJ_F_LIGHT_FLAGS": {
+          "offset": 256,
+          "length": 4
+        },
+        "OBJ_F_LIGHT_AID": {
+          "offset": 260,
+          "length": 4
+        },
+        "OBJ_F_LIGHT_COLOR": {
+          "offset": 264,
+          "length": 4
+        },
+        "OBJ_F_OVERLAY_LIGHT_FLAGS": {
+          "offset": 268,
+          "length": 1
+        },
+        "OBJ_F_OVERLAY_LIGHT_AID": {
+          "offset": 269,
+          "length": 41
+        },
+        "OBJ_F_OVERLAY_LIGHT_COLOR": {
+          "offset": 310,
+          "length": 1
+        },
+        "OBJ_F_FLAGS": {
+          "offset": 311,
+          "length": 4
+        },
+        "OBJ_F_SPELL_FLAGS": {
+          "offset": 315,
+          "length": 4
+        },
+        "OBJ_F_BLOCKING_MASK": {
+          "offset": 319,
+          "length": 4
+        },
+        "OBJ_F_NAME": {
+          "offset": 323,
+          "length": 4
+        },
+        "OBJ_F_DESCRIPTION": {
+          "offset": 327,
+          "length": 4
+        },
+        "OBJ_F_AID": {
+          "offset": 331,
+          "length": 4
+        },
+        "OBJ_F_DESTROYED_AID": {
+          "offset": 335,
+          "length": 4
+        },
+        "OBJ_F_AC": {
+          "offset": 339,
+          "length": 4
+        },
+        "OBJ_F_HP_PTS": {
+          "offset": 343,
+          "length": 4
+        },
+        "OBJ_F_HP_ADJ": {
+          "offset": 347,
+          "length": 4
+        },
+        "OBJ_F_HP_DAMAGE": {
+          "offset": 351,
+          "length": 4
+        },
+        "OBJ_F_MATERIAL": {
+          "offset": 355,
+          "length": 4
+        },
+        "OBJ_F_RESISTANCE_IDX": {
+          "offset": 359,
+          "length": 45
+        },
+        "OBJ_F_SCRIPTS_IDX": {
+          "offset": 404,
+          "length": 37
+        },
+        "OBJ_F_SOUND_EFFECT": {
+          "offset": 441,
+          "length": 4
+        },
+        "OBJ_F_CATEGORY": {
+          "offset": 445,
+          "length": 4
+        },
+        "OBJ_F_PAD_IAS_1": {
+          "offset": 449,
+          "length": 1
+        },
+        "OBJ_F_PAD_I64AS_1": {
+          "offset": 450,
+          "length": 1
+        },
+        "OBJ_F_CRITTER_FLAGS": {
+          "offset": 451,
+          "length": 4
+        },
+        "OBJ_F_CRITTER_FLAGS2": {
+          "offset": 455,
+          "length": 4
+        },
+        "OBJ_F_CRITTER_STAT_BASE_IDX": {
+          "offset": 459,
+          "length": 137
+        },
+        "OBJ_F_CRITTER_BASIC_SKILL_IDX": {
+          "offset": 596,
+          "length": 73
+        },
+        "OBJ_F_CRITTER_TECH_SKILL_IDX": {
+          "offset": 669,
+          "length": 41
+        },
+        "OBJ_F_CRITTER_SPELL_TECH_IDX": {
+          "offset": 710,
+          "length": 125
+        },
+        "OBJ_F_CRITTER_FATIGUE_PTS": {
+          "offset": 835,
+          "length": 4
+        },
+        "OBJ_F_CRITTER_FATIGUE_ADJ": {
+          "offset": 839,
+          "length": 4
+        },
+        "OBJ_F_CRITTER_FATIGUE_DAMAGE": {
+          "offset": 843,
+          "length": 4
+        },
+        "OBJ_F_CRITTER_CRIT_HIT_CHART": {
+          "offset": 847,
+          "length": 4
+        },
+        "OBJ_F_CRITTER_EFFECTS_IDX": {
+          "offset": 851,
+          "length": 1
+        },
+        "OBJ_F_CRITTER_EFFECT_CAUSE_IDX": {
+          "offset": 852,
+          "length": 1
+        },
+        "OBJ_F_CRITTER_FLEEING_FROM": {
+          "offset": 853,
+          "length": 1
+        },
+        "OBJ_F_CRITTER_PORTRAIT": {
+          "offset": 854,
+          "length": 4
+        },
+        "OBJ_F_CRITTER_GOLD": {
+          "offset": 858,
+          "length": 1
+        },
+        "OBJ_F_CRITTER_ARROWS": {
+          "offset": 859,
+          "length": 1
+        },
+        "OBJ_F_CRITTER_BULLETS": {
+          "offset": 860,
+          "length": 1
+        },
+        "OBJ_F_CRITTER_POWER_CELLS": {
+          "offset": 861,
+          "length": 1
+        },
+        "OBJ_F_CRITTER_FUEL": {
+          "offset": 862,
+          "length": 1
+        },
+        "OBJ_F_CRITTER_INVENTORY_NUM": {
+          "offset": 863,
+          "length": 4
+        },
+        "OBJ_F_CRITTER_INVENTORY_LIST_IDX": {
+          "offset": 867,
+          "length": 1
+        },
+        "OBJ_F_CRITTER_INVENTORY_SOURCE": {
+          "offset": 868,
+          "length": 4
+        },
+        "OBJ_F_CRITTER_DESCRIPTION_UNKNOWN": {
+          "offset": 872,
+          "length": 4
+        },
+        "OBJ_F_CRITTER_FOLLOWER_IDX": {
+          "offset": 876,
+          "length": 1
+        },
+        "OBJ_F_CRITTER_TELEPORT_DEST": {
+          "offset": 877,
+          "length": 1
+        },
+        "OBJ_F_CRITTER_TELEPORT_MAP": {
+          "offset": 878,
+          "length": 4
+        },
+        "OBJ_F_CRITTER_DEATH_TIME": {
+          "offset": 882,
+          "length": 4
+        },
+        "OBJ_F_CRITTER_AUTO_LEVEL_SCHEME": {
+          "offset": 886,
+          "length": 4
+        },
+        "OBJ_F_CRITTER_PAD_I_1": {
+          "offset": 890,
+          "length": 4
+        },
+        "OBJ_F_CRITTER_PAD_I_2": {
+          "offset": 894,
+          "length": 4
+        },
+        "OBJ_F_CRITTER_PAD_I_3": {
+          "offset": 898,
+          "length": 4
+        },
+        "OBJ_F_CRITTER_PAD_IAS_1": {
+          "offset": 902,
+          "length": 1
+        },
+        "OBJ_F_CRITTER_PAD_I64AS_1": {
+          "offset": 903,
+          "length": 1
+        },
+        "OBJ_F_NPC_FLAGS": {
+          "offset": 904,
+          "length": 4
+        },
+        "OBJ_F_NPC_LEADER": {
+          "offset": 908,
+          "length": 1
+        },
+        "OBJ_F_NPC_AI_DATA": {
+          "offset": 909,
+          "length": 4
+        },
+        "OBJ_F_NPC_COMBAT_FOCUS": {
+          "offset": 913,
+          "length": 1
+        },
+        "OBJ_F_NPC_WHO_HIT_ME_LAST": {
+          "offset": 914,
+          "length": 1
+        },
+        "OBJ_F_NPC_EXPERIENCE_WORTH": {
+          "offset": 915,
+          "length": 4
+        },
+        "OBJ_F_NPC_EXPERIENCE_POOL": {
+          "offset": 919,
+          "length": 4
+        },
+        "OBJ_F_NPC_WAYPOINTS_IDX": {
+          "offset": 923,
+          "length": 1
+        },
+        "OBJ_F_NPC_WAYPOINT_CURRENT": {
+          "offset": 924,
+          "length": 4
+        },
+        "OBJ_F_NPC_STANDPOINT_DAY": {
+          "offset": 928,
+          "length": 1
+        },
+        "OBJ_F_NPC_STANDPOINT_NIGHT": {
+          "offset": 929,
+          "length": 1
+        },
+        "OBJ_F_NPC_ORIGIN": {
+          "offset": 930,
+          "length": 4
+        },
+        "OBJ_F_NPC_FACTION": {
+          "offset": 934,
+          "length": 4
+        },
+        "OBJ_F_NPC_RETAIL_PRICE_MULTIPLIER": {
+          "offset": 938,
+          "length": 4
+        },
+        "OBJ_F_NPC_SUBSTITUTE_INVENTORY": {
+          "offset": 942,
+          "length": 1
+        },
+        "OBJ_F_NPC_REACTION_BASE": {
+          "offset": 943,
+          "length": 4
+        },
+        "OBJ_F_NPC_SOCIAL_CLASS": {
+          "offset": 947,
+          "length": 4
+        },
+        "OBJ_F_NPC_REACTION_PC_IDX": {
+          "offset": 951,
+          "length": 1
+        },
+        "OBJ_F_NPC_REACTION_LEVEL_IDX": {
+          "offset": 952,
+          "length": 1
+        },
+        "OBJ_F_NPC_REACTION_TIME_IDX": {
+          "offset": 953,
+          "length": 1
+        },
+        "OBJ_F_NPC_WAIT": {
+          "offset": 954,
+          "length": 4
+        },
+        "OBJ_F_NPC_GENERATOR_DATA": {
+          "offset": 958,
+          "length": 4
+        },
+        "OBJ_F_NPC_PAD_I_1": {
+          "offset": 962,
+          "length": 4
+        },
+        "OBJ_F_NPC_DAMAGE_IDX": {
+          "offset": 966,
+          "length": 33
+        },
+        "OBJ_F_NPC_SHIT_LIST_IDX": {
+          "offset": 999,
+          "length": 1
+        }
+      },
+      "baselines": [],
+      "sha256": "3B1A1687AE48AB6D6EA51FBB1D90FCEE1017CD26CEEC9BB2231BA8BDC2FD7B1F"
+    }
+  ],
+  "script_operand_note": "Operand type tags are raw integers. Interpret numeric arguments with ScriptValueType and object selectors with ScriptFocusObject; tag 1 is SFO_ATTACHEE for object selectors."
+}

@@ -8,3 +8,6 @@
 {7}{Stock}
 {8}{Fabrication : %d lots sur %d.}
 {9}{Inventaire plein : les objets fabriqués sont aux pieds du fabricant.}
+{10}{Qtt : %d}
+{11}{Obtenus : %lld}
+{12}{Stock :%d}

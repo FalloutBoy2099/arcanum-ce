@@ -187,6 +187,7 @@ typedef enum AgData {
 
 #define AGDATA_SELF_TILE 31
 #define AGDATA_NULL_OBJ 33
+#define AG_FLAG_FOLLOWING_LEADER 0x1000
 #define AGDATA_FORCE_TARGET_TILE 34
 
 typedef struct AnimGoalData {

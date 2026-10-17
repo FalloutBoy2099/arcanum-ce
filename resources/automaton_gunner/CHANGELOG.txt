@@ -1,0 +1,15 @@
+AUTOMATON GUNNER CHANGELOG
+==========================
+
+Version 1.0.4
+
+- Replaced the single whole-file Arcanum.exe hash gate with structural UAP 2.0.2
+  validation.
+- Added support for High Resolution Patch, Level Cap 100, Master Educator,
+  No XP Per Hit, No Combat Music, and other non-overlapping executable changes.
+- Added explicit detection of unpatched, fully patched, partially patched, and
+  incompatible edit sites.
+- Preserved automatic backup, payload verification, and final patched-value
+  verification for every accepted executable variant.
+- Recorded the reported BD2CD6AF...C4DE UAP option variant for diagnostics while
+  still requiring it to pass all structural safety checks.

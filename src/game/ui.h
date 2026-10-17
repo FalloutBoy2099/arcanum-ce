@@ -4,6 +4,10 @@
 #define SCHEMATIC_TOOLBAR_KEY "schematic_toolbar"
 #define LOGBOOK_TOOLBAR_KEY "logbook_toolbar"
 #define WORLDMAP_TOOLBAR_KEY "worldmap_toolbar"
+#define SCHEMATIC_COLOR_AVAILABLE_KEY "schematic_color_available"
+#define SCHEMATIC_COLOR_MISSING_KEY "schematic_color_missing"
+#define SCHEMATIC_OPACITY_AVAILABLE_KEY "schematic_opacity_available"
+#define SCHEMATIC_OPACITY_MISSING_KEY "schematic_opacity_missing"
 
 #include "game/context.h"
 #include "game/schematic.h"

@@ -42,6 +42,7 @@ static bool blocked_grid[20][20];
 static int failures;
 static bool testing_benchmark_route;
 static int occupied_destination_checks;
+static int follow_count = 1;
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "FAIL %d: %s\n", __LINE__, #x); failures++; } } while (0)
 
 int settings_get_value(Settings* instance, const char* key) { (void)instance; (void)key; return party_components; }
@@ -51,10 +52,10 @@ int64_t obj_field_int64_get(int64_t obj, int fld) { (void)fld; return objects[ob
 int64_t obj_field_handle_get(int64_t obj, int fld) { (void)fld; return objects[obj].prototype; }
 int64_t obj_arrayfield_handle_get(int64_t obj, int fld, int index)
 {
-    if (fld == OBJ_F_CRITTER_FOLLOWER_IDX) return index == 0 ? 2 : 0;
+    if (fld == OBJ_F_CRITTER_FOLLOWER_IDX) return index < follow_count ? index + 2 : 0;
     return objects[obj].inventory[index];
 }
-int obj_arrayfield_length_get(int64_t obj, int fld) { (void)obj; (void)fld; return 1; }
+int obj_arrayfield_length_get(int64_t obj, int fld) { (void)obj; return fld == OBJ_F_CRITTER_FOLLOWER_IDX ? follow_count : 1; }
 int64_t critter_pc_leader_get(int64_t obj) { return objects[obj].fields[OBJ_F_TYPE] == OBJ_TYPE_NPC ? objects[obj].leader : 0; }
 bool critter_is_dead(int64_t obj) { return objects[obj].dead; }
 bool critter_is_unconscious(int64_t obj) { return objects[obj].unconscious; }
@@ -250,6 +251,16 @@ static void test_crafting_preview(void)
     remove("crafting-preview-test.csv");
     CHECK(preview.stock[0] == 1 && preview.stock[1] == 0 && !preview.pair_available);
     CHECK(preview.prototypes[0] == 20 && preview.prototypes[1] == 21);
+    CHECK(preview.produced_per_lot == 1);
+    recipe.qty = 5;
+    crafting_preview(1, &recipe, &preview);
+    CHECK(preview.produced_per_lot == 5);
+    objects[24].fields[OBJ_F_TYPE] = OBJ_TYPE_AMMO;
+    objects[24].fields[OBJ_F_AMMO_QUANTITY] = 10;
+    crafting_preview(1, &recipe, &preview);
+    CHECK(preview.produced_per_lot == 50);
+    recipe.qty = 1;
+    objects[24].fields[OBJ_F_TYPE] = OBJ_TYPE_GENERIC;
     CHECK(preview.component_available[0] && !preview.component_available[1]);
     CHECK(preview.expertise_available[0] && preview.expertise_available[1]);
     party_components = true;
@@ -336,10 +347,40 @@ static void test_passages(void)
     CHECK(!companion_movement_escape(1, 2, &destination));
 }
 
+static void test_follow_slots(void)
+{
+    reset();
+    follow_count = 16;
+    int64_t destinations[16];
+    for (int index = 0; index < 16; index++) {
+        objects[index + 2].fields[OBJ_F_TYPE] = OBJ_TYPE_NPC;
+        CHECK(companion_movement_follow_destination(index + 2, 1, &destinations[index]));
+        CHECK(location_dist(destinations[index], objects[1].loc) <= 2);
+        CHECK(destinations[index] != objects[1].loc);
+        for (int prior = 0; prior < index; prior++) CHECK(destinations[index] != destinations[prior]);
+    }
+    objects[1].fields[OBJ_F_CURRENT_AID] = 1234;
+    int64_t destination;
+    CHECK(companion_movement_follow_destination(2, 1, &destination));
+    CHECK(destination == destinations[0]); // Facing cannot shuffle the formation.
+    objects[2].fields[OBJ_F_NPC_FLAGS] = ONF_AI_SPREAD_OUT;
+    CHECK(companion_movement_follow_destination(2, 1, &destination));
+    CHECK(location_dist(destination, objects[1].loc) == 5);
+    objects[2].combat = true;
+    CHECK(!companion_movement_follow_destination(2, 1, &destination));
+    CHECK(!companion_movement_follow_destination(40, 1, &destination));
+    CHECK(!companion_movement_follow_destination(2, 1, NULL));
+    CHECK(!companion_movement_repath_needed(loc(10, 10), loc(11, 10), 4));
+    CHECK(!companion_movement_repath_needed(loc(10, 10), loc(10, 10), 1));
+    CHECK(companion_movement_repath_needed(loc(10, 10), loc(12, 10), 4));
+    CHECK(companion_movement_repath_needed(loc(10, 10), loc(11, 10), 1));
+    follow_count = 1;
+}
+
 int main(void)
 {
     CHECK(SDL_Init(0)); tig_memory_init(NULL);
-    test_crafting(); test_crafting_preview(); test_benchmark_route(); test_passages();
+    test_crafting(); test_crafting_preview(); test_benchmark_route(); test_passages(); test_follow_slots();
     tig_memory_exit(); SDL_Quit();
     printf("Crafting and companion movement: %s\n", failures == 0 ? "PASS" : "FAIL");
     return failures != 0;

@@ -20,10 +20,14 @@ static const char* metric_names[TIG_PERF_METRIC_COUNT] = {
     "frame_work", "simulation", "world_render", "zoom_blit", "present_with_vsync",
     "path", "text_measure", "text_raster", "journal_build", "crafting_scan",
     "journal_paginate",
+    "texture_upload", "render_present_with_vsync",
+    "lighting", "object_render", "collision", "event_dispatch",
 };
 static const char* counter_names[TIG_PERF_COUNTER_COUNT] = {
     "dirty_pixels_requested", "path_expansions", "path_scanned_cells",
     "search_cache_builds", "search_cache_hits", "history_cache_hits", "index_cache_hits",
+    "texture_upload_bytes", "text_cache_hits", "text_cache_misses",
+    "object_queries", "object_query_visits", "event_nodes_new", "event_nodes_reused", "event_insert_steps",
 };
 static PerformanceSamples samples[TIG_PERF_METRIC_COUNT];
 static Uint64 counters[TIG_PERF_COUNTER_COUNT];

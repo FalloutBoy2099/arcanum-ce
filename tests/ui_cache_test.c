@@ -1,10 +1,13 @@
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "ui/cache_key.h"
 #include "ui/search_cache.h"
 #include "ui/text_pagination.h"
+#include "ui/journal_index.h"
+#include "game/journal_text.h"
 
 static int failures;
 #define CHECK(expr) do { if (!(expr)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #expr); failures++; } } while (0)
@@ -58,8 +61,83 @@ static void test_filtered_pages(void)
     CHECK(fixture.dry_calls == fixture.calls);
 }
 
+static void test_journal_index(void)
+{
+    static JournalIndexWorkspace workspace;
+    const char* names[] = { "Tarant", "Tarant Nord", "Virgil", "Gil", "L'ami", "\xC9glise", "\xE9glise", "123", "-", "", NULL };
+    const char* texts[] = { NULL, "", "TARANT Nord et Virgil", "Tarantais, Virgile, 1234", "L'ami de l'\xE9glise - 123.", "\xC9GLISE", "Gil-Virgil", "Tarant\xE9", "--" };
+    for (int t = 0; t < sizeof(texts) / sizeof(texts[0]); t++) {
+        journal_index_begin(&workspace);
+        for (int n = 0; n < sizeof(names) / sizeof(names[0]); n++) workspace.candidates[n].name = names[n];
+        journal_index_prepare_mentions(&workspace, sizeof(names) / sizeof(names[0]));
+        journal_index_match_mentions(&workspace, texts[t]);
+        for (int n = 0; n < sizeof(names) / sizeof(names[0]); n++) CHECK(workspace.candidates[n].known == journal_text_mentions(texts[t], names[n]));
+    }
+    // Deterministic differential corpus, including byte accents and partial words.
+    unsigned int random = 12345;
+    const char alphabet[] = "abAB -'12\xC9\xE9";
+    char generated_names[40][12];
+    for (int run = 0; run < 500; run++) {
+        char text[160];
+        journal_index_begin(&workspace);
+        for (int n = 0; n < 40; n++) {
+            random = random * 1664525U + 1013904223U;
+            int length = random % 11 + 1;
+            for (int i = 0; i < length; i++) {
+                random = random * 1664525U + 1013904223U;
+                generated_names[n][i] = alphabet[random % (sizeof(alphabet) - 1)];
+            }
+            generated_names[n][length] = 0;
+            workspace.candidates[n].name = generated_names[n];
+        }
+        for (int i = 0; i < sizeof(text) - 1; i++) {
+            random = random * 1664525U + 1013904223U;
+            text[i] = alphabet[random % (sizeof(alphabet) - 1)];
+        }
+        text[sizeof(text) - 1] = 0;
+        journal_index_prepare_mentions(&workspace, 40);
+        journal_index_match_mentions(&workspace, text);
+        for (int n = 0; n < 40; n++) CHECK(workspace.candidates[n].known == journal_text_mentions(text, generated_names[n]));
+    }
+    journal_index_begin(&workspace);
+    for (int i = 1; i <= JOURNAL_INDEX_LIMIT; i++) {
+        // Same hash bucket: exercise collision chains without losing candidates.
+        CHECK(journal_index_add_description(&workspace, i * 16384));
+        CHECK(!journal_index_add_description(&workspace, i * 16384));
+    }
+    CHECK(!journal_index_add_description(&workspace, 0));
+    journal_index_begin(&workspace);
+    CHECK(journal_index_add_description(&workspace, 16384));
+}
+
+static void benchmark_journal_mentions(void)
+{
+    static JournalIndexWorkspace workspace;
+    static char names[2000][24];
+    bool previous[2000] = { 0 };
+    const char* text = "A long journal entry describing a journey between Place0010 and Place1900, with several sentences that do not mention other locations. Place0010 is already known.";
+    journal_index_begin(&workspace);
+    for (int i = 0; i < 2000; i++) {
+        snprintf(names[i], sizeof(names[i]), "Place%04d", i);
+        workspace.candidates[i].name = names[i];
+    }
+    clock_t start = clock();
+    for (int run = 0; run < 400; run++) {
+        for (int i = 0; i < 2000; i++) if (!previous[i]) previous[i] = journal_text_mentions(text, names[i]);
+    }
+    double old_ms = (double)(clock() - start) * 1000 / CLOCKS_PER_SEC;
+    start = clock();
+    journal_index_prepare_mentions(&workspace, 2000);
+    for (int run = 0; run < 400; run++) journal_index_match_mentions(&workspace, text);
+    double new_ms = (double)(clock() - start) * 1000 / CLOCKS_PER_SEC;
+    for (int i = 0; i < 2000; i++) CHECK(previous[i] == workspace.candidates[i].known);
+    printf("Synthetic journal matching (2000 candidates / 400 entries): before %.3f ms, after %.3f ms\n", old_ms, new_ms);
+}
+
 int main(void)
 {
+    test_journal_index();
+    benchmark_journal_mentions();
     test_filtered_pages();
     uint64_t left = UI_CACHE_KEY_INIT, right = UI_CACHE_KEY_INIT;
     ui_cache_key_string(&left, "ab"); ui_cache_key_string(&left, "c");

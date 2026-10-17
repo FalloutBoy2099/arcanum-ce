@@ -62,7 +62,6 @@
 #define LOGBOOK_COLOR_ACTIVE_KEY "logbook_color_active"
 #define LOGBOOK_COLOR_CURSE_KEY "logbook_color_curse"
 #define MAIN_MENU_ART_KEY "main_menu_art"
-#define MENU_BORDERS_KEY "menu_borders"
 #define DIALOG_OPTIONS_MIN_KEY "dialog_options_min"
 #define DIALOG_OPTIONS_MAX_KEY "dialog_options_max"
 

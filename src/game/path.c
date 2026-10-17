@@ -1,4 +1,5 @@
 #include "game/path.h"
+#include "game/path_open_set.h"
 #include <tig/performance.h>
 
 #include "game/critter.h"
@@ -42,6 +43,8 @@ static int path_cost_tbl[4096];
 
 // 0x5D9628
 static int path_backtrack_tbl[4096];
+
+static PathOpenSet path_open_set;
 
 // NOTE: Unusual size.
 //
@@ -320,7 +323,7 @@ int sub_41F9F0(PathCreateInfo* path_create_info)
     int start_index;
     int target_index;
     int current_index;
-    int best_estimated_cost;
+    uint64_t counted_comparisons = 0;
 
     if (obj_field_int32_get(path_create_info->obj, OBJ_F_TYPE) == OBJ_TYPE_NPC) {
         if (dword_5DE5F8 == 0
@@ -330,11 +333,11 @@ int sub_41F9F0(PathCreateInfo* path_create_info)
             dword_5DE600 = 0;
         }
 
-        if (dword_5DE5FC > path_limit) {
+        if (dword_5DE5FC >= path_limit) {
             return 0;
         }
 
-        if (dword_5DE600 > path_time_limit) {
+        if (dword_5DE600 >= path_time_limit) {
             return 0;
         }
 
@@ -387,31 +390,18 @@ int sub_41F9F0(PathCreateInfo* path_create_info)
     memset(path_cost_tbl, 0, sizeof(path_cost_tbl));
     path_cost_tbl[start_index] = 1;
     path_backtrack_tbl[start_index] = -1;
+    path_open_set_init(&path_open_set);
+    int start_estimate = 1 + path_dist(start_index, target_index, 64);
+    if (start_estimate / 10 <= path_create_info->max_rotations) {
+        path_open_set_update(&path_open_set, start_index, start_estimate);
+    }
 
     while (true) {
-        current_index = -1;
-
-        // Grab open node with minimal cost.
+        // O(log N) selection instead of scanning the entire 64 x 64 grid.
         tig_performance_count(TIG_PERF_PATH_EXPANSIONS, 1);
-        tig_performance_count(TIG_PERF_PATH_SCANNED_CELLS, 4096);
-        for (int i = 0; i < 4096; i++) {
-            // Check if node is open, i.e. it has a positive cost (negative cost
-            // are closed nodes, zero cost are unprocessed nodes).
-            if (path_cost_tbl[i] > 0) {
-                int estimated_cost = path_cost_tbl[i] + path_dist(i, target_index, 64);
-                if (estimated_cost / 10 <= path_create_info->max_rotations) {
-                    // If no candidate node selected yet, or this candidate has
-                    // a lower cost, update current candidate.
-                    if (current_index == -1 || estimated_cost < best_estimated_cost) {
-                        best_estimated_cost = estimated_cost;
-                        current_index = i;
-                    }
-                } else {
-                    // Mark node as unreachable.
-                    path_cost_tbl[i] = -32768;
-                }
-            }
-        }
+        current_index = path_open_set_pop(&path_open_set);
+        tig_performance_count(TIG_PERF_PATH_SCANNED_CELLS, path_open_set.comparisons - counted_comparisons);
+        counted_comparisons = path_open_set.comparisons;
 
         // If no node has been found, path is not reachable.
         if (current_index == -1) {
@@ -454,6 +444,7 @@ int sub_41F9F0(PathCreateInfo* path_create_info)
                     if ((path_create_info->flags & PATH_FLAG_0x0008) == 0
                         && tile_is_blocking(adjacent_loc, v1)) {
                         path_cost_tbl[neighbor_index] = -32768;
+                        path_open_set_remove(&path_open_set, neighbor_index);
                         continue;
                     }
 
@@ -466,6 +457,7 @@ int sub_41F9F0(PathCreateInfo* path_create_info)
                             && block_obj_type != OBJ_TYPE_WALL
                             && block_obj_type != OBJ_TYPE_PORTAL) {
                             path_cost_tbl[neighbor_index] = -32768;
+                            path_open_set_remove(&path_open_set, neighbor_index);
                         }
                         continue;
                     }
@@ -525,6 +517,13 @@ int sub_41F9F0(PathCreateInfo* path_create_info)
                 || path_cost_tbl[neighbor_index] == 0) {
                 path_cost_tbl[neighbor_index] = cost;
                 path_backtrack_tbl[neighbor_index] = current_index;
+                int estimate = cost + path_dist(neighbor_index, target_index, 64);
+                if (estimate / 10 <= path_create_info->max_rotations) {
+                    path_open_set_update(&path_open_set, neighbor_index, estimate);
+                } else {
+                    path_cost_tbl[neighbor_index] = -32768;
+                    path_open_set_remove(&path_open_set, neighbor_index);
+                }
             }
         }
 
@@ -568,6 +567,13 @@ int sub_41F9F0(PathCreateInfo* path_create_info)
 }
 
 // 0x4200C0
+#ifdef ARCANUM_PATH_TEST
+int path_test_astar(PathCreateInfo* path_create_info)
+{
+    return sub_41F9F0(path_create_info);
+}
+#endif
+
 int path_dist(int src, int dst, int width)
 {
     int dx;
@@ -1021,7 +1027,10 @@ int sub_4209C0(WmapPathInfo* path_info)
 // 0x420E30
 int sub_420E30(PathCreateInfo* path_create_info, tig_duration_t ms)
 {
-    // TODO: Incomplete.
+    // The long-range solver has not been reconstructed. Use the bounded local
+    // solver rather than returning an indeterminate path length.
+    (void)ms;
+    return sub_41F9F0(path_create_info);
 }
 
 // 0x421AC0

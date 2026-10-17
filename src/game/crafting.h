@@ -19,6 +19,7 @@ typedef struct CraftingPreview {
     int stock[2];
     int discipline[2];
     int complexity[2];
+    int64_t produced_per_lot;
     bool component_available[2];
     bool expertise_available[2];
     bool pair_available;

@@ -543,19 +543,7 @@ bool trap_is_trap_device(int64_t obj)
 // 0x4BCAB0
 int64_t get_trap_at_location(int64_t loc)
 {
-    ObjectList traps;
-    int64_t obj;
-
-    object_list_location(loc, OBJ_TM_TRAP, &traps);
-    if (traps.head != NULL) {
-        obj = traps.head->obj;
-    } else {
-        obj = OBJ_HANDLE_NULL;
-    }
-
-    object_list_destroy(&traps);
-
-    return obj;
+    return object_find_first_at_location(loc, OBJ_TM_TRAP, NULL, NULL);
 }
 
 // 0x4BCB00

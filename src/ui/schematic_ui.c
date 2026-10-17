@@ -15,6 +15,8 @@
 #include "game/item.h"
 #include "game/input_bindings.h"
 #include "game/mes.h"
+#include "game/modern_font.h"
+#include "game/ui.h"
 #include "game/name.h"
 #include "game/obj.h"
 #include "game/object.h"
@@ -1215,6 +1217,13 @@ static void schematic_ui_toolbar_text(TigRect rect, const char* text)
         text, false);
 }
 
+static void schematic_ui_draw_quantity_label(int x, int y, int width, const char* text)
+{
+    TigRect rect = { x, y + 1, width, 16 };
+    tig_font_push(schematic_ui_description_font);
+    tig_window_text_write(schematic_ui_window, text, &rect);
+    tig_font_pop();
+}
 static void schematic_ui_draw_toolbar(const CraftingPreview* preview)
 {
     if (!settings_get_value(&settings, SCHEMATIC_TOOLBAR_KEY)) {
@@ -1248,9 +1257,15 @@ static void schematic_ui_draw_toolbar(const CraftingPreview* preview)
     schematic_ui_toolbar_text(schematic_ui_party_rect, text);
     if (schematic_ui_current_id() != -1) {
         for (int i = 0; i < 2; i++) {
-            snprintf(text, sizeof(text), "%s: %d/%d", mes_localized_get("crafting_ui", 7), preview->stock[i], schematic_ui_batch_size);
-            schematic_ui_toolbar_text((TigRect){ 579, 161 + i * 96, 99, 18 }, text);
+            snprintf(text, sizeof(text), mes_localized_get("crafting_ui", 10),
+                schematic_ui_batch_size);
+            schematic_ui_draw_quantity_label(583, 161 + i * 96, 50, text);
+            snprintf(text, sizeof(text), mes_localized_get("crafting_ui", 12), preview->stock[i]);
+            schematic_ui_draw_quantity_label(633, 161 + i * 96, 52, text);
         }
+        snprintf(text, sizeof(text), mes_localized_get("crafting_ui", 11),
+            (long long)(preview->produced_per_lot * schematic_ui_batch_size));
+        schematic_ui_draw_quantity_label(583, 348, 102, text);
     }
 }
 
@@ -1588,7 +1603,33 @@ void schematic_ui_draw_component(int ingr, const CraftingPreview* preview)
 
         art_blit_info.src_rect = &src_rect;
         art_blit_info.dst_rect = &dst_rect;
-        tig_window_blit_art(schematic_ui_window, &art_blit_info);
+        // Retain the original ART texture unless a valid custom color is set.
+        // Recolor a temporary palette, never the shared cached artwork.
+        TigPalette* background_palette = NULL;
+        tig_color_t background_color;
+        const char* background_key = preview->component_available[ingr]
+            ? SCHEMATIC_COLOR_AVAILABLE_KEY : SCHEMATIC_COLOR_MISSING_KEY;
+        if (modern_font_color_read(background_key, &background_color)
+            && tig_art_anim_data(art_blit_info.art_id, &art_anim_data) == TIG_OK) {
+            background_palette = tig_palette_create();
+            TigPaletteModifyInfo background_modify = { 0 };
+            background_modify.flags = TIG_PALETTE_MODIFY_GRAYSCALE | TIG_PALETTE_MODIFY_TINT;
+            background_modify.tint_color = background_color;
+            background_modify.src_palette = art_anim_data.palette1;
+            background_modify.dst_palette = background_palette;
+            tig_palette_modify(&background_modify);
+            art_blit_info.flags = TIG_ART_BLT_PALETTE_OVERRIDE;
+            art_blit_info.palette = background_palette;
+        }
+        int background_opacity = modern_font_int_for(preview->component_available[ingr]
+                ? SCHEMATIC_OPACITY_AVAILABLE_KEY : SCHEMATIC_OPACITY_MISSING_KEY,
+            100, 0, 100);
+        if (background_opacity < 100) {
+            art_blit_info.flags |= TIG_ART_BLT_BLEND_ALPHA_CONST;
+            art_blit_info.alpha[0] = (uint8_t)((background_opacity * 255 + 50) / 100);
+        }
+        if (background_opacity > 0) tig_window_blit_art(schematic_ui_window, &art_blit_info);
+        if (background_palette != NULL) tig_palette_destroy(background_palette);
     }
 
     // Draw component image.

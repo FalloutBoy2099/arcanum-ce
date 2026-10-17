@@ -8,6 +8,7 @@
 #include "game/benchmark.h"
 #include "game/map_marker.h"
 #include "ui/map_marker_input.h"
+#include "ui/search_bar.h"
 #include "game/journal_memory.h"
 #include "game/journal_text.h"
 #include "game/conversation_history.h"
@@ -23,6 +24,7 @@
 #include "game/highres_config.h"
 #include "game/input_bindings.h"
 #include "game/controller.h"
+#include "game/modern_font.h"
 #include "game/iso_zoom.h"
 #include "game/language.h"
 #include "game/mes.h"
@@ -284,9 +286,14 @@ static void test_journal_catalogs(const char* resources)
         for (int id = 20; id <= 22; id++) { entry.num = id; CHECK(mes_search(catalog, &entry)); }
         mes_unload(catalog);
         CHECK(mes_load("mes\\crafting_ui.mes", &catalog));
-        for (int id = 0; id <= 9; id++) { entry.num = id; CHECK(mes_search(catalog, &entry)); }
+        for (int id = 0; id <= 12; id++) { entry.num = id; CHECK(mes_search(catalog, &entry)); }
         mes_unload(catalog);
         CHECK(mes_load("mes\\options_ui.mes", &catalog));
+        entry.num = 1; CHECK(mes_search(catalog, &entry)); CHECK(strcmp(entry.str, "6") == 0);
+        int option_ids[] = { 115, 1115, 304, 1304, 312, 1312, 313, 1313, 401, 1401, 406, 1406, 407, 1407, 408, 1408, 409, 1409, 410, 1410, 411, 1411, 2070, 2071, 2072 };
+        for (int n = 0; n < SDL_arraysize(option_ids); n++) {
+            entry.num = option_ids[n]; CHECK(mes_search(catalog, &entry)); CHECK(entry.str[0] != '\0');
+        }
         entry.num = 116; CHECK(mes_search(catalog, &entry));
         entry.num = 1116; CHECK(mes_search(catalog, &entry));
         mes_unload(catalog);
@@ -604,6 +611,72 @@ static void test_worldmap_accents(const char* path)
     tig_palette_exit();
 }
 
+static int test_black_pixels(tig_window_handle_t window)
+{
+    TigVideoBuffer* buffer;
+    CHECK(tig_window_vbid_get(window, &buffer) == TIG_OK);
+    CHECK(tig_video_buffer_lock(buffer) == TIG_OK);
+    TigVideoBufferData data;
+    CHECK(tig_video_buffer_data(buffer, &data) == TIG_OK);
+    int count = 0;
+    for (int y = 0; y < 24; y++) {
+        for (int x = 0; x < 99; x++) {
+            Uint32 color = *(Uint32*)((Uint8*)data.pixels + y * data.pitch + x * 4);
+            if (color == tig_color_make(0, 0, 0)) count++;
+        }
+    }
+    tig_video_buffer_unlock(buffer);
+    return count;
+}
+
+static void test_plain_stock_label(const char* path)
+{
+    // The checked-in bitmap font is 21 pixels high. In a 24-pixel cell the
+    // old padding leaves 18 pixels and silently suppresses every glyph;
+    // plain label padding leaves 22. The game's 15/18-pixel stock case is the
+    // same failure, tested here without depending on installed game assets.
+    worldmap_font_art = path;
+    TigInitInfo info = { 0 };
+    info.bpp = 32;
+    info.width = 99;
+    info.height = 24;
+    info.art_file_path_resolver = test_worldmap_font_path;
+    info.art_id_reset_func = test_art_normalize;
+    CHECK(tig_palette_init(&info) == TIG_OK);
+    CHECK(tig_art_init(&info) == TIG_OK);
+    CHECK(tig_rect_init(&info) == TIG_OK);
+    CHECK(tig_window_init(&info) == TIG_OK);
+    TigFont font = { 0 };
+    font.color = tig_color_make(0, 0, 0);
+    tig_art_interface_id_create(840, 0, 0, 0, &font.art_id);
+    tig_font_handle_t font_handle;
+    tig_font_create(&font, &font_handle);
+    TigWindowData data = { 0 };
+    data.rect = (TigRect){ 0, 0, 99, 24 };
+    tig_window_handle_t window;
+    CHECK(tig_window_create(&data, &window) == TIG_OK);
+    ui_search_bar_cell(window, data.rect, font_handle, "3/2", false);
+    CHECK(test_black_pixels(window) == 0);
+    tig_color_t parchment = tig_color_make(220, 210, 190);
+    CHECK(tig_window_fill(window, &data.rect, parchment) == TIG_OK);
+    ui_search_bar_label(window, data.rect, font_handle, "3/2");
+    CHECK(test_black_pixels(window) > 0);
+    TigVideoBuffer* buffer;
+    CHECK(tig_window_vbid_get(window, &buffer) == TIG_OK);
+    CHECK(tig_video_buffer_lock(buffer) == TIG_OK);
+    TigVideoBufferData pixels;
+    CHECK(tig_video_buffer_data(buffer, &pixels) == TIG_OK);
+    CHECK(*(Uint32*)pixels.pixels == parchment); // No added border or fill.
+    CHECK(*(Uint32*)((Uint8*)pixels.pixels + 2 * pixels.pitch + 2 * 4) == parchment);
+    tig_video_buffer_unlock(buffer);
+    tig_window_destroy(window);
+    tig_font_destroy(font_handle);
+    tig_window_exit();
+    tig_rect_exit();
+    tig_art_exit();
+    tig_palette_exit();
+}
+
 static void test_button_art(const char* directory)
 {
     button_art_directory = directory;
@@ -690,11 +763,12 @@ static void test_ini_round_trip(void)
     FILE* stream = fopen("arcanum.ini", "wt");
     CHECK(stream != NULL);
     if (stream == NULL) return;
-    fputs("[global]\nlanguage=french\n[video]\nscroll_using_borders=0\ncamera_follows_player=1\nvsync_mode=2\nzoom_min=0.5\nzoom_max=1.75\nzoom_enabled=1\nzoom_filter=nearest\n"
-          "[ui]\nhud_stage=2\ndialogue_camera_mode=2\n"
+    fputs("[global]\nlanguage=french\n[video]\ndialog_font=2\nscroll_using_borders=0\ncamera_follows_player=1\nvsync_mode=2\nzoom_min=0.5\nzoom_max=1.75\nzoom_enabled=1\nzoom_filter=nearest\n"
+          "[ui]\nhud_stage=2\ndialogue_camera_mode=2\nschematic_color_available=#407090\nschematic_color_missing=160,50,60\nschematic_opacity_available=30\nschematic_opacity_missing=30\n"
           "dialogue_camera_zoom_to_fit=1\ndialogue_camera_tween_back=1\ntranslucent_black_ui=1\n"
-          "dialogue_option_numbers=1\ndialogue_emote_dim=1\ndialogue_emote_dim_choices=1\ndialogue_emote_dim_percent=60\n"
+          "dialogue_option_numbers=1\ndialogue_emote_dim=1\ndialogue_emote_dim_choices=1\ndialogue_emote_dim_percent=60\nfloating_shadow_opacity=70\n"
           "[game]\nautosave_travel=0\nautosave_sleep=1\naction_tooltips=1\nrandom_encounters=2\nlighting=50\n[bindings]\nzoom_reset=Keypad 0\ncycle_hud=TAB\ninventory=J\n"
+          "[fonts]\nmodern_fonts=1\nmodern_font_size=22\nlogbook_font=1\n"
           "[xbox_controller]\ncursor_speed=850\nmouse_left=b|rt\nmouse_right=a|lt\nquick_save=none\n", stream);
     fclose(stream);
     settings_init(&settings, "arcanum.ini");
@@ -702,6 +776,26 @@ static void test_ini_round_trip(void)
     controller_settings_register(&settings);
     input_bindings_init();
     CHECK(settings_get_value(&settings, "controller_enabled") == 0);
+    CHECK(modern_font_int_for(SCHEMATIC_OPACITY_AVAILABLE_KEY, 100, 0, 100) == 30);
+    CHECK(modern_font_int_for(SCHEMATIC_OPACITY_MISSING_KEY, 100, 0, 100) == 30);
+    settings_set_value(&settings, SCHEMATIC_OPACITY_MISSING_KEY, -10);
+    CHECK(modern_font_int_for(SCHEMATIC_OPACITY_MISSING_KEY, 100, 0, 100) == 0);
+    settings_set_value(&settings, SCHEMATIC_OPACITY_MISSING_KEY, 150);
+    CHECK(modern_font_int_for(SCHEMATIC_OPACITY_MISSING_KEY, 100, 0, 100) == 100);
+    settings_set_value(&settings, SCHEMATIC_OPACITY_MISSING_KEY, 30);
+    tig_color_t schematic_color;
+    CHECK(modern_font_color_read(SCHEMATIC_COLOR_AVAILABLE_KEY, &schematic_color));
+    CHECK(schematic_color == tig_color_make(64, 112, 144));
+    CHECK(modern_font_color_read(SCHEMATIC_COLOR_MISSING_KEY, &schematic_color));
+    CHECK(schematic_color == tig_color_make(160, 50, 60));
+    const char* invalid_colors[] = { "original", "", "badval", "#FF000g", "256,0,0", "12,34,56junk" };
+    for (int i = 0; i < SDL_arraysize(invalid_colors); i++) {
+        settings_set_str_value(&settings, SCHEMATIC_COLOR_MISSING_KEY, invalid_colors[i]);
+        schematic_color = tig_color_make(1, 2, 3);
+        CHECK(!modern_font_color_read(SCHEMATIC_COLOR_MISSING_KEY, &schematic_color));
+        CHECK(schematic_color == tig_color_make(1, 2, 3));
+    }
+    settings_set_str_value(&settings, SCHEMATIC_COLOR_MISSING_KEY, "160,50,60");
     settings_set_value(&settings, "controller_enabled", 1);
     CHECK(settings_get_value(&settings, "controller_cursor_speed") == 850);
     CHECK(strcmp(settings_get_str_value(&settings, "controller_mouse_left"), "b|rt") == 0);
@@ -758,11 +852,21 @@ static void test_ini_round_trip(void)
         bool in_ui = false;
         bool in_controller = false;
         int controller_keys = 0;
+        bool in_fonts = false, in_video = false;
+        int font_keys = 0;
         int toolbar_keys = 0;
         while (fgets(line, sizeof(line), stream) != NULL) {
             CHECK(line[0] != ';' && line[0] != '#');
             if (line[0] == '[') in_ui = strcmp(line, "[ui]\n") == 0;
+            if (strncmp(line, "schematic_color_", 16) == 0) CHECK(in_ui);
+            if (strncmp(line, "schematic_opacity_", 18) == 0) CHECK(in_ui);
             if (line[0] == '[') in_controller = strcmp(line, "[xbox_controller]\n") == 0;
+            if (line[0] == '[') in_fonts = strcmp(line, "[fonts]\n") == 0;
+            if (line[0] == '[') in_video = strcmp(line, "[video]\n") == 0;
+            if (strncmp(line, "modern_fonts=", 13) == 0 || strncmp(line, "modern_font_size=", 17) == 0
+                || strncmp(line, "logbook_font=", 13) == 0) { CHECK(in_fonts); font_keys++; }
+            if (strncmp(line, "lighting=", 9) == 0) CHECK(in_video);
+            if (strncmp(line, "dialog_font=", 12) == 0 || strncmp(line, "floating_shadow_opacity=", 24) == 0) CHECK(in_fonts);
             if (strncmp(line, "cursor_speed=", 13) == 0 || strncmp(line, "enabled=", 8) == 0) {
                 CHECK(in_controller);
                 controller_keys++;
@@ -775,6 +879,7 @@ static void test_ini_round_trip(void)
         }
         CHECK(toolbar_keys == 3);
         CHECK(controller_keys == 2);
+        CHECK(font_keys == 3);
         fclose(stream);
     }
     settings_exit(&settings);
@@ -783,6 +888,10 @@ static void test_ini_round_trip(void)
     CHECK(settings_get_value(&settings, VSYNC_MODE_KEY) == 1);
     CHECK(settings_get_value(&settings, SCHEMATIC_TOOLBAR_KEY) == 0);
     CHECK(settings_get_value(&settings, WORLDMAP_TOOLBAR_KEY) == 0);
+    CHECK(strcmp(settings_get_str_value(&settings, SCHEMATIC_COLOR_AVAILABLE_KEY), "#407090") == 0);
+    CHECK(strcmp(settings_get_str_value(&settings, SCHEMATIC_COLOR_MISSING_KEY), "160,50,60") == 0);
+    CHECK(settings_get_value(&settings, SCHEMATIC_OPACITY_AVAILABLE_KEY) == 30);
+    CHECK(settings_get_value(&settings, SCHEMATIC_OPACITY_MISSING_KEY) == 30);
     CHECK(settings_get_value(&settings, "controller_enabled") == 1);
     CHECK(settings_get_value(&settings, "controller_cursor_speed") == 850);
     CHECK(strcmp(settings_get_str_value(&settings, "controller_mouse_left"), "b|rt") == 0);
@@ -793,6 +902,11 @@ static void test_ini_round_trip(void)
     CHECK(settings_get_value(&settings, SCROLL_USING_BORDERS_KEY) == 0);
     CHECK(settings_get_value(&settings, RANDOM_ENCOUNTERS_KEY) == 2);
     CHECK(settings_get_value(&settings, LIGHTING_KEY) == 50);
+    CHECK(settings_get_value(&settings, "modern_fonts") == 1);
+    CHECK(settings_get_value(&settings, "modern_font_size") == 22);
+    CHECK(settings_get_value(&settings, LOGBOOK_FONT_KEY) == 1);
+    CHECK(settings_get_value(&settings, DIALOG_FONT_KEY) == 2);
+    CHECK(settings_get_value(&settings, FLOATING_SHADOW_OPACITY_KEY) == 70);
     CHECK(settings_get_value(&settings, ACTION_TOOLTIPS_KEY) == 1);
     CHECK(settings_get_value(&settings, "hud_stage") == 2);
     CHECK(settings_get_value(&settings, "dialogue_camera_tween_back") == 1);
@@ -1112,6 +1226,66 @@ static void test_language_labels(const char* path)
     tig_font_destroy(handle);
 }
 
+static void test_modern_cache(const char* path)
+{
+    if (path == NULL || path[0] == '\0') return;
+    TigVideoBufferCreateInfo info = { 0 };
+    info.flags = TIG_VIDEO_BUFFER_CREATE_SYSTEM_MEMORY;
+    info.width = 320; info.height = 180;
+    TigVideoBuffer* buffer = NULL;
+    CHECK(tig_video_buffer_create(&info, &buffer) == TIG_OK);
+    if (buffer == NULL) return;
+    TigFont font = { 0 };
+    font.flags = TIG_FONT_MODERN | TIG_FONT_SHADOW | TIG_FONT_DIM_BRACKETS;
+    font.modern_font_path = path;
+    font.modern_font_size = 20;
+    font.modern_shadow_opacity = 180;
+    font.modern_shadow_distance = 2;
+    tig_font_handle_t handle;
+    tig_font_create(&font, &handle);
+    tig_font_push(handle);
+    CHECK(tig_performance_set_enabled(true, "text-cache-test.csv"));
+    Uint32 pixels[320 * 180];
+    TigRect bounds = { 0, 0, 320, 180 };
+    for (int variant = 0; variant < 12; variant++) {
+        TigFont* actual = (TigFont*)handle;
+        actual->color = tig_color_make(255, variant * 20, 30);
+        actual->modern_shadow_opacity = variant * 20;
+        actual->modern_shadow_color = tig_color_make(variant * 10, 20, 0);
+        actual->bracket_dim_percent = variant * 8;
+        actual->flags = font.flags | (variant % 2 ? TIG_FONT_UNDERLINE : 0)
+            | (variant % 3 ? TIG_FONT_UTF8 : 0);
+        TigRect rect = { 4, 6, 90 + variant * 15, 160 };
+        const char* text = "Dialogue [action] \xc3\xa9quipement";
+        TigPerformanceSummary before, cold, hot;
+        tig_performance_summary(TIG_PERF_TEXT_RASTER, &before);
+        TigRect first_dirty, second_dirty;
+        tig_video_buffer_fill(buffer, &bounds, 0);
+        CHECK(tig_font_write(buffer, text, &rect, &first_dirty) == TIG_OK);
+        tig_performance_summary(TIG_PERF_TEXT_RASTER, &cold);
+        CHECK(cold.count > before.count);
+        TigVideoBufferData data;
+        CHECK(tig_video_buffer_lock(buffer) == TIG_OK);
+        tig_video_buffer_data(buffer, &data);
+        for (int y = 0; y < 180; y++) memcpy(pixels + y * 320, (Uint8*)data.pixels + y * data.pitch, 320 * 4);
+        tig_video_buffer_unlock(buffer);
+        tig_video_buffer_fill(buffer, &bounds, 0);
+        CHECK(tig_font_write(buffer, text, &rect, &second_dirty) == TIG_OK);
+        tig_performance_summary(TIG_PERF_TEXT_RASTER, &hot);
+        CHECK(hot.count == cold.count);
+        CHECK(memcmp(&first_dirty, &second_dirty, sizeof(TigRect)) == 0);
+        CHECK(tig_video_buffer_lock(buffer) == TIG_OK);
+        tig_video_buffer_data(buffer, &data);
+        for (int y = 0; y < 180; y++) CHECK(memcmp(pixels + y * 320, (Uint8*)data.pixels + y * data.pitch, 320 * 4) == 0);
+        tig_video_buffer_unlock(buffer);
+    }
+    tig_performance_set_enabled(false, NULL);
+    remove("text-cache-test.csv");
+    tig_font_pop();
+    tig_font_destroy(handle);
+    tig_video_buffer_destroy(buffer);
+}
+
 static void test_modern_measurement(const char* path)
 {
     if (path == NULL || path[0] == '\0') return;
@@ -1216,6 +1390,7 @@ int main(int argc, char** argv)
     if (argc > 1) {
         test_language_labels(argv[1]);
         test_modern_measurement(argv[1]);
+        test_modern_cache(argv[1]);
         test_large_floating_dialogue(argv[1]);
         test_modern_brackets(argv[1], 400);
         test_modern_brackets(argv[1], 90);
@@ -1223,7 +1398,10 @@ int main(int argc, char** argv)
         test_search_underlines(argv[1], 90);
     }
     if (argc > 2) test_button_art(argv[2]);
-    if (argc > 3) test_worldmap_accents(argv[3]);
+    if (argc > 3) {
+        test_worldmap_accents(argv[3]);
+        test_plain_stock_label(argv[3]);
+    }
     if (argc > 4) test_journal_catalogs(argv[4]);
     settings_exit(&settings);
     tig_color_exit();

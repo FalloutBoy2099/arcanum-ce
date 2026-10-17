@@ -22,6 +22,7 @@
 #include "game/skill.h"
 #include "game/snd.h"
 #include "game/tf.h"
+#include "game/ui.h"
 #include "ui/cyclic_ui.h"
 #include "ui/gameuilib.h"
 
@@ -165,6 +166,21 @@ BOOLEAN_OPTION(options_ui_zoom, ISO_ZOOM_ENABLED_KEY, 0)
 BOOLEAN_OPTION(options_ui_modern_fonts, MODERN_FONTS_KEY, 0)
 BOOLEAN_OPTION(options_ui_numbers, DIALOGUE_OPTION_NUMBERS_KEY, 0)
 BOOLEAN_OPTION(options_ui_dialogue_zoom, DIALOGUE_CAMERA_ZOOM_TO_FIT_KEY, 0)
+BOOLEAN_OPTION(options_ui_camera_tween, DIALOGUE_CAMERA_TWEEN_BACK_KEY, 0)
+BOOLEAN_OPTION(options_ui_logbook_toolbar, LOGBOOK_TOOLBAR_KEY, 0)
+BOOLEAN_OPTION(options_ui_worldmap_toolbar, WORLDMAP_TOOLBAR_KEY, 0)
+BOOLEAN_OPTION(options_ui_schematic_toolbar, SCHEMATIC_TOOLBAR_KEY, 0)
+
+static void options_ui_dialogue_opacity_get(int* value, bool* enabled)
+{
+    *value = SDL_clamp(settings_get_value(&settings, DIALOG_BACKGROUND_OPACITY_KEY), 0, 255);
+    *enabled = true;
+}
+
+static void options_ui_dialogue_opacity_set(int value)
+{
+    settings_set_value(&settings, DIALOG_BACKGROUND_OPACITY_KEY, SDL_clamp(value, 0, 255));
+}
 
 static void options_ui_vsync_get(int* value, bool* enabled)
 {
@@ -316,7 +332,7 @@ static OptionsUiControlInfo options_ui_tab_controls_meta[OPTIONS_UI_TAB_COUNT][M
         { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "", options_ui_resolution_get, options_ui_resolution_set, options_ui_resolution_values, SDL_arraysize(options_ui_resolution_values), 0 },
         { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "", options_ui_vsync_get, options_ui_vsync_set, options_ui_vsync_values, SDL_arraysize(options_ui_vsync_values), 0 },
         { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 9, "", options_ui_brightness_get, options_ui_brightness_set, NULL, 0, 0 },
-        { 0 }, // Intentionally empty fourth slot.
+        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "", options_ui_lighting_get, options_ui_lighting_set, options_ui_lighting_values, SDL_arraysize(options_ui_lighting_values), 0 },
         { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "", options_ui_text_duration_get, options_ui_text_duration_set, NULL, 0, 0 },
         { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "mes\\OptionsFloats.mes", options_ui_floats_get, options_ui_floats_set, NULL, 0, 0 },
         { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "", options_ui_float_speed_get, options_ui_float_speed_set, NULL, 0, 0 },
@@ -326,7 +342,6 @@ static OptionsUiControlInfo options_ui_tab_controls_meta[OPTIONS_UI_TAB_COUNT][M
         { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "mes\\OptionsOffOn.mes", options_ui_zoom_get, options_ui_zoom_set, NULL, 0, 1 },
         { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "", options_ui_filter_get, options_ui_filter_set, options_ui_filter_values, SDL_arraysize(options_ui_filter_values), 1 },
         { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "", options_ui_main_menu_art_get, options_ui_main_menu_art_set, options_ui_main_menu_art_values, SDL_arraysize(options_ui_main_menu_art_values), 1 },
-        { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "", options_ui_lighting_get, options_ui_lighting_set, options_ui_lighting_values, SDL_arraysize(options_ui_lighting_values), 1 },
     },
     {
         { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "", options_ui_effects_volume_get, options_ui_effects_volume_set, NULL, 0, 0 },
@@ -346,6 +361,11 @@ static OptionsUiControlInfo options_ui_tab_controls_meta[OPTIONS_UI_TAB_COUNT][M
         { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "mes\\OptionsOffOn.mes", options_ui_numbers_get, options_ui_numbers_set, NULL, 0, 0 },
         { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "", options_ui_camera_get, options_ui_camera_set, options_ui_camera_values, SDL_arraysize(options_ui_camera_values), 0 },
         { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "mes\\OptionsOffOn.mes", options_ui_dialogue_zoom_get, options_ui_dialogue_zoom_set, NULL, 0, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "mes\\OptionsOffOn.mes", options_ui_camera_tween_get, options_ui_camera_tween_set, NULL, 0, 0 },
+        { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 255, "", options_ui_dialogue_opacity_get, options_ui_dialogue_opacity_set, NULL, 0, 0 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "mes\\OptionsOffOn.mes", options_ui_logbook_toolbar_get, options_ui_logbook_toolbar_set, NULL, 0, 1 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "mes\\OptionsOffOn.mes", options_ui_worldmap_toolbar_get, options_ui_worldmap_toolbar_set, NULL, 0, 1 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "mes\\OptionsOffOn.mes", options_ui_schematic_toolbar_get, options_ui_schematic_toolbar_set, NULL, 0, 1 },
     },
     {
         { 0 }, // Shortcut settings will be added here later.
@@ -458,7 +478,7 @@ void options_ui_start(OptionsUiTab tab, tig_window_handle_t window_handle, bool 
     mes_load("mes\\options_ui.mes", &options_ui_mes_file);
     MesFileEntry catalog = { 1, NULL };
     options_ui_catalog_current = options_ui_mes_file != MES_FILE_HANDLE_INVALID
-        && mes_search(options_ui_mes_file, &catalog) && SDL_strcmp(catalog.str, "5") == 0;
+        && mes_search(options_ui_mes_file, &catalog) && SDL_strcmp(catalog.str, "6") == 0;
     options_ui_load_value_messages();
     options_ui_description_id = -1;
 
@@ -622,10 +642,9 @@ static const char* options_ui_message(int id)
 static int options_ui_title_id(int index)
 {
     // Catalog order follows the left menu: Game, Audio, Video, Interface,
-    // Shortcuts. The blank fourth Video slot does not consume a message ID.
+    // Shortcuts. IDs follow the setting order within each tab.
     static const int bases[OPTIONS_UI_TAB_COUNT] = { 100, 300, 200, 400, 500 };
     int offset = index + 1;
-    if (options_ui_tab == OPTIONS_UI_TAB_VIDEO && index > 3) offset--;
     return bases[options_ui_tab] + offset;
 }
 

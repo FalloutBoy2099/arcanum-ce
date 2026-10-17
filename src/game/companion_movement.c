@@ -6,6 +6,32 @@
 #include "game/obj.h"
 #include "game/path.h"
 
+bool companion_movement_repath_needed(int64_t planned_leader_tile, int64_t leader_tile, int remaining_steps)
+{
+    // A one-tile leader movement need not invalidate an otherwise usable path.
+    // Always refresh at its end, so a stationary leader is not left behind.
+    return planned_leader_tile != leader_tile
+        && (remaining_steps <= 1 || location_dist(planned_leader_tile, leader_tile) > 1);
+}
+
+bool companion_movement_follow_destination(int64_t companion, int64_t leader, int64_t* destination)
+{
+    if (companion == OBJ_HANDLE_NULL || leader == OBJ_HANDLE_NULL || destination == NULL
+        || obj_field_int32_get(companion, OBJ_F_TYPE) != OBJ_TYPE_NPC
+        || combat_critter_is_combat_mode_active(companion) || combat_critter_is_combat_mode_active(leader)) return false;
+    int count = obj_arrayfield_length_get(leader, OBJ_F_CRITTER_FOLLOWER_IDX);
+    for (int index = 0; index < count; index++) {
+        if (obj_arrayfield_handle_get(leader, OBJ_F_CRITTER_FOLLOWER_IDX, index) != companion) continue;
+        // Stable world-space slots: turning the leader must not swap everyone's positions.
+        static const int directions[8] = { 0, 4, 2, 6, 1, 5, 3, 7 };
+        int range = (obj_field_int32_get(companion, OBJ_F_NPC_FLAGS) & ONF_AI_SPREAD_OUT) != 0 ? 5 : 2;
+        // Additional rings avoid duplicate destinations for unusually large parties.
+        range -= (index / 8) % range;
+        return location_in_range(obj_field_int64_get(leader, OBJ_F_LOCATION), directions[index % 8], range, destination);
+    }
+    return false;
+}
+
 bool companion_movement_escape(int64_t companion, int64_t requester, int64_t* destination)
 {
     if (companion == OBJ_HANDLE_NULL || requester == OBJ_HANDLE_NULL || destination == NULL

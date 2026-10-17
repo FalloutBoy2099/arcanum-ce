@@ -2,6 +2,7 @@
 #include <tig/performance.h>
 #include "ui/cache_key.h"
 #include "ui/search_bar.h"
+#include "ui/journal_index.h"
 #include "ui/textedit_ui.h"
 #include "ui/text_pagination.h"
 #include "game/area.h"
@@ -1236,12 +1237,7 @@ static bool logbook_ui_format_entry(char* buffer, size_t maxlen, int index)
     return add_line_spacing;
 }
 
-typedef struct JournalIndexCandidate {
-    const char* name;
-    int description;
-    bool known;
-    bool person;
-} JournalIndexCandidate;
+static JournalIndexWorkspace logbook_ui_index_workspace;
 
 static int logbook_ui_index_compare(const void* a, const void* b)
 {
@@ -1254,9 +1250,7 @@ static void logbook_ui_index_candidate(JournalIndexCandidate* candidates, int* c
     if (description < 30000) return;
     const char* name = description_get(description);
     if (name == NULL || name[0] == '\0' || *count >= 8192) return;
-    for (int i = 0; i < *count; i++) {
-        if (candidates[i].person && candidates[i].description == description) return;
-    }
+    if (!journal_index_add_description(&logbook_ui_index_workspace, description)) return;
     candidates[*count].name = name;
     candidates[*count].description = description;
     candidates[*count].known = logbook_ui_obj == player_get_local_pc_obj() && journal_memory_knows(description);
@@ -1276,7 +1270,8 @@ static void logbook_ui_clear_index_cache(void)
 static void logbook_ui_load_index(void)
 {
     Uint64 perf_start = tig_performance_begin();
-    JournalIndexCandidate* candidates = CALLOC(8192, sizeof(*candidates));
+    journal_index_begin(&logbook_ui_index_workspace);
+    JournalIndexCandidate* candidates = logbook_ui_index_workspace.candidates;
     int count = 0;
     int saved_tab = logbook_ui_tab;
     bool saved_quotes = logbook_ui_quotes_mode;
@@ -1364,6 +1359,7 @@ static void logbook_ui_load_index(void)
         goto index_done;
     }
     logbook_ui_clear_index_cache();
+    journal_index_prepare_mentions(&logbook_ui_index_workspace, count);
     for (int tab = 0; tab < LOGBOOK_UI_TAB_COUNT; tab++) {
         logbook_ui_tab = tab;
         logbook_ui_load_data();
@@ -1375,11 +1371,7 @@ static void logbook_ui_load_index(void)
             char text[MAX_STRING] = { 0 };
             logbook_ui_format_entry(text, sizeof(text), i);
             if (!validated_texts) ui_cache_key_string(&key, text);
-            for (int candidate = 0; candidate < count; candidate++) {
-                if (!candidates[candidate].known && journal_text_mentions(text, candidates[candidate].name)) {
-                    candidates[candidate].known = true;
-                }
-            }
+            journal_index_match_mentions(&logbook_ui_index_workspace, text);
         }
     }
     logbook_ui_tab = saved_tab;
@@ -1419,7 +1411,6 @@ static void logbook_ui_load_index(void)
     logbook_ui_index_cache_key = key;
     logbook_ui_index_cache_valid = true;
 index_done:
-    FREE(candidates);
     while (logbook_ui_current_page > 1
         && logbook_ui_page_spread_starts[(logbook_ui_current_page - 1) / 2] >= logbook_ui_entry_count) {
         logbook_ui_current_page -= 2;
