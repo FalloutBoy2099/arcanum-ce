@@ -124,7 +124,7 @@ bool ai_init(GameInitInfo* init_info);
 void ai_exit(void);
 bool ai_mod_load(void);
 void ai_mod_unload(void);
-void ai_set_callbacks(AiEndDialogCallback a1, AiFloatLineFunc float_line_func);
+void ai_set_callbacks(AiEndDialogCallback end_dialog_callback, AiFloatLineFunc float_line_func);
 void ai_process(int64_t obj);
 void ai_redirect_init(AiRedirect* ai_redirect, int64_t source_obj, int64_t target_obj);
 void ai_redirect_perform(AiRedirect* ai_redirect);

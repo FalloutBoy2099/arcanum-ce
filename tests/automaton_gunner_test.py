@@ -38,7 +38,7 @@ class AutomatonGunnerTest(unittest.TestCase):
     def test_prototypes_fit_engine_ranges(self):
         source = (ROOT / "src/game/proto.c").read_text()
         tables = []
-        for symbol in ("proto_first_number_by_type", "dword_5B384C"):
+        for symbol in ("proto_first_number_by_type", "proto_number_upper_bounds_by_type"):
             body = re.search(symbol + r"\[OBJ_TYPE_COUNT\] = \{(.*?)\};", source, re.S)[1]
             tables.append(dict((kind, int(value)) for kind, value in re.findall(r"/\*\s*(OBJ_TYPE_\w+)\s*\*/\s*(\d+)", body)))
         for path in (port.BUNDLE / "data/proto").glob("*.pro"):

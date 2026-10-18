@@ -132,7 +132,7 @@ static float tc_scale = 1.0f;
  *
  * 0x5FF544
  */
-static bool dword_5FF544;
+static bool tc_highlight_uses_red_font;
 
 /**
  * Flag indicating whether the text conversation is in editor mode.
@@ -145,7 +145,7 @@ static bool tc_editor;
  * Font handle for rendering text conversation line in red.
  *
  * The exact purpose is unclear. The flag which controls the use of this font
- * (`dword_5FF544`) is never set.
+ * (`tc_highlight_uses_red_font`) is never set.
  *
  * 0x5FF54C
  */
@@ -297,7 +297,7 @@ bool tc_init(GameInitInfo* init_info)
     tig_font_create(&font, &tc_yellow_font);
 
     // Create red font, the purpose is unclear. This font is only used instead
-    // of the yellow font, but appropriate variable `dword_5FF544` is never set.
+    // of the yellow font, but appropriate variable `tc_highlight_uses_red_font` is never set.
     font.color = tig_color_make(255, 0, 0);
     tig_font_create(&font, &tc_red_font);
 
@@ -522,7 +522,7 @@ void tc_clear(bool compact)
 
     // Reset highlight state and some internal flag (which is unused).
     tc_highlighted_idx = -1;
-    dword_5FF544 = false;
+    tc_highlight_uses_red_font = false;
     tc_compact = compact;
 
     // Set default content size and center it horizontally.
@@ -782,8 +782,8 @@ void tc_render_option(int index, bool highlighted)
         tig_color_make(0, 0, 0));
 
     if (highlighted) {
-        if (dword_5FF544) {
-            // NOTE: Since `dword_5FF544` is never set, this code path is dead.
+        if (tc_highlight_uses_red_font) {
+            // NOTE: Since `tc_highlight_uses_red_font` is never set, this code path is dead.
             tig_font_push(tc_red_font);
         } else {
             tig_font_push(tc_yellow_font);

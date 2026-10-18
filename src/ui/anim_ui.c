@@ -27,10 +27,10 @@ static void ambient_lighting_reschedule(void);
 static bool ambient_lighting_enabled = true;
 
 // 0x5CB40C
-static int dword_5CB40C = -1;
+static int anim_ui_selected_event_type = -1;
 
 // 0x5CB410
-static int dword_5CB410 = -1;
+static int anim_ui_selected_event_parameter = -1;
 
 // 0x57D240
 bool anim_ui_init(GameInitInfo* init_info)
@@ -119,19 +119,19 @@ void anim_ui_event_add_delay(int type, int param, int milliseconds)
 // 0x57D3B0
 bool anim_ui_timeevent_matches_current(TimeEvent* timeevent)
 {
-    return timeevent->params[0].integer_value == dword_5CB40C
-        && timeevent->params[1].integer_value == dword_5CB410;
+    return timeevent->params[0].integer_value == anim_ui_selected_event_type
+        && timeevent->params[1].integer_value == anim_ui_selected_event_parameter;
 }
 
 // 0x57D3E0
 void anim_ui_event_remove(int type, int param)
 {
-    dword_5CB40C = type;
-    dword_5CB410 = param;
+    anim_ui_selected_event_type = type;
+    anim_ui_selected_event_parameter = param;
     // FIX: Original code uses `type` as timeevent type which is obviously wrong.
     timeevent_clear_one_ex(TIMEEVENT_TYPE_BKG_ANIM, anim_ui_timeevent_matches_current);
-    dword_5CB40C = -1;
-    dword_5CB410 = -1;
+    anim_ui_selected_event_type = -1;
+    anim_ui_selected_event_parameter = -1;
 }
 
 // 0x57D410
@@ -146,12 +146,12 @@ bool anim_ui_bkg_process_callback(TimeEvent* timeevent)
     case ANIM_UI_EVENT_TYPE_UPDATE_FATIGUE_BAR:
         intgame_draw_bar(INTGAME_BAR_FATIGUE);
         break;
-    case ANIM_UI_EVENT_TYPE_2:
-    case ANIM_UI_EVENT_TYPE_3:
-    case ANIM_UI_EVENT_TYPE_4:
-    case ANIM_UI_EVENT_TYPE_5:
-    case ANIM_UI_EVENT_TYPE_6:
-    case ANIM_UI_EVENT_TYPE_7:
+    case ANIM_UI_EVENT_TYPE_RESERVED_2:
+    case ANIM_UI_EVENT_TYPE_RESERVED_3:
+    case ANIM_UI_EVENT_TYPE_RESERVED_4:
+    case ANIM_UI_EVENT_TYPE_RESERVED_5:
+    case ANIM_UI_EVENT_TYPE_RESERVED_6:
+    case ANIM_UI_EVENT_TYPE_RESERVED_7:
         break;
     case ANIM_UI_EVENT_TYPE_ROTATE_INTERFACE:
         iso_interface_window_set_animated(timeevent->params[1].integer_value);

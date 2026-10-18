@@ -181,13 +181,13 @@ static tig_timestamp_t timeevent_last_ping_time;
 static bool timeevent_initialized;
 
 // 0x5E8618
-static int dword_5E8618;
+static int timeevent_pause_depth;
 
 // 0x5E861C
 static bool timeevent_in_ping;
 
 // 0x5E8620
-static bool dword_5E8620;
+static bool timeevent_immediate_insertion_active;
 
 // 0x5E8624
 static tig_timestamp_t timeevent_last_network_sync_time;
@@ -196,7 +196,7 @@ static tig_timestamp_t timeevent_last_network_sync_time;
 static int timeevent_client_time_advance_milliseconds;
 
 // 0x5DE6E0
-static bool dword_5DE6E0;
+static bool timeevent_pause_flag;
 
 // Returns the current game clock by value.
 // 0x45A7C0
@@ -770,8 +770,8 @@ bool timeevent_load_node(TimeEvent* timeevent, TigFile* stream)
 // 0x45B300
 bool timeevent_game_time_is_paused(void)
 {
-    if (dword_5E8618 == 0) {
-        return sub_52A900();
+    if (timeevent_pause_depth == 0) {
+        return tig_net_game_time_is_paused();
     } else {
         return true;
     }
@@ -780,19 +780,19 @@ bool timeevent_game_time_is_paused(void)
 // 0x45B320
 void timeevent_pause_push(void)
 {
-    if (dword_5E8618 < 30) {
-        dword_5E8618++;
-        dword_5DE6E0 = true;
+    if (timeevent_pause_depth < 30) {
+        timeevent_pause_depth++;
+        timeevent_pause_flag = true;
     }
 }
 
 // 0x45B340
 void timeevent_pause_pop(void)
 {
-    if (dword_5E8618 > 0) {
-        dword_5E8618--;
-        if (dword_5E8618 == 0) {
-            dword_5DE6E0 = false;
+    if (timeevent_pause_depth > 0) {
+        timeevent_pause_depth--;
+        if (timeevent_pause_depth == 0) {
+            timeevent_pause_flag = false;
         }
     }
 }
@@ -800,8 +800,8 @@ void timeevent_pause_pop(void)
 // 0x45B360
 void timeevent_pause_reset(void)
 {
-    dword_5E8618 = 0;
-    dword_5DE6E0 = false;
+    timeevent_pause_depth = 0;
+    timeevent_pause_flag = false;
 }
 
 // 0x45B370
@@ -1035,12 +1035,12 @@ bool timeevent_add_immediate(TimeEvent* timeevent)
     DateTime datetime;
     bool rc;
 
-    dword_5E8620 = true;
+    timeevent_immediate_insertion_active = true;
 
     datetime_init(&datetime, 0);
     rc = timeevent_add_delay(timeevent, &datetime);
 
-    dword_5E8620 = false;
+    timeevent_immediate_insertion_active = false;
 
     return rc;
 }
@@ -1092,7 +1092,7 @@ bool timeevent_add_base_at_func(TimeEvent* timeevent, DateTime* base, DateTime* 
     timeevent->datetime = *base;
 
     time_type = timeevent_type_info_table[timeevent->type].time_type;
-    if (!timeevent_in_ping || dword_5E8620) {
+    if (!timeevent_in_ping || timeevent_immediate_insertion_active) {
         node_ptr = &(timeevent_lists[time_type]);
     } else {
         node_ptr = &(timeevent_new_lists[time_type]);

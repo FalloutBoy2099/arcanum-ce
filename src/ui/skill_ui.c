@@ -87,10 +87,10 @@ bool skill_ui_init(GameInitInfo* init_info)
 
     (void)init_info;
 
-    callbacks.field_0 = skill_ui_result_feedback_primary;
+    callbacks.primary_result_callback = skill_ui_result_feedback_primary;
     callbacks.steal_item_func = skill_ui_steal_item;
     callbacks.plant_item_output = skill_ui_plant_item;
-    callbacks.field_C = skill_ui_result_feedback_secondary;
+    callbacks.disarm_check_result_callback = skill_ui_result_feedback_secondary;
     callbacks.disarm_trap_func = skill_ui_disarm_trap;
     callbacks.repair_func = skill_ui_repair;
     callbacks.no_repair_func = skill_ui_no_repair;
@@ -295,7 +295,7 @@ void skill_ui_activate(TargetDescriptor* td, int64_t obj, int a3)
             object_handle_reference_init(obj, &(skill_invocation.source));
             object_handle_reference_init(td->obj, &(skill_invocation.target));
             object_handle_reference_init(OBJ_HANDLE_NULL, &(skill_invocation.item));
-            skill_invocation.flags = SKILL_INVOCATION_0x04;
+            skill_invocation.flags = SKILL_INVOCATION_APPLY_DISARM_TRAP;
             skill_invocation.skill = SKILL_DISARM_TRAPS;
             skill_ui_best_follower_select(&skill_invocation);
             skill_ui_invocation_execute(&skill_invocation);
@@ -345,15 +345,15 @@ void skill_ui_invocation_execute(SkillInvocation* skill_invocation)
 }
 
 // 0x57A6C0
-int skill_ui_target_skill_resolve(int a1, TargetDescriptor* td)
+int skill_ui_target_skill_resolve(int skill, TargetDescriptor* td)
 {
     int v1;
     int complexity;
 
-    v1 = skill_ui_action_skills[a1];
+    v1 = skill_ui_action_skills[skill];
     if (v1 == -1) {
         complexity = obj_field_int32_get(td->obj, OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY);
-        if (a1 == 3 && complexity >= 20) {
+        if (skill == 3 && complexity >= 20) {
             v1 = SKILL_REPAIR;
         }
     }

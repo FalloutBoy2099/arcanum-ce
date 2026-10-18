@@ -260,3 +260,8 @@ Deuxième bloc : 30 champs, leurs 30 types de callbacks et 2 variables globales 
 ## Lisibilité : messages d’interface et callback schématique
 
 Troisième bloc : 3 champs de UiMessage et 2 variables globales renommés, bornes numériques remplacées par leurs constantes existantes. Correction séparée du callback schématique non initialisé ; les 86 membres de UiCallbacks sont maintenant explicitement affectés. Compilation Release x86 et 24 suites CTest réussies. Voir [le rapport et la séparation des validations](explicit_ui_messages.md).
+
+
+## Lisibilité : passe transversale des noms
+
+113 fichiers de code clarifiés, sans commentaire ajouté ni changement de logique. Compilation Release x86 et 24 suites CTest réussies. Voir [les correspondances, validations et limites restantes](explicit_semantic_names.md).

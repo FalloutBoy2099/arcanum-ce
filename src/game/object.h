@@ -84,13 +84,13 @@ typedef struct ObjectList {
     /* 0050 */ ObjectNode* head;
 } ObjectList;
 
-extern int dword_5E2E68;
-extern int dword_5E2E6C;
-extern bool dword_5E2E94;
+extern int object_hover_overlay_palette;
+extern int object_hover_underlay_palette;
+extern bool object_hover_uses_critter_markers;
 extern tig_art_id_t object_hover_underlay_art_id;
 extern tig_color_t object_hover_color;
 extern tig_art_id_t object_hover_overlay_art_id;
-extern ObjectReference stru_5E2F60;
+extern ObjectReference object_hover_reference;
 extern int64_t object_hover_obj;
 
 bool object_init(GameInitInfo* init_info);
@@ -201,7 +201,7 @@ void object_handle_reference_init(int64_t obj, ObjectHandleReference* handle_ref
 bool object_handle_reference_resolve(ObjectHandleReference* handle_reference);
 bool object_handle_reference_recover_if_stale(ObjectHandleReference* handle_reference);
 int64_t get_fire_at_location(int64_t loc);
-void object_pull_adjacent_to_source(int64_t a1, int64_t a2);
+void object_pull_adjacent_to_source(int64_t source_obj, int64_t target_obj);
 
 void object_highlight_mode_set(bool enabled);
 

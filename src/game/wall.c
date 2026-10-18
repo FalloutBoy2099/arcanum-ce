@@ -17,7 +17,7 @@ static TigRect wall_iso_content_rect;
 static bool wall_editor;
 
 // 0x603434
-static int dword_603434;
+static int wall_topdown_marker_color;
 
 // 0x603438
 static IsoInvalidateRectFunc* wall_iso_window_invalidate_rect;
@@ -51,7 +51,7 @@ bool wall_init(GameInitInfo* init_info)
     wall_view_options.type = VIEW_TYPE_ISOMETRIC;
     wall_editor = init_info->editor;
     wall_enabled = true;
-    dword_603434 = tig_color_make(255, 0, 100);
+    wall_topdown_marker_color = tig_color_make(255, 0, 100);
 
     return true;
 }
@@ -254,7 +254,7 @@ void wall_topdown_grid_markers_draw(GameDrawInfo* draw_info)
             rect_node = *draw_info->rects;
             while (rect_node != NULL) {
                 if (tig_rect_intersection(&rect, &(rect_node->rect), &tmp_rect) == TIG_OK) {
-                    tig_window_fill(wall_iso_window_handle, &tmp_rect, dword_603434);
+                    tig_window_fill(wall_iso_window_handle, &tmp_rect, wall_topdown_marker_color);
                 }
                 rect_node = rect_node->next;
             }

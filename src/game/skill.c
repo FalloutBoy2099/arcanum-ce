@@ -79,7 +79,7 @@ static int skill_level_training_tbl[TRAINING_COUNT] = {
  *
  * 0x5B6F48
  */
-static int dword_5B6F48[TRAINING_COUNT - 1] = {
+static int skill_monster_melee_training_skill_thresholds[TRAINING_COUNT - 1] = {
     /*       TRAINING_NONE */ 1,
     /* TRAINING_APPRENTICE */ 9,
     /*     TRAINING_EXPERT */ 18,
@@ -91,7 +91,7 @@ static int dword_5B6F48[TRAINING_COUNT - 1] = {
  *
  * 0x5B6F58
  */
-static int dword_5B6F58[TRAINING_COUNT - 1] = {
+static int skill_monster_melee_training_level_thresholds[TRAINING_COUNT - 1] = {
     /*       TRAINING_NONE */ 10,
     /* TRAINING_APPRENTICE */ 20,
     /*     TRAINING_EXPERT */ 30,
@@ -220,7 +220,7 @@ const char* training_lookup_keys_tbl[TRAINING_COUNT] = {
  *
  * 0x5B7044
  */
-static int dword_5B7044[19] = {
+static int skill_success_chance_quarter_units[19] = {
     /* -9 */ 55, // 13
     /* -8 */ 66, // 16
     /* -7 */ 78, // 19
@@ -281,7 +281,7 @@ static int skill_gambling_item_cost_tbl[21] = {
  *
  * 0x5B70E4
  */
-static int dword_5B70E4[9] = {
+static int skill_pickpocket_equipment_difficulty[9] = {
     /*    HELMET */ 50,
     /*     RING1 */ 30,
     /*     RING2 */ 30,
@@ -353,10 +353,10 @@ bool skill_init(GameInitInfo* init_info)
     settings_register(&settings, FOLLOWER_SKILLS_KEY, "1", NULL);
 
     // Reset callbacks.
-    skill_callbacks.field_0 = NULL;
+    skill_callbacks.primary_result_callback = NULL;
     skill_callbacks.steal_item_func = NULL;
     skill_callbacks.plant_item_output = NULL;
-    skill_callbacks.field_C = NULL;
+    skill_callbacks.disarm_check_result_callback = NULL;
     skill_callbacks.disarm_trap_func = NULL;
     skill_callbacks.repair_func = NULL;
     skill_callbacks.no_repair_func = NULL;
@@ -659,11 +659,11 @@ int basic_skill_training_get(int64_t obj, int bs)
         // not stopped in the middle of the loop, `training` will reach the
         // value of 3 (which is `TRAINING_MASTER`).
         for (training = 0; training < TRAINING_COUNT - 1; training++) {
-            if (melee < dword_5B6F48[training]) {
+            if (melee < skill_monster_melee_training_skill_thresholds[training]) {
                 break;
             }
 
-            if (level < dword_5B6F58[training]) {
+            if (level < skill_monster_melee_training_level_thresholds[training]) {
                 break;
             }
         }
@@ -898,7 +898,7 @@ int basic_skill_vs(int64_t obj, int skill, int64_t other_obj)
     }
 
     // Otherwise, use the lookup table to determine success rate, scaled by 1/4.
-    return dword_5B7044[delta + 9] / 4;
+    return skill_success_chance_quarter_units[delta + 9] / 4;
 }
 
 /**
@@ -1629,7 +1629,7 @@ bool skill_invocation_run(SkillInvocation* skill_invocation)
         }
         break;
     case SKILL_PICK_POCKET: {
-        if ((skill_invocation->flags & SKILL_INVOCATION_0x02) == 0) {
+        if ((skill_invocation->flags & SKILL_INVOCATION_PLANT_ITEM) == 0) {
             // Steal item from the target object.
             if (is_success) {
                 int64_t parent_obj;
@@ -2009,7 +2009,7 @@ bool skill_invocation_run(SkillInvocation* skill_invocation)
         break;
     }
     case SKILL_DISARM_TRAPS: {
-        if ((skill_invocation->flags & SKILL_INVOCATION_0x04) != 0) {
+        if ((skill_invocation->flags & SKILL_INVOCATION_APPLY_DISARM_TRAP) != 0) {
             // The master of disarming traps gets a second chance (unless the
             // first attempt was a critical failure).
             if (!is_success
@@ -2031,8 +2031,8 @@ bool skill_invocation_run(SkillInvocation* skill_invocation)
         } else {
             // TODO: Unclear.
             if (player_is_local_pc_obj(source_obj)) {
-                if (skill_callbacks.field_C != NULL) {
-                    skill_callbacks.field_C(source_obj, target_obj, is_success);
+                if (skill_callbacks.disarm_check_result_callback != NULL) {
+                    skill_callbacks.disarm_check_result_callback(source_obj, target_obj, is_success);
                 }
             }
         }
@@ -2494,7 +2494,7 @@ int skill_invocation_difficulty(SkillInvocation* skill_invocation)
         // are harder to steal)
         inventory_location = item_inventory_location_get(item_obj);
         if (IS_WEAR_INV_LOC(inventory_location)) {
-            difficulty += dword_5B70E4[inventory_location - FIRST_WEAR_INV_LOC];
+            difficulty += skill_pickpocket_equipment_difficulty[inventory_location - FIRST_WEAR_INV_LOC];
         }
 
         // Apply penalty based on the item's size (larger items are harder to

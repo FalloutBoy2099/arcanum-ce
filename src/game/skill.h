@@ -67,10 +67,10 @@ typedef enum Training {
 
 #define IS_TRAINING_VALID(tr) ((tr) >= 0 && (tr) < TRAINING_COUNT)
 
-typedef bool (*SkillCallbacksF0)(int64_t source_obj, int64_t target_obj, bool success);
+typedef bool (*SkillPrimaryResultCallback)(int64_t source_obj, int64_t target_obj, bool success);
 typedef bool (*SkillStealItemFunc)(int64_t source_obj, int64_t target_obj, int64_t item_obj, bool success);
 typedef bool (*SkillPlantItemFunc)(int64_t source_obj, int64_t target_obj, int64_t item_obj, bool success);
-typedef bool (*SkillCallbacksFC)(int64_t source_obj, int64_t target_obj, bool success);
+typedef bool (*SkillDisarmCheckResultCallback)(int64_t source_obj, int64_t target_obj, bool success);
 typedef bool (*SkillDisarmTrapFunc)(int64_t source_obj, int64_t target_obj, bool success);
 typedef bool (*SkillRepairFunc)(int64_t source_obj, int64_t target_obj, bool success);
 typedef bool (*SkillNoRepairFunc)(int64_t source_obj, int64_t target_obj, bool success);
@@ -78,10 +78,10 @@ typedef bool (*SkillLockFunc)(int64_t source_obj, int64_t target_obj, bool succe
 typedef bool (*SkillNoLockFunc)(int64_t source_obj);
 
 typedef struct SkillCallbacks {
-    SkillCallbacksF0 field_0;
+    SkillPrimaryResultCallback primary_result_callback;
     SkillStealItemFunc steal_item_func;
     SkillPlantItemFunc plant_item_output;
-    SkillCallbacksFC field_C;
+    SkillDisarmCheckResultCallback disarm_check_result_callback;
     SkillDisarmTrapFunc disarm_trap_func;
     SkillRepairFunc repair_func;
     SkillNoRepairFunc no_repair_func;
@@ -91,8 +91,8 @@ typedef struct SkillCallbacks {
 
 // clang-format off
 #define SKILL_INVOCATION_SUCCESS            0x00000001u
-#define SKILL_INVOCATION_0x02               0x00000002u
-#define SKILL_INVOCATION_0x04               0x00000004u
+#define SKILL_INVOCATION_PLANT_ITEM               0x00000002u
+#define SKILL_INVOCATION_APPLY_DISARM_TRAP               0x00000004u
 #define SKILL_INVOCATION_AIM                0x00000008u
 #define SKILL_INVOCATION_CRITICAL           0x00000010u
 #define SKILL_INVOCATION_PENALTY_MSR        0x00000040u

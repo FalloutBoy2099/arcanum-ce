@@ -177,18 +177,18 @@ bool target_descriptor_evaluate_current(TargetDescriptorEvaluation* evaluation)
 {
     target_current_context.source_obj = evaluation->source_obj;
 
-    if (evaluation->td->is_loc) {
-        target_current_context.orig_target_loc = evaluation->td->loc;
-        target_current_context.target_loc = evaluation->td->loc;
+    if (evaluation->descriptor->is_loc) {
+        target_current_context.orig_target_loc = evaluation->descriptor->loc;
+        target_current_context.target_loc = evaluation->descriptor->loc;
         target_current_context.target_obj = OBJ_HANDLE_NULL;
         target_current_context.orig_target_obj = OBJ_HANDLE_NULL;
     } else {
-        if ((obj_field_int32_get(evaluation->td->obj, OBJ_F_FLAGS) & OF_CLICK_THROUGH) != 0) {
+        if ((obj_field_int32_get(evaluation->descriptor->obj, OBJ_F_FLAGS) & OF_CLICK_THROUGH) != 0) {
             return false;
         }
 
-        target_current_context.orig_target_obj = evaluation->td->obj;
-        target_current_context.target_obj = evaluation->td->obj;
+        target_current_context.orig_target_obj = evaluation->descriptor->obj;
+        target_current_context.target_obj = evaluation->descriptor->obj;
         target_current_context.target_loc = OBJ_HANDLE_NULL;
         target_current_context.orig_target_loc = OBJ_HANDLE_NULL;
     }
@@ -202,13 +202,13 @@ bool target_descriptor_evaluate_current(TargetDescriptorEvaluation* evaluation)
         return false;
     }
 
-    if (!evaluation->td->is_loc) {
-        if (evaluation->td->obj != OBJ_HANDLE_NULL) {
-            target_current_context.target_loc = obj_field_int64_get(evaluation->td->obj, OBJ_F_LOCATION);
+    if (!evaluation->descriptor->is_loc) {
+        if (evaluation->descriptor->obj != OBJ_HANDLE_NULL) {
+            target_current_context.target_loc = obj_field_int64_get(evaluation->descriptor->obj, OBJ_F_LOCATION);
             target_current_context.orig_target_loc = target_current_context.target_loc;
         }
         if (target_context_evaluate(&target_current_context) && target_current_params.tgt) {
-            target_descriptor_set_loc(evaluation->td, target_current_context.target_loc);
+            target_descriptor_set_loc(evaluation->descriptor, target_current_context.target_loc);
             return true;
         }
     }
@@ -299,7 +299,7 @@ bool target_pick_at_local_xy(int x, int y, TargetDescriptor* td)
 
     v1.source_obj = pc_obj;
     v1.self_obj = pc_obj;
-    v1.td = td;
+    v1.descriptor = td;
 
     if ((target_current_params.tgt & TGT_OBJ_NO_SELF) != 0) {
         object_flags_set(pc_obj, OF_CLICK_THROUGH);
@@ -1623,10 +1623,10 @@ bool target_find_displacement_loc(int64_t obj, int distance, int64_t* loc_ptr)
     target_path_to = target_path_create_info.to;
     target_path_from = target_path_create_info.from;
 
-    if ((target_path_length > 0 || target_path_create_info.field_24 > 0)
+    if ((target_path_length > 0 || target_path_create_info.range_or_partial_path_length > 0)
         && target_path_length < distance + 2) {
-        if (target_path_create_info.field_24 == 0) {
-            target_path_create_info.field_24 = target_path_length;
+        if (target_path_create_info.range_or_partial_path_length == 0) {
+            target_path_create_info.range_or_partial_path_length = target_path_length;
         }
 
         // Start with current location.
@@ -1634,7 +1634,7 @@ bool target_find_displacement_loc(int64_t obj, int distance, int64_t* loc_ptr)
 
         // Advance along the path.
         target_path_step = 0;
-        while (target_path_step < target_path_create_info.field_24) {
+        while (target_path_step < target_path_create_info.range_or_partial_path_length) {
             if (obj_type_is_critter(obj_type)) {
                 // Check if there are no critters on candidate loc.
                 object_list_location(to, OBJ_TM_CRITTER, &critters);

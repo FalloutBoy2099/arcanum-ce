@@ -138,7 +138,7 @@ int tig_video_buffer_lock(TigVideoBuffer* video_buffer);
 int tig_video_buffer_unlock(TigVideoBuffer* video_buffer);
 int tig_video_buffer_outline(TigVideoBuffer* video_buffer, TigRect* rect, tig_color_t color);
 int tig_video_buffer_fill(TigVideoBuffer* video_buffer, TigRect* rect, tig_color_t color);
-int tig_video_buffer_line(TigVideoBuffer* video_buffer, TigLine* line, TigRect* a3, tig_color_t color);
+int tig_video_buffer_line(TigVideoBuffer* video_buffer, TigLine* line, TigRect* clip_rect, tig_color_t color);
 int tig_video_buffer_render_target_check(TigVideoBuffer* video_buffer, unsigned int flags);
 int tig_video_buffer_blit(TigVideoBufferBlitInfo* blit_info);
 // Limited to opaque, unmodulated scaling. Unsupported cases return an error so

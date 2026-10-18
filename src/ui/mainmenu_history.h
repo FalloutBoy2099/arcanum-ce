@@ -21,7 +21,7 @@ typedef enum MainMenuWindowType {
     MM_WINDOW_CHAREDIT,
     MM_WINDOW_SHOP,
     MM_WINDOW_CREDITS,
-    MM_WINDOW_26,
+    MM_WINDOW_MAINMENU_WITHOUT_LOAD,
     MM_WINDOW_COUNT,
 } MainMenuWindowType;
 

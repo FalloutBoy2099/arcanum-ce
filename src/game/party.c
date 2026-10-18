@@ -14,10 +14,10 @@ static bool party_update(void);
 static void party_join_feedback_schedule(int64_t a1, int64_t a2, int a3);
 
 // 0x5FC32C
-static int dword_5FC32C[PARTY_TABLE_SIZE];
+static int party_player_party_ids[PARTY_TABLE_SIZE];
 
 // 0x5FC34C
-static int dword_5FC34C;
+static int party_next_unused_id_candidate;
 
 // 0x4B9E10
 bool party_init(GameInitInfo* init_info)
@@ -41,7 +41,7 @@ void party_reset(void)
     int index;
 
     for (index = 0; index < PARTY_TABLE_SIZE; index++) {
-        dword_5FC32C[index] = -1;
+        party_player_party_ids[index] = -1;
     }
 }
 
@@ -56,7 +56,7 @@ bool party_save(TigFile* stream)
         return false;
     }
 
-    if (tig_file_fwrite(dword_5FC32C, sizeof(*dword_5FC32C), PARTY_TABLE_SIZE, stream) != PARTY_TABLE_SIZE) {
+    if (tig_file_fwrite(party_player_party_ids, sizeof(*party_player_party_ids), PARTY_TABLE_SIZE, stream) != PARTY_TABLE_SIZE) {
         tig_debug_printf("Party: could not save, unable to write table.\n", cnt);
         return false;
     }
@@ -79,7 +79,7 @@ bool party_load(GameLoadInfo* load_info)
         return false;
     }
 
-    if (tig_file_fread(dword_5FC32C, sizeof(*dword_5FC32C), PARTY_TABLE_SIZE, load_info->stream) != PARTY_TABLE_SIZE) {
+    if (tig_file_fread(party_player_party_ids, sizeof(*party_player_party_ids), PARTY_TABLE_SIZE, load_info->stream) != PARTY_TABLE_SIZE) {
         tig_debug_printf("Party: could not read, unable to read table.\n");
         return false;
     }
@@ -101,13 +101,13 @@ int64_t party_find_first(int64_t obj, int* index_ptr)
         return OBJ_HANDLE_NULL;
     }
 
-    if (dword_5FC32C[index] == -1) {
+    if (party_player_party_ids[index] == -1) {
         *index_ptr = PARTY_TABLE_SIZE;
         return obj;
     }
 
     for (*index_ptr = 0; *index_ptr < PARTY_TABLE_SIZE; (*index_ptr)++) {
-        if (dword_5FC32C[*index_ptr] == dword_5FC32C[index]) {
+        if (party_player_party_ids[*index_ptr] == party_player_party_ids[index]) {
             return multiplayer_active_player_object_get(*index_ptr);
         }
     }
@@ -129,13 +129,13 @@ int64_t party_find_next(int* index_ptr)
         return OBJ_HANDLE_NULL;
     }
 
-    if (dword_5FC32C[index] == -1) {
+    if (party_player_party_ids[index] == -1) {
         *index_ptr = PARTY_TABLE_SIZE;
         return OBJ_HANDLE_NULL;
     }
 
     while (*index_ptr < PARTY_TABLE_SIZE) {
-        if (dword_5FC32C[*index_ptr] == dword_5FC32C[index]) {
+        if (party_player_party_ids[*index_ptr] == party_player_party_ids[index]) {
             return multiplayer_active_player_object_get(*index_ptr);
         }
         (*index_ptr)++;
@@ -162,7 +162,7 @@ int party_id_from_obj(int64_t obj)
         return -1;
     }
 
-    return dword_5FC32C[index];
+    return party_player_party_ids[index];
 }
 
 // 0x4BA080
@@ -186,19 +186,19 @@ bool party_add(int64_t leader_obj, int64_t target_obj, int* id_ptr)
             return false;
         }
 
-        if (dword_5FC32C[player2] != -1) {
+        if (party_player_party_ids[player2] != -1) {
             party_join_feedback_schedule(leader_obj, target_obj, 3);
             return false;
         }
 
-        if (dword_5FC32C[player1] == -1) {
-            dword_5FC32C[player1] = party_unused_id_find();
+        if (party_player_party_ids[player1] == -1) {
+            party_player_party_ids[player1] = party_unused_id_find();
         }
 
-        dword_5FC32C[player2] = dword_5FC32C[player1];
+        party_player_party_ids[player2] = party_player_party_ids[player1];
 
         if (id_ptr != NULL) {
-            *id_ptr = dword_5FC32C[player2];
+            *id_ptr = party_player_party_ids[player2];
         }
 
         party_join_feedback_schedule(leader_obj, target_obj, 0);
@@ -232,12 +232,12 @@ bool party_remove(int64_t obj)
             return false;
         }
 
-        if (dword_5FC32C[index] == -1) {
+        if (party_player_party_ids[index] == -1) {
             party_join_feedback_schedule(obj, obj, 6);
             return false;
         }
 
-        dword_5FC32C[index] = -1;
+        party_player_party_ids[index] = -1;
         party_join_feedback_schedule(obj, obj, 6);
         ui_optional_event_dispatch(115, 0, NULL);
         party_update();
@@ -252,13 +252,13 @@ int party_unused_id_find(void)
     int index;
 
     for (index = 0; index < 8; index++) {
-        if (dword_5FC32C[index] == dword_5FC34C) {
-            dword_5FC34C = (dword_5FC34C + 1) & 7;
+        if (party_player_party_ids[index] == party_next_unused_id_candidate) {
+            party_next_unused_id_candidate = (party_next_unused_id_candidate + 1) & 7;
             index = -1;
         }
     }
 
-    return dword_5FC34C;
+    return party_next_unused_id_candidate;
 }
 
 // 0x4BA290
@@ -269,7 +269,7 @@ bool party_update(void)
         PacketPartyUpdate pkt;
 
         pkt.type = 71;
-        memcpy(pkt.party, dword_5FC32C, sizeof(dword_5FC32C));
+        memcpy(pkt.party, party_player_party_ids, sizeof(party_player_party_ids));
         tig_net_send_app_all(&pkt, sizeof(pkt));
     }
 
@@ -284,7 +284,7 @@ bool party_membership_table_apply(int* party, int cnt)
         return true;
     }
 
-    memcpy(dword_5FC32C, party, sizeof(*party) * cnt);
+    memcpy(party_player_party_ids, party, sizeof(*party) * cnt);
     ui_optional_event_dispatch(115, 0, NULL);
 
     return true;

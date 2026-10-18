@@ -24,7 +24,7 @@ static bool text_filter_sleeping_validate(int64_t obj);
 static void text_filter_sleeping_process(const char* src, char** dst);
 
 // 0x5BCEB8
-static TextFilterInfo stru_5BCEB8[] = {
+static TextFilterInfo text_filter_modules[] = {
     {
         "sleeping",
         text_filter_sleeping_validate,
@@ -49,9 +49,9 @@ bool text_filter_init(void)
 {
     int index;
 
-    for (index = 0; stru_5BCEB8[index].name != NULL; index++) {
-        if (!stru_5BCEB8[index].init()) {
-            tig_debug_printf("TextFilter: module %s(%d) failed initialization.\n", stru_5BCEB8[index].name, index);
+    for (index = 0; text_filter_modules[index].name != NULL; index++) {
+        if (!text_filter_modules[index].init()) {
+            tig_debug_printf("TextFilter: module %s(%d) failed initialization.\n", text_filter_modules[index].name, index);
             return false;
         }
     }
@@ -64,8 +64,8 @@ void text_filter_exit(void)
 {
     int index;
 
-    for (index = 0; stru_5BCEB8[index].name != NULL; index++) {
-        stru_5BCEB8[index].exit();
+    for (index = 0; text_filter_modules[index].name != NULL; index++) {
+        text_filter_modules[index].exit();
     }
 }
 
@@ -74,9 +74,9 @@ bool text_filter_process(int64_t obj, const char* src, char** dst)
 {
     int index;
 
-    for (index = 0; stru_5BCEB8[index].name != NULL; index++) {
-        if (stru_5BCEB8[index].validate(obj)) {
-            stru_5BCEB8[index].process(src, dst);
+    for (index = 0; text_filter_modules[index].name != NULL; index++) {
+        if (text_filter_modules[index].validate(obj)) {
+            text_filter_modules[index].process(src, dst);
             return true;
         }
     }

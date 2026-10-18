@@ -256,10 +256,10 @@ typedef struct AnimRunInfo {
 extern const char* anim_goal_names[];
 extern int anim_processing_slot;
 extern int anim_goal_parameter_types[AGDATA_COUNT];
-extern bool dword_5E34F4;
+extern bool anim_slot_exhaustion_recovery_pending;
 extern void (*anim_all_goals_complete_callback)(void);
 extern bool in_anim_load;
-extern int dword_5E3500;
+extern int anim_allocated_slot_count;
 extern int anim_active_goal_count;
 extern int anim_next_unique_id;
 extern int dword_739E40;

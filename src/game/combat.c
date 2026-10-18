@@ -81,7 +81,7 @@ static int hit_loc_penalties[HIT_LOC_COUNT] = {
 };
 
 // 0x5B57A8
-static int dword_5B57A8[TRAINING_COUNT] = {
+static int combat_critical_dodge_chance_by_training[TRAINING_COUNT] = {
     0,
     10,
     50,
@@ -167,28 +167,28 @@ static ObjectNode* combat_current_turn_node;
 static int combat_required_action_points;
 
 // 0x5FC248
-static int64_t qword_5FC248;
+static int64_t combat_last_turn_obj;
 
 // 0x5FC250
-static int dword_5FC250;
+static int combat_current_turn_index;
 
 // 0x5FC258
-static int64_t qword_5FC258;
+static int64_t combat_previous_turn_obj;
 
 // 0x5FC260
-static int dword_5FC260;
+static int combat_previous_action_points;
 
 // 0x5FC264
-static bool dword_5FC264;
+static bool combat_action_points_stalled;
 
 // 0x5FC268
 static bool in_combat_reset;
 
 // 0x5FC26C
-static bool dword_5FC26C;
+static bool combat_taking_damage_script_active;
 
 // 0x5FC270
-static int64_t qword_5FC270;
+static int64_t combat_debug_object;
 
 // 0x5FC1E0
 static CombatCallbacks combat_callbacks;
@@ -272,7 +272,7 @@ bool combat_save(TigFile* stream)
 
     if (tig_file_fwrite(&combat_required_action_points, sizeof(combat_required_action_points), 1, stream) != 1) return false;
 
-    oid = obj_get_id(qword_5FC248);
+    oid = obj_get_id(combat_last_turn_obj);
     if (tig_file_fwrite(&oid, sizeof(oid), 1, stream) != 1) return false;
 
     return true;
@@ -335,8 +335,8 @@ bool combat_load(GameLoadInfo* load_info)
     combat_required_action_points = 0;
 
     if (tig_file_fread(&oid, sizeof(oid), 1, load_info->stream) != 1) return false;
-    qword_5FC248 = obj_pool_perm_lookup(oid);
-    if (qword_5FC248 == OBJ_HANDLE_NULL) {
+    combat_last_turn_obj = obj_pool_perm_lookup(oid);
+    if (combat_last_turn_obj == OBJ_HANDLE_NULL) {
         return false;
     }
 
@@ -951,7 +951,7 @@ int combat_attack_resolve(CombatContext* combat)
 
                     if ((skill_invocation.flags & SKILL_INVOCATION_CRITICAL) != 0) {
                         int training = basic_skill_training_get(combat->target_obj, BASIC_SKILL_DODGE);
-                        if (random_between(1, 100) <= dword_5B57A8[training]) {
+                        if (random_between(1, 100) <= combat_critical_dodge_chance_by_training[training]) {
                             combat->flags |= COMBAT_ATTACK_CRITICAL;
                         }
                     }
@@ -1416,12 +1416,12 @@ void combat_dmg(CombatContext* combat)
         }
     }
 
-    if (!dword_5FC26C) {
+    if (!combat_taking_damage_script_active) {
         bool def;
 
-        dword_5FC26C = true;
+        combat_taking_damage_script_active = true;
         def = object_script_execute(combat->attacker_obj, combat->target_obj, OBJ_HANDLE_NULL, SAP_TAKING_DAMAGE, 0);
-        dword_5FC26C = false;
+        combat_taking_damage_script_active = false;
 
         if (!def) {
             return;
@@ -2922,7 +2922,7 @@ void combat_debug(int64_t obj, const char* msg)
     char* name = NULL;
 
     if (obj == OBJ_HANDLE_NULL) {
-        obj = qword_5FC270;
+        obj = combat_debug_object;
     }
 
     if (obj != OBJ_HANDLE_NULL) {
@@ -2933,14 +2933,14 @@ void combat_debug(int64_t obj, const char* msg)
                 obj_field_string_get(obj, OBJ_F_NAME, &name);
             }
         } else {
-            qword_5FC270 = OBJ_HANDLE_NULL;
+            combat_debug_object = OBJ_HANDLE_NULL;
         }
     }
 
     tig_debug_printf("Combat: TB: DBG: %s: %s, Idx: %d, APs Left: %d\n",
         msg,
         name != NULL ? name : " ",
-        dword_5FC250,
+        combat_current_turn_index,
         combat_action_points);
 
     if (name != NULL) {
@@ -2957,8 +2957,8 @@ void combat_turn_based_whos_turn_set(int64_t obj)
 
     combat_debug(obj, "Whos Turn Set");
 
-    if (!player_is_local_pc_obj(qword_5FC248)) {
-        anim_object_interrupt_by_priority(qword_5FC248, 3, 0, 1);
+    if (!player_is_local_pc_obj(combat_last_turn_obj)) {
+        anim_object_interrupt_by_priority(combat_last_turn_obj, 3, 0, 1);
     }
 
     if (combat_current_turn_node->obj != obj) {
@@ -3012,7 +3012,7 @@ void combat_turn_based_whos_turn_set(int64_t obj)
         }
     }
 
-    qword_5FC248 = obj;
+    combat_last_turn_obj = obj;
 
     if (combat_callbacks.object_notify_stub != NULL) {
         combat_callbacks.object_notify_stub(obj);
@@ -3057,13 +3057,13 @@ void combat_turn_completion_schedule(void)
             return;
         }
 
-        if (combat_current_turn_node->obj == qword_5FC258) {
-            if (combat_action_points == dword_5FC260) {
-                dword_5FC264 = true;
+        if (combat_current_turn_node->obj == combat_previous_turn_obj) {
+            if (combat_action_points == combat_previous_action_points) {
+                combat_action_points_stalled = true;
             }
-            dword_5FC260 = combat_action_points;
+            combat_previous_action_points = combat_action_points;
         } else {
-            qword_5FC258 = combat_current_turn_node->obj;
+            combat_previous_turn_obj = combat_current_turn_node->obj;
         }
     }
 
@@ -3088,8 +3088,8 @@ bool combat_tb_timeevent_process(TimeEvent* timeevent)
             return true;
         }
 
-        if (dword_5FC264) {
-            dword_5FC264 = false;
+        if (combat_action_points_stalled) {
+            combat_action_points_stalled = false;
             combat_consume_action_points(combat_current_turn_node->obj, combat_action_points);
         }
 
@@ -3120,7 +3120,7 @@ bool combat_turn_based_start(void)
         tig_debug_printf("Combat: TB_Start: Anim-Goal-Interrupt FAILED!\n");
     }
 
-    dword_5FC250 = 0;
+    combat_current_turn_index = 0;
 
     anim_update_callback_set(combat_turn_completion_schedule);
 
@@ -3186,7 +3186,7 @@ bool combat_turn_based_begin_turn(void)
     LocRect loc_rect;
     ObjectList objects;
 
-    dword_5FC250 = 0;
+    combat_current_turn_index = 0;
     pc_obj = player_get_local_pc_obj();
     combat_turn_based_turn++;
     pc_loc = obj_field_int64_get(pc_obj, OBJ_F_LOCATION);
@@ -3202,20 +3202,20 @@ bool combat_turn_based_begin_turn(void)
 
     sort_combat_list();
 
-    dword_5FC250 = 0;
+    combat_current_turn_index = 0;
     combat_current_turn_node = combat_critter_list.head;
     while (combat_turn_candidate_should_skip(combat_current_turn_node) && combat_current_turn_node != NULL) {
-        dword_5FC250++;
+        combat_current_turn_index++;
         combat_current_turn_node = combat_current_turn_node->next;
     }
 
     if (combat_current_turn_node == NULL) {
         if (critter_is_active(pc_obj)) {
-            dword_5FC250 = 0;
+            combat_current_turn_index = 0;
             combat_current_turn_node = combat_critter_list.head;
             while (combat_current_turn_node != NULL && combat_current_turn_node->obj != pc_obj) {
                 combat_current_turn_node = combat_current_turn_node->next;
-                dword_5FC250++;
+                combat_current_turn_index++;
             }
 
             if (combat_current_turn_node == OBJ_HANDLE_NULL) {
@@ -3227,9 +3227,9 @@ bool combat_turn_based_begin_turn(void)
     }
 
     combat_debug(combat_current_turn_node != NULL ? combat_current_turn_node->obj : OBJ_HANDLE_NULL, "TB Begin Turn");
-    qword_5FC258 = OBJ_HANDLE_NULL;
-    dword_5FC260 = 0;
-    dword_5FC264 = 0;
+    combat_previous_turn_obj = OBJ_HANDLE_NULL;
+    combat_previous_action_points = 0;
+    combat_action_points_stalled = 0;
     combat_turn_based_subturn_start();
 
     return true;
@@ -3283,7 +3283,7 @@ void combat_turn_based_next_subturn(void)
 {
     combat_debug(combat_current_turn_node->obj, "Next SubTurn");
 
-    dword_5FC250++;
+    combat_current_turn_index++;
     combat_turn_based_subturn_end();
 
     combat_current_turn_node = combat_current_turn_node->next;
@@ -3295,7 +3295,7 @@ void combat_turn_based_next_subturn(void)
     if (combat_turn_candidate_should_skip(combat_current_turn_node)) {
         while (combat_current_turn_node != NULL) {
             combat_current_turn_node = combat_current_turn_node->next;
-            dword_5FC250++;
+            combat_current_turn_index++;
             if (combat_current_turn_node == NULL) {
                 break;
             }
@@ -3812,7 +3812,7 @@ int combat_turn_based_turn_get(void)
 void combat_recalc_reaction(int64_t obj)
 {
     // 0x5B5818
-    static unsigned int dword_5B5818[7] = {
+    static unsigned int combat_reaction_flags_by_type[7] = {
         OCF2_REACTION_0,
         OCF2_REACTION_1,
         OCF2_REACTION_2,
@@ -3838,7 +3838,7 @@ void combat_recalc_reaction(int64_t obj)
 
     flags = obj_field_int32_get(obj, OBJ_F_CRITTER_FLAGS2);
     flags &= ~(OCF2_REACTION_0 | OCF2_REACTION_1 | OCF2_REACTION_2 | OCF2_REACTION_3 | OCF2_REACTION_4 | OCF2_REACTION_5 | OCF2_REACTION_6);
-    flags |= dword_5B5818[reaction_type];
+    flags |= combat_reaction_flags_by_type[reaction_type];
     obj_field_int32_set(obj, OBJ_F_CRITTER_FLAGS2, flags);
 
     if (critter_is_dead(obj) || combat_object_is_hidden_awake(obj)) {

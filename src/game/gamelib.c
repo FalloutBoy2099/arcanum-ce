@@ -245,7 +245,7 @@ static char gamelib_mod_patch_paths[GAMELIB_MAX_PATCH_COUNT][TIG_MAX_PATH];
 // FIXME: Should be of TIG_MAX_PATH (260), not 256.
 //
 // 0x5D0A50
-static char byte_5D0A50[256];
+static char gamelib_save_info_path_buffer[256];
 
 // 0x5D0B50
 static ViewOptions gamelib_view_options;
@@ -281,7 +281,7 @@ static int gamelib_game_difficulty;
 static bool gamelib_mod_loaded;
 
 // 0x5D0EA4
-static char byte_5D0EA4[TIG_MAX_PATH];
+static char gamelib_loaded_module_path[TIG_MAX_PATH];
 
 // 0x5D0FA8
 static char gamelib_mod_dat_path[TIG_MAX_PATH];
@@ -298,7 +298,7 @@ static TigGuid gamelib_mod_guid;
 static int gamelib_thumbnail_width;
 
 // 0x5D10C4
-static bool dword_5D10C4;
+static bool gamelib_module_guid_available;
 
 // 0x5D10D4
 static GameExtraSaveFunc gamelib_extra_save_func;
@@ -815,7 +815,7 @@ void gamelib_modlist_create(GameModuleList* module_list, int type)
                     module_list->paths = (char**)REALLOC(module_list->paths, sizeof(module_list->paths) * (module_list->count + 1));
                     module_list->paths[module_list->count] = STRDUP(file_list.entries[file_index].path);
 
-                    if (SDL_strcasecmp(byte_5D0EA4, file_list.entries[file_index].path) == 0) {
+                    if (SDL_strcasecmp(gamelib_loaded_module_path, file_list.entries[file_index].path) == 0) {
                         module_list->selected = module_list->count;
                     }
 
@@ -860,7 +860,7 @@ bool gamelib_mod_load(const char* path)
         tig_file_repository_guid(gamelib_mod_dat_path, &gamelib_mod_guid);
     }
 
-    dword_5D10C4 = true;
+    gamelib_module_guid_available = true;
 
     if (tig_file_is_directory("Save\\Current")) {
         if (!tig_file_is_empty_directory("Save\\Current")) {
@@ -910,7 +910,7 @@ bool gamelib_mod_load(const char* path)
         }
     }
 
-    strcpy(byte_5D0EA4, path);
+    strcpy(gamelib_loaded_module_path, path);
     gamelib_mod_loaded = true;
 
     return true;
@@ -919,7 +919,7 @@ bool gamelib_mod_load(const char* path)
 // 0x402C20
 bool gamelib_mod_guid_get(TigGuid* guid_ptr)
 {
-    if (!dword_5D10C4) {
+    if (!gamelib_module_guid_available) {
         return false;
     }
 
@@ -1830,23 +1830,23 @@ bool gamelib_delete(const char* name)
 const char* gamelib_last_save_name(void)
 {
     // 0x5D0D88
-    static char byte_5D0D88[TIG_MAX_PATH];
+    static char gamelib_latest_save_name_buffer[TIG_MAX_PATH];
 
     // 0x5D10C8
     static GameSaveList save_list;
 
-    byte_5D0D88[0] = '\0';
+    gamelib_latest_save_name_buffer[0] = '\0';
     gamelib_savelist_create(&save_list);
     gamelib_savelist_sort(&save_list, GAME_SAVE_LIST_ORDER_DATE, true);
 
     if (save_list.count > 0) {
-        strcpy(byte_5D0D88, save_list.names[0]);
+        strcpy(gamelib_latest_save_name_buffer, save_list.names[0]);
     }
 
     // FIX: Memory leak.
     gamelib_savelist_destroy(&save_list);
 
-    return byte_5D0D88;
+    return gamelib_latest_save_name_buffer;
 }
 
 // 0x4038C0
@@ -2174,21 +2174,21 @@ bool gamelib_saveinfo_load(const char* name, GameSaveInfo* save_info)
     int size;
     bool success = false;
 
-    snprintf(byte_5D0A50, sizeof(byte_5D0A50), "save\\%s.gsi", name);
+    snprintf(gamelib_save_info_path_buffer, sizeof(gamelib_save_info_path_buffer), "save\\%s.gsi", name);
 
-    stream = tig_file_fopen(byte_5D0A50, "rb");
+    stream = tig_file_fopen(gamelib_save_info_path_buffer, "rb");
     if (stream == NULL) {
         return false;
     }
 
     save_info->thumbnail_video_buffer = NULL;
 
-    strcpy(byte_5D0A50, "save\\");
-    strncpy(&(byte_5D0A50[5]), name, 8);
-    strcpy(&(byte_5D0A50[13]), ".bmp");
+    strcpy(gamelib_save_info_path_buffer, "save\\");
+    strncpy(&(gamelib_save_info_path_buffer[5]), name, 8);
+    strcpy(&(gamelib_save_info_path_buffer[13]), ".bmp");
 
     do {
-        if (tig_video_buffer_load_from_bmp(byte_5D0A50, &save_info->thumbnail_video_buffer, 0x1) != TIG_OK) break;
+        if (tig_video_buffer_load_from_bmp(gamelib_save_info_path_buffer, &save_info->thumbnail_video_buffer, 0x1) != TIG_OK) break;
 
         if (tig_file_fread(&(save_info->version), sizeof(save_info->version), 1, stream) != 1) break;
 
@@ -2601,9 +2601,9 @@ void gamelib_unload_module_data(void)
     gamelib_mod_dir_path[0] = '\0';
     byte_5D0B58[0] = '\0';
     gamelib_mod_dat_path[0] = '\0';
-    byte_5D0EA4[0] = '\0';
+    gamelib_loaded_module_path[0] = '\0';
 
     memset(&gamelib_mod_guid, 0, sizeof(gamelib_mod_guid));
 
-    dword_5D10C4 = false;
+    gamelib_module_guid_available = false;
 }

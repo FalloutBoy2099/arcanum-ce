@@ -104,7 +104,7 @@ static void script_fx_stop(int64_t obj, int fx_id);
 static mes_file_handle_t script_story_state_mes_file = MES_FILE_HANDLE_INVALID;
 
 // 0x5A5700
-int dword_5A5700[3] = {
+int script_slide_sequence_ids[3] = {
     997,
     998,
     999,
@@ -292,8 +292,8 @@ bool script_execute(ScriptInvocation* invocation)
     if (tig_net_is_active()
         && !tig_net_is_host()) {
         // NOTE: Script at index 1 is not being checked, probably a bug.
-        if (invocation->script->num != dword_5A5700[0]
-            && invocation->script->num != dword_5A5700[2]) {
+        if (invocation->script->num != script_slide_sequence_ids[0]
+            && invocation->script->num != script_slide_sequence_ids[2]) {
             return false;
         }
     }

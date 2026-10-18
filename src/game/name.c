@@ -17,13 +17,13 @@ static bool name_art_picker_message_filter(TigMessage* msg);
 static void name_art_picker_draw(void);
 
 // 0x5A1064
-static const char* off_5A1064 = "art";
+static const char* name_art_directory = "art";
 
 // 0x5A1068
-static const char* off_5A1068 = "art\\missing.dat";
+static const char* name_missing_art_cache_path = "art\\missing.dat";
 
 // 0x5A106C
-static int dword_5A106C[] = {
+static int name_animation_presence_masks[] = {
     1,
     2,
     4,
@@ -92,7 +92,7 @@ static TigArtWeaponType name_check_weapons[] = {
 };
 
 // 0x5A1150
-static TigArtAnim dword_5A1150[] = {
+static TigArtAnim name_animation_types[] = {
     TIG_ART_ANIM_WALK,
     TIG_ART_ANIM_WALK,
     TIG_ART_ANIM_STAND,
@@ -218,19 +218,19 @@ static bool name_initialized;
 static bool name_missing_art_initialized;
 
 // 0x739E48
-static tig_window_handle_t dword_739E48;
+static tig_window_handle_t name_art_picker_window;
 
 // 0x739E4C
-static int dword_739E4C;
+static int name_art_picker_result;
 
 // 0x739E50
 static int* dword_739E50;
 
 // 0x739E54
-static int dword_739E54;
+static int name_art_picker_selected_art_id;
 
 // 0x739E58
-static int dword_739E58;
+static int name_art_picker_type;
 
 // 0x41CA40
 bool name_init(GameInitInfo* init_info)
@@ -427,7 +427,7 @@ void name_missing_art_init(void)
         for (idx = 0; idx < 19; idx++) {
             for (num = 0; num < num_critter_art; num++) {
                 if (tig_art_critter_id_create(num & 1, num / 2, 0, 0, 0, 4, name_check_anims[idx], name_check_weapons[idx], 0, &aid) != TIG_OK) {
-                    missing_critter_art[num] |= dword_5A106C[idx];
+                    missing_critter_art[num] |= name_animation_presence_masks[idx];
                     tig_debug_printf("Unable to create valid art id for critter %d (%s%c) using animation %d (%c%c)\n",
                         num,
                         name_body_type_strs[num / 2],
@@ -436,7 +436,7 @@ void name_missing_art_init(void)
                         name_weapon_type_codes[name_check_weapons[idx]],
                         'a' + name_check_anims[idx]);
                 } else if (tig_art_exists(aid) != TIG_OK) {
-                    missing_critter_art[num] |= dword_5A106C[idx];
+                    missing_critter_art[num] |= name_animation_presence_masks[idx];
                     tig_debug_printf("Missing art for critter %d (%s%c) using animation %d (%c%c)\n",
                         num,
                         name_body_type_strs[num / 2],
@@ -449,7 +449,7 @@ void name_missing_art_init(void)
 
             for (num = 0; num < num_monster_art; num++) {
                 if (tig_art_monster_id_create(num, 0, 0, 0, 4, name_check_anims[idx], name_check_weapons[idx], 0, &aid) != TIG_OK) {
-                    missing_monster_art[num] |= dword_5A106C[idx];
+                    missing_monster_art[num] |= name_animation_presence_masks[idx];
 
                     mes_file_entry.num = num;
                     mes_get_msg(name_monster_mes_file, &mes_file_entry);
@@ -461,7 +461,7 @@ void name_missing_art_init(void)
                         name_weapon_type_codes[name_check_weapons[idx]],
                         'a' + name_check_anims[idx]);
                 } else if (tig_art_exists(aid) != TIG_OK) {
-                    missing_monster_art[num] |= dword_5A106C[idx];
+                    missing_monster_art[num] |= name_animation_presence_masks[idx];
 
                     mes_file_entry.num = num;
                     mes_get_msg(name_monster_mes_file, &mes_file_entry);
@@ -477,7 +477,7 @@ void name_missing_art_init(void)
 
             for (num = 0; num < num_unique_npc_art; num++) {
                 if (tig_art_unique_npc_id_create(num, 0, 0, 4, name_check_anims[idx], name_check_weapons[idx], 0, &aid) != TIG_OK) {
-                    missing_unique_npc_art[num] |= dword_5A106C[idx];
+                    missing_unique_npc_art[num] |= name_animation_presence_masks[idx];
 
                     mes_file_entry.num = num;
                     mes_get_msg(name_unique_npc_mes_file, &mes_file_entry);
@@ -489,7 +489,7 @@ void name_missing_art_init(void)
                         name_weapon_type_codes[name_check_weapons[idx]],
                         'a' + name_check_anims[idx]);
                 } else if (tig_art_exists(aid) != TIG_OK) {
-                    missing_unique_npc_art[num] |= dword_5A106C[idx];
+                    missing_unique_npc_art[num] |= name_animation_presence_masks[idx];
 
                     mes_file_entry.num = num;
                     mes_get_msg(name_monster_mes_file, &mes_file_entry);
@@ -517,7 +517,7 @@ bool name_missing_art_load(void)
     int expected_cnt;
     int actual_cnt;
 
-    stream = tig_file_fopen(off_5A1068, "rb");
+    stream = tig_file_fopen(name_missing_art_cache_path, "rb");
     if (stream == NULL) {
         return false;
     }
@@ -561,9 +561,9 @@ bool name_missing_art_save(void)
     TigFile* stream;
 
     cnt = name_critter_art_file_count();
-    tig_file_mkdir(off_5A1064);
+    tig_file_mkdir(name_art_directory);
 
-    stream = tig_file_fopen(off_5A1068, "wb");
+    stream = tig_file_fopen(name_missing_art_cache_path, "wb");
     if (stream == NULL) {
         return false;
     }
@@ -834,11 +834,11 @@ void fix_missing_art(int num, int cnt, unsigned int* missing, int* anim_ptr, int
     }
 
     for (idx = 0; idx < 19; idx++) {
-        if ((dword_5A106C[idx] & missing[num]) != 0
+        if ((name_animation_presence_masks[idx] & missing[num]) != 0
             && *anim_ptr == name_check_anims[idx]
             && (*anim_ptr != 21
                 || *weapon_ptr == name_check_weapons[idx])) {
-            *anim_ptr = dword_5A1150[idx];
+            *anim_ptr = name_animation_types[idx];
             if (*anim_ptr == 1) {
                 if ((missing[num] & 0x1) != 0) {
                     *weapon_ptr = 0;
@@ -1457,9 +1457,9 @@ bool name_art_picker_open(int a1, int* a2, int* a3)
 {
     TigWindowData window_data;
 
-    dword_739E58 = a1;
+    name_art_picker_type = a1;
     dword_739E50 = a2;
-    dword_739E54 = -1;
+    name_art_picker_selected_art_id = -1;
 
     window_data.rect.x = 40;
     window_data.rect.y = 40;
@@ -1469,25 +1469,25 @@ bool name_art_picker_open(int a1, int* a2, int* a3)
     window_data.message_filter = name_art_picker_message_filter;
     window_data.background_color = tig_color_make(30, 30, 30);
 
-    if (tig_window_create(&window_data, &dword_739E48) != TIG_OK) {
+    if (tig_window_create(&window_data, &name_art_picker_window) != TIG_OK) {
         return false;
     }
 
     name_art_picker_draw();
 
-    dword_739E4C = 0;
-    while (dword_739E4C == 0) {
+    name_art_picker_result = 0;
+    while (name_art_picker_result == 0) {
         tig_ping();
         tig_window_display();
     }
 
-    tig_window_destroy(dword_739E48);
+    tig_window_destroy(name_art_picker_window);
 
-    if (dword_739E4C != 1) {
+    if (name_art_picker_result != 1) {
         return false;
     }
 
-    *a3 = dword_739E54;
+    *a3 = name_art_picker_selected_art_id;
 
     return true;
 }
@@ -1501,28 +1501,28 @@ bool name_art_picker_message_filter(TigMessage* msg)
         && msg->data.keyboard.pressed) {
         switch (msg->data.keyboard.key) {
         case SDLK_A:
-            if (dword_739E54 != -1) {
-                dword_739E54 = name_previous_art_id_stub(dword_739E54);
+            if (name_art_picker_selected_art_id != -1) {
+                name_art_picker_selected_art_id = name_previous_art_id_stub(name_art_picker_selected_art_id);
                 name_art_picker_draw();
             }
             break;
         case SDLK_Z:
-            if (dword_739E54 == -1) {
-                dword_739E54 = name_first_art_id_get(dword_739E58, dword_739E50);
+            if (name_art_picker_selected_art_id == -1) {
+                name_art_picker_selected_art_id = name_first_art_id_get(name_art_picker_type, dword_739E50);
                 name_art_picker_draw();
             } else {
-                v1 = name_next_art_id_get(dword_739E54);
+                v1 = name_next_art_id_get(name_art_picker_selected_art_id);
                 if (v1 != -1) {
-                    dword_739E54 = v1;
+                    name_art_picker_selected_art_id = v1;
                 }
                 name_art_picker_draw();
             }
             break;
         case SDLK_ESCAPE:
-            dword_739E4C = -1;
+            name_art_picker_result = -1;
             break;
         case SDLK_RETURN:
-            dword_739E4C = 1;
+            name_art_picker_result = 1;
             break;
         }
     }
@@ -1543,10 +1543,10 @@ void name_art_picker_draw(void)
     dst_rect.width = 80;
     dst_rect.height = 80;
 
-    tig_window_fill(dword_739E48, &dst_rect, tig_color_make(0, 0, 60));
+    tig_window_fill(name_art_picker_window, &dst_rect, tig_color_make(0, 0, 60));
 
-    if (dword_739E54 != TIG_ART_ID_INVALID) {
-        if (tig_art_frame_data(dword_739E54, &art_frame_data) == TIG_OK) {
+    if (name_art_picker_selected_art_id != TIG_ART_ID_INVALID) {
+        if (tig_art_frame_data(name_art_picker_selected_art_id, &art_frame_data) == TIG_OK) {
             src_rect.x = 0;
             src_rect.y = 0;
             src_rect.width = art_frame_data.width;
@@ -1567,10 +1567,10 @@ void name_art_picker_draw(void)
             dst_rect.y += (80 - dst_rect.height) / 2;
 
             art_blit_spec.flags = TIG_ART_BLT_PALETTE_ORIGINAL;
-            art_blit_spec.art_id = dword_739E54;
+            art_blit_spec.art_id = name_art_picker_selected_art_id;
             art_blit_spec.src_rect = &src_rect;
             art_blit_spec.dst_rect = &dst_rect;
-            tig_window_blit_art(dword_739E48, &art_blit_spec);
+            tig_window_blit_art(name_art_picker_window, &art_blit_spec);
         }
     }
 }

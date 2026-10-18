@@ -41,16 +41,16 @@ static void show_inven_identify(int64_t pc_obj, int64_t target_obj);
 static void show_inven_npc_identify(int64_t pc_obj, int64_t target_obj);
 static void display_warning(char* str);
 static void refresh_fatigue_bar(int64_t obj);
-static void tb_ui_dialog_script_and_greeting(int64_t a1, int64_t a2);
+static void tb_ui_dialog_script_and_greeting(int64_t pc_obj, int64_t npc_obj);
 static void end_death(void);
 static void end_game(void);
-static void tb_ui_hotkey_slot_clear(int a1);
+static void tb_ui_hotkey_slot_clear(int slot);
 static void tb_ui_counters_refresh(void);
 static void tb_ui_targeting_reset(void);
 static void tb_ui_spell_apply(int64_t obj, void* a2, int a3);
 static void handle_sector_changed(int64_t sec, int64_t obj);
 static void charedit_error_msg(int type, int param);
-static void tb_ui_character_sheet_open(int64_t a1, int64_t a2);
+static void tb_ui_character_sheet_open(int64_t pc_obj, int64_t target_obj);
 static void tb_ui_inventory_drag_cancel(void);
 static bool tb_ui_multiplayer_confirmation_1902(void);
 static bool tb_ui_multiplayer_confirmation_1903(void);
@@ -73,7 +73,7 @@ bool tb_ui_init(GameInitInfo* init_info)
     callbacks.character_panels_refresh = tb_ui_character_panels_refresh;
     callbacks.object_destroyed_notify = tb_ui_object_destroyed_notify;
     callbacks.update_inven = tb_inven_ui_update;
-    callbacks.field_C = NULL;
+    callbacks.unused_callback = NULL;
     callbacks.refresh_fatigue_bar = refresh_fatigue_bar;
     callbacks.refresh_health_bar = intgame_refresh_health_bar;
     callbacks.selected_object_set = intgame_selected_object_set;
@@ -122,7 +122,7 @@ bool tb_ui_init(GameInitInfo* init_info)
     callbacks.gameuilib_reset = gameuilib_reset;
     callbacks.start_dialog = dialog_ui_start_dialog;
     callbacks.end_dialog = dialog_ui_end_dialog;
-    callbacks.field_F8 = NULL;
+    callbacks.optional_event_callback = NULL;
     callbacks.mainmenu_return = mainmenu_ui_return_to_main;
     callbacks.refresh_cursor = intgame_refresh_cursor;
     callbacks.target_skill_resolve = skill_ui_target_skill_resolve;
@@ -141,13 +141,13 @@ bool tb_ui_init(GameInitInfo* init_info)
     callbacks.inventory_game_mode_select = inven_ui_game_mode_select;
     callbacks.inventory_target_prepare = inven_ui_target_inventory_prepare;
     callbacks.inven_create = inven_ui_create;
-    callbacks.field_150 = NULL;
-    callbacks.field_144 = NULL;
-    callbacks.field_148 = NULL;
-    callbacks.field_14C = NULL;
-    callbacks.field_154 = NULL;
-    callbacks.field_158 = NULL;
-    callbacks.field_15C = NULL;
+    callbacks.reserved_string_pair_callback_150 = NULL;
+    callbacks.reserved_string_callback_144 = NULL;
+    callbacks.reserved_string_callback_148 = NULL;
+    callbacks.reserved_string_pair_callback_14c = NULL;
+    callbacks.reserved_integer_pair_callback_154 = NULL;
+    callbacks.reserved_string_pair_callback_158 = NULL;
+    callbacks.reserved_callback_15c = NULL;
     callbacks.show_inven_npc_identify = show_inven_npc_identify;
     ui_init(&callbacks);
 
@@ -246,15 +246,15 @@ void refresh_fatigue_bar(int64_t obj)
 }
 
 // 0x57CC70
-void tb_ui_dialog_script_and_greeting(int64_t a1, int64_t a2)
+void tb_ui_dialog_script_and_greeting(int64_t pc_obj, int64_t npc_obj)
 {
     int64_t danger_source_obj;
 
-    if (object_script_execute(a1, a2, OBJ_HANDLE_NULL, SAP_DIALOG, 0) == 1) {
-        if (ai_surrendered(a2, &danger_source_obj) && critter_party_same(danger_source_obj, a1)) {
-            ai_flee(a2, a1);
+    if (object_script_execute(pc_obj, npc_obj, OBJ_HANDLE_NULL, SAP_DIALOG, 0) == 1) {
+        if (ai_surrendered(npc_obj, &danger_source_obj) && critter_party_same(danger_source_obj, pc_obj)) {
+            ai_flee(npc_obj, pc_obj);
         } else {
-            dialog_ui_npc_greeting_float(a1, a2);
+            dialog_ui_npc_greeting_float(pc_obj, npc_obj);
         }
     }
 }
@@ -299,9 +299,9 @@ void end_game(void)
 }
 
 // 0x57CDF0
-void tb_ui_hotkey_slot_clear(int a1)
+void tb_ui_hotkey_slot_clear(int slot)
 {
-    hotkey_ui_slot_clear_callback(a1);
+    hotkey_ui_slot_clear_callback(slot);
 }
 
 // 0x57CE00
@@ -318,13 +318,13 @@ void tb_ui_targeting_reset(void)
     intgame_mode_set(INTGAME_MODE_MAIN);
 
     if (object_hover_obj != OBJ_HANDLE_NULL) {
-        dword_5E2E94 = false;
+        object_hover_uses_critter_markers = false;
         object_hover_obj = OBJ_HANDLE_NULL;
 
         object_hover_color = tig_color_make(255, 255, 255);
-        tig_art_interface_id_create(467, dword_5E2E6C, 1, 0, &object_hover_underlay_art_id);
-        tig_art_interface_id_create(468, dword_5E2E68, 1, 0, &object_hover_overlay_art_id);
-        object_reference_init(OBJ_HANDLE_NULL, &stru_5E2F60);
+        tig_art_interface_id_create(467, object_hover_underlay_palette, 1, 0, &object_hover_underlay_art_id);
+        tig_art_interface_id_create(468, object_hover_overlay_palette, 1, 0, &object_hover_overlay_art_id);
+        object_reference_init(OBJ_HANDLE_NULL, &object_hover_reference);
     }
 }
 
@@ -395,10 +395,10 @@ void charedit_error_msg(int type, int param)
 }
 
 // 0x57CF70
-void tb_ui_character_sheet_open(int64_t a1, int64_t a2)
+void tb_ui_character_sheet_open(int64_t pc_obj, int64_t target_obj)
 {
-    if (player_is_local_pc_obj(a1)) {
-        charedit_open(a2, CHAREDIT_MODE_PASSIVE);
+    if (player_is_local_pc_obj(pc_obj)) {
+        charedit_open(target_obj, CHAREDIT_MODE_PASSIVE);
     }
 }
 

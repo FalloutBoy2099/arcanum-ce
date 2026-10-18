@@ -104,7 +104,7 @@ static bool map_patch_next_token(char** str, char* token);
 static void map_apply_obj_patch(int64_t obj, char* str);
 
 // 0x59F058
-static const char* off_59F058[MAP_TYPE_COUNT] = {
+static const char* map_type_names[MAP_TYPE_COUNT] = {
     /*         MAP_TYPE_NONE */ "NONE",
     /*    MAP_TYPE_START_MAP */ "START_MAP",
     /* MAP_TYPE_SHOPPING_MAP */ "SHOPPING_MAP",
@@ -132,13 +132,13 @@ static MapModule map_modules[MAP_MODULE_COUNT] = {
 };
 
 // 0x59F3DC
-static char off_59F3DC[] = "*** Deleted Map ***";
+static char map_deleted_entry_name[] = "*** Deleted Map ***";
 
 // 0x5D11E0
 static int64_t map_starting_loc;
 
 // 0x5D11E8
-static bool dword_5D11E8;
+static bool map_closed;
 
 // 0x5D11EC
 static bool dword_5D11EC;
@@ -147,10 +147,10 @@ static bool dword_5D11EC;
 static bool map_gender_check_enabled;
 
 // 0x5D11D8
-static int dword_5D11D8;
+static int map_list_mes_file;
 
 // 0x5D11F0
-static bool dword_5D11F0;
+static bool map_initialized;
 
 // 0x5D11F4
 static char* map_save_path;
@@ -174,18 +174,18 @@ static bool map_in_map_clear_objects;
 static int map_list_info_count;
 
 // 0x5D1210
-static int dword_5D1210;
+static int map_current_id;
 
 // 0x5D1214
-static int dword_5D1214[MAP_TYPE_COUNT];
+static int map_special_ids_by_type[MAP_TYPE_COUNT];
 
 // 0x5D1220
-static int dword_5D1220;
+static int map_jumppoint_recursion_depth;
 
 // 0x40EA90
 bool map_init(GameInitInfo* init_info)
 {
-    if (dword_5D11F0) {
+    if (map_initialized) {
         return true;
     }
 
@@ -216,7 +216,7 @@ bool map_init(GameInitInfo* init_info)
     }
 
     map_gender_check_enabled = 0;
-    dword_5D11F0 = true;
+    map_initialized = true;
     map_editor = init_info->editor;
     dword_5D11EC = false;
 
@@ -229,7 +229,7 @@ void map_reset(void)
     tig_timestamp_t reset_start;
     tig_timestamp_t start;
 
-    if (dword_5D11F0) {
+    if (map_initialized) {
         tig_debug_printf("\nmap_reset: Resetting...\n");
         tig_timer_now(&reset_start);
 
@@ -246,7 +246,7 @@ void map_reset(void)
         tig_debug_printf("map_reset: closing map...");
         tig_timer_now(&start);
         map_close();
-        dword_5D1210 = 0;
+        map_current_id = 0;
         tig_debug_printf("done. Time (ms): %d\n", tig_timer_elapsed(start));
 
         for (int index = 0; index < MAP_MODULE_COUNT; index++) {
@@ -317,7 +317,7 @@ void map_mod_unload(void)
 // 0x40EDC0
 void map_exit(void)
 {
-    if (dword_5D11F0) {
+    if (map_initialized) {
         map_close();
     }
 
@@ -331,7 +331,7 @@ void map_exit(void)
     FREE(map_save_path);
     FREE(map_list_info);
 
-    dword_5D11F0 = false;
+    map_initialized = false;
 }
 
 // 0x40EE20
@@ -355,7 +355,7 @@ bool map_save(TigFile* stream)
     tig_debug_printf("\nmap_save()\n");
     tig_timer_now(&save_start);
 
-    if (!dword_5D11F0) {
+    if (!map_initialized) {
         return false;
     }
 
@@ -433,7 +433,7 @@ bool map_load(GameLoadInfo* load_info)
     tig_debug_printf("\nmap_load\n");
     tig_timer_now(&load_start);
 
-    if (!dword_5D11F0) {
+    if (!map_initialized) {
         return false;
     }
 
@@ -510,7 +510,7 @@ bool map_load(GameLoadInfo* load_info)
 // 0x40F320
 void map_update_view(ViewOptions* view_options)
 {
-    if (dword_5D11F0) {
+    if (map_initialized) {
         for (int index = MAP_MODULE_COUNT - 1; index >= 0; index--) {
             if (map_modules[index].update_view_func != NULL) {
                 map_modules[index].update_view_func(view_options);
@@ -527,7 +527,7 @@ bool map_new(MapNewInfo* new_map_info)
     TigFile* stream;
     MapProperties map_properties;
 
-    if (!dword_5D11F0) {
+    if (!map_initialized) {
         return false;
     }
 
@@ -589,7 +589,7 @@ bool map_open(const char* base_path, const char* save_path, bool a3)
     int map;
     MapNewInfo new_map_info;
 
-    if (!dword_5D11F0) {
+    if (!map_initialized) {
         return false;
     }
 
@@ -748,11 +748,11 @@ bool map_open(const char* base_path, const char* save_path, bool a3)
     sector_limits_set(map_properties.width >> 6, map_properties.height >> 6);
     sector_map_name_set(base_path, save_path);
     location_origin_set(location_center_get());
-    dword_5D1210 = 0;
+    map_current_id = 0;
     pch = strrchr(base_path, '\\');
     map = map_list_info_find(pch != NULL ? pch + 1 : base_path);
     if (map != -1) {
-        dword_5D1210 = map + 1;
+        map_current_id = map + 1;
     }
     duration = tig_timer_elapsed(timestamp);
     tig_debug_printf("done.  Time (ms): %d\n", duration);
@@ -773,7 +773,7 @@ bool map_open(const char* base_path, const char* save_path, bool a3)
     tig_timer_now(&timestamp);
     map_gender_check();
     dword_5D11EC = false;
-    if (dword_5D1210 != 0 && dword_5D1214[MAP_TYPE_START_MAP] == dword_5D1210) {
+    if (map_current_id != 0 && map_special_ids_by_type[MAP_TYPE_START_MAP] == map_current_id) {
         dword_5D11EC = true;
     }
     duration = tig_timer_elapsed(timestamp);
@@ -782,7 +782,7 @@ bool map_open(const char* base_path, const char* save_path, bool a3)
     duration = tig_timer_elapsed(start_timestamp);
     tig_debug_printf("map_open(): Done.  Total time: %d ms.\n", duration);
 
-    dword_5D11E8 = false;
+    map_closed = false;
     map_valid = true;
 
     return true;
@@ -795,7 +795,7 @@ bool map_open_in_game(int map, bool a2, bool a3)
     char base_path[TIG_MAX_PATH];
     char save_path[TIG_MAX_PATH];
 
-    if (!dword_5D11F0) {
+    if (!map_initialized) {
         return false;
     }
 
@@ -891,14 +891,14 @@ bool map_get_name(int map, char** name)
 // 0x40FF40
 int map_current_map(void)
 {
-    return dword_5D1210;
+    return map_current_id;
 }
 
 // 0x40FF50
 int map_by_type(int map_type)
 {
     if (map_type >= 0 && map_type < MAP_TYPE_COUNT) {
-        return dword_5D1214[map_type];
+        return map_special_ids_by_type[map_type];
     } else {
         return 0;
     }
@@ -1004,9 +1004,9 @@ void map_process_jumppoint(int64_t loc, int64_t obj)
     JumpPoint jumppoint;
     TeleportData teleport_data;
 
-    if (dword_5D1220 < 9) {
+    if (map_jumppoint_recursion_depth < 9) {
         if (jumppoint_get(loc, &jumppoint)) {
-            dword_5D1220++;
+            map_jumppoint_recursion_depth++;
 
             teleport_data.flags = 0;
             teleport_data.obj = obj;
@@ -1014,7 +1014,7 @@ void map_process_jumppoint(int64_t loc, int64_t obj)
             teleport_data.map = jumppoint.dst_map;
             teleport_do(&teleport_data);
 
-            dword_5D1220--;
+            map_jumppoint_recursion_depth--;
         }
     }
 }
@@ -1145,8 +1145,8 @@ void map_close(void)
 {
     int index;
 
-    if (!dword_5D11E8) {
-        dword_5D11E8 = true;
+    if (!map_closed) {
+        map_closed = true;
 
         wallcheck_flush();
         gsound_flush();
@@ -2005,14 +2005,14 @@ bool map_list_info_load(void)
 {
     MesFileEntry mes_file_entry;
 
-    if (!mes_load("Rules\\MapList.mes", &dword_5D11D8)) {
+    if (!mes_load("Rules\\MapList.mes", &map_list_mes_file)) {
         return false;
     }
 
     tig_str_parse_set_separator(',');
 
     mes_file_entry.num = 5000;
-    while (mes_search(dword_5D11D8, &mes_file_entry)) {
+    while (mes_search(map_list_mes_file, &mes_file_entry)) {
         char* str = mes_file_entry.str;
         tig_str_parse_str_value(&str, map_list_info[map_list_info_count].name, sizeof(map_list_info[map_list_info_count].name));
 
@@ -2020,7 +2020,7 @@ bool map_list_info_load(void)
         // overrun `MAP_NAME_LENGTH` and crash before this check
         if (strlen(map_list_info[map_list_info_count].name) >= MAP_NAME_LENGTH) {
             tig_debug_println("ERROR: Map name is too long");
-            mes_unload(dword_5D11D8);
+            mes_unload(map_list_mes_file);
             return false;
         }
 
@@ -2029,8 +2029,8 @@ bool map_list_info_load(void)
 
         if (str != NULL) {
             int type;
-            if (tig_str_match_named_str_to_list(&str, "Type:", off_59F058, MAP_TYPE_COUNT, &type)) {
-                dword_5D1214[type] = map_list_info_count + 1;
+            if (tig_str_match_named_str_to_list(&str, "Type:", map_type_names, MAP_TYPE_COUNT, &type)) {
+                map_special_ids_by_type[type] = map_list_info_count + 1;
             }
         }
 
@@ -2057,7 +2057,7 @@ bool map_list_info_load(void)
         mes_file_entry.num++;
     }
 
-    mes_unload(dword_5D11D8);
+    mes_unload(map_list_mes_file);
     return true;
 }
 
@@ -2083,10 +2083,10 @@ bool map_list_info_set(int index, const char* name, int64_t x, int64_t y, bool i
     map_list_info[index].area = area;
 
     if (is_start_map) {
-        dword_5D1214[MAP_TYPE_START_MAP] = index + 1;
+        map_special_ids_by_type[MAP_TYPE_START_MAP] = index + 1;
     } else {
-        if (dword_5D1214[MAP_TYPE_START_MAP] == index + 1) {
-            dword_5D1214[MAP_TYPE_START_MAP] = 0;
+        if (map_special_ids_by_type[MAP_TYPE_START_MAP] == index + 1) {
+            map_special_ids_by_type[MAP_TYPE_START_MAP] = 0;
         }
     }
 
@@ -2103,7 +2103,7 @@ bool map_list_info_add(const char* name, int64_t x, int64_t y, bool is_start_map
         return map_list_info_set(index, name, x, y, is_start_map, map_list_info[index].worldmap, map_list_info[index].area);
     }
 
-    index = map_list_info_find(off_59F3DC);
+    index = map_list_info_find(map_deleted_entry_name);
     if (index != -1) {
         return map_list_info_set(index, name, x, y, is_start_map, -1, 0);
     }

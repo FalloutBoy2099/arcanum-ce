@@ -168,7 +168,7 @@ void slide_ui_prepare(int type)
     Script scr;
     ScriptInvocation invocation;
 
-    scr.num = dword_5A5700[type];
+    scr.num = script_slide_sequence_ids[type];
 
     invocation.script = &scr;
     invocation.attachment_point = SAP_USE;

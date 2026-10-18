@@ -21,14 +21,14 @@ typedef enum ApColor {
 #define THREE 3
 #define TWENTY 20
 
-static void combat_ui_mode_change_notify(int a1);
+static void combat_ui_mode_change_notify(int mode);
 static void combat_ui_recreate(void);
 static void combat_ui_create(void);
 static void combat_ui_destroy_callback(void);
 static void combat_ui_destroy(void);
 static void combat_ui_draw_compact_ap_bar(int available_ap);
 static void combat_ui_draw_ap_bar_segment(tig_window_handle_t window_handle, TigRect* rect, tig_color_t color);
-static void combat_ui_action_points_bar_draw(int a1);
+static void combat_ui_action_points_bar_draw(int action_points);
 static void combat_ui_draw_compact_npc_turn_indicator(void);
 static void combat_ui_object_callback_stub(int64_t obj);
 static bool combat_ui_message_filter(TigMessage* msg);
@@ -43,7 +43,7 @@ static tig_art_id_t combat_ui_ap_bar_loading_indicator_art_id = TIG_ART_ID_INVAL
 static UiButtonInfo combat_ui_end_turn_button_info = { 320, 9, 297, TIG_BUTTON_HANDLE_INVALID };
 
 // 0x5CAA48
-static int dword_5CAA48[TWENTY] = {
+static int combat_ui_action_point_knob_x_positions[TWENTY] = {
     22,
     35,
     48,
@@ -83,7 +83,7 @@ static int combat_ui_ap_icon_nums[AP_COLOR_COUNT] = {
 static tig_art_id_t combat_ui_ap_icon_art_ids[AP_COLOR_COUNT];
 
 // 0x680EB4
-static int dword_680EB4;
+static int combat_ui_animated_knob_index;
 
 // 0x680EB8
 static bool combat_ui_initialized;
@@ -192,10 +192,10 @@ void combat_ui_resize(GameResizeInfo* resize_info)
 }
 
 // 0x56ECE0
-void combat_ui_mode_change_notify(int a1)
+void combat_ui_mode_change_notify(int mode)
 {
     intgame_refresh_cursor();
-    if (a1) {
+    if (mode) {
         wmap_ui_close();
     }
 }
@@ -262,7 +262,7 @@ void combat_ui_create(void)
     }
 
     combat_ui_created = true;
-    dword_680EB4 = 0;
+    combat_ui_animated_knob_index = 0;
 
     combat_ui_refresh();
     combat_ui_action_points_bar_draw(0);
@@ -515,7 +515,7 @@ void combat_ui_action_points_bar_draw(int a1)
 
         art_blit_info.art_id = combat_ui_ap_icon_art_ids[AP_COLOR_GREEN];
         while (green > 0) {
-            dst_rect.x = dword_5CAA48[knob];
+            dst_rect.x = combat_ui_action_point_knob_x_positions[knob];
             tig_window_blit_art(combat_ui_ap_bar_window_handle, &art_blit_info);
             green--;
             knob++;
@@ -523,7 +523,7 @@ void combat_ui_action_points_bar_draw(int a1)
 
         art_blit_info.art_id = combat_ui_ap_icon_art_ids[AP_COLOR_ORANGE];
         while (orange > 0) {
-            dst_rect.x = dword_5CAA48[knob];
+            dst_rect.x = combat_ui_action_point_knob_x_positions[knob];
             tig_window_blit_art(combat_ui_ap_bar_window_handle, &art_blit_info);
             orange--;
             knob++;
@@ -531,7 +531,7 @@ void combat_ui_action_points_bar_draw(int a1)
 
         art_blit_info.art_id = combat_ui_ap_icon_art_ids[AP_COLOR_RED];
         while (red > 0) {
-            dst_rect.x = dword_5CAA48[knob];
+            dst_rect.x = combat_ui_action_point_knob_x_positions[knob];
             tig_window_blit_art(combat_ui_ap_bar_window_handle, &art_blit_info);
             red--;
             knob++;
@@ -559,8 +559,8 @@ void combat_ui_refresh(void)
 
     obj = combat_turn_based_whos_turn_get();
     if (!player_is_local_pc_obj(obj)) {
-        if (dword_680EB4 >= TWENTY) {
-            dword_680EB4 = 0;
+        if (combat_ui_animated_knob_index >= TWENTY) {
+            combat_ui_animated_knob_index = 0;
         }
 
         if (tig_art_interface_id_create(294, 0, 0, 0, &art_id) == TIG_OK
@@ -584,7 +584,7 @@ void combat_ui_refresh(void)
             src_rect.width = art_frame_data.width;
             src_rect.height = art_frame_data.height;
 
-            dst_rect.x = dword_5CAA48[dword_680EB4];
+            dst_rect.x = combat_ui_action_point_knob_x_positions[combat_ui_animated_knob_index];
             dst_rect.y = 10;
             dst_rect.width = art_frame_data.width;
             dst_rect.height = art_frame_data.height;
@@ -595,14 +595,14 @@ void combat_ui_refresh(void)
             blit_info.dst_rect = &dst_rect;
             tig_window_blit_art(combat_ui_ap_bar_window_handle, &blit_info);
 
-            dst_rect.x = dword_5CAA48[dword_680EB4 - 7 < 0 ? dword_680EB4 + TWENTY - 7 : dword_680EB4 - 7];
+            dst_rect.x = combat_ui_action_point_knob_x_positions[combat_ui_animated_knob_index - 7 < 0 ? combat_ui_animated_knob_index + TWENTY - 7 : combat_ui_animated_knob_index - 7];
             tig_window_blit_art(combat_ui_ap_bar_window_handle, &blit_info);
 
-            dst_rect.x = dword_5CAA48[dword_680EB4 + 7 >= TWENTY ? dword_680EB4 - TWENTY + 7 : dword_680EB4 + 7];
+            dst_rect.x = combat_ui_action_point_knob_x_positions[combat_ui_animated_knob_index + 7 >= TWENTY ? combat_ui_animated_knob_index - TWENTY + 7 : combat_ui_animated_knob_index + 7];
             tig_window_blit_art(combat_ui_ap_bar_window_handle, &blit_info);
         }
 
-        dword_680EB4++;
+        combat_ui_animated_knob_index++;
     }
 
     if (combat_ui_created) {
@@ -631,7 +631,7 @@ void combat_ui_draw_compact_npc_turn_indicator(void)
     rect.height = combat_ui_compact_ap_bar_frame.height - 4;
     tig_window_fill(combat_ui_compact_ap_bar_window_handle, &rect, tig_color_make(0, 0, 0));
 
-    rect.x = 120 * dword_680EB4 / 25;
+    rect.x = 120 * combat_ui_animated_knob_index / 25;
     rect.width = 4;
     rect.height += 4;
     combat_ui_draw_ap_bar_segment(combat_ui_compact_ap_bar_window_handle, &rect, tig_color_make(0, 255, 0));

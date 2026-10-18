@@ -140,7 +140,7 @@ static tig_color_t light_outdoor_color;
 static uint32_t* lighter_colors;
 
 // 0x602EB8
-static bool dword_602EB8;
+static bool light_drawing_enabled;
 
 // 0x602EBC
 static int darker_pitch;
@@ -199,7 +199,7 @@ bool light_init(GameInitInfo* init_info)
     light_editor = init_info->editor;
     light_view_options.type = VIEW_TYPE_ISOMETRIC;
     light_enabled = true;
-    dword_602EB8 = true;
+    light_drawing_enabled = true;
 
     if (tig_window_data(init_info->iso_window_handle, &window_data) != TIG_OK) {
         FREE(light_shadow_palettes);
@@ -335,7 +335,7 @@ void light_draw(GameDrawInfo* draw_info)
     int64_t cx;
     int64_t cy;
 
-    if (!dword_602EB8) {
+    if (!light_drawing_enabled) {
         return;
     }
 

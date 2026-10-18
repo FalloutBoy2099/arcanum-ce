@@ -19,7 +19,7 @@ static void roof_fill(int64_t loc, bool fill, int a3);
 static unsigned int roof_blit_flags = TIG_ART_BLT_BLEND_ALPHA_CONST;
 
 // 0x5A53A4
-static char byte_5A53A4[TIG_ART_ROOF_PIECE_COUNT][4][4] = {
+static char roof_piece_tile_coverage[TIG_ART_ROOF_PIECE_COUNT][4][4] = {
     /* TIG_ART_ROOF_PIECE_NORTH_WEST_OUTSIDE */
     {
         { 0, 0, 0, 0 },
@@ -693,7 +693,7 @@ bool roof_is_covered_loc(int64_t loc, bool check_faded)
     piece = tig_art_roof_id_piece_get(aid);
     row = (location_get_y(loc) + 3) % 4;
     col = (location_get_x(loc) + 3) % 4;
-    if (!byte_5A53A4[piece][row][col]) {
+    if (!roof_piece_tile_coverage[piece][row][col]) {
         return false;
     }
 

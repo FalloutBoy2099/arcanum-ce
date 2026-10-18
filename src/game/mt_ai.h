@@ -31,10 +31,10 @@ typedef struct MagicTechAi {
     /* 0000 */ int64_t obj;
     /* 0008 */ int64_t leader_obj;
     /* 0010 */ int action;
-    /* 0018 */ int64_t field_18;
-    /* 0020 */ int field_20;
+    /* 0018 */ int64_t target_obj;
+    /* 0020 */ int preferred_spell;
     /* 0024 */ int field_24;
-    /* 0028 */ int field_28;
+    /* 0028 */ int cached_preferred_spell;
     /* 002C */ int field_2C;
     /* 0030 */ MagicTechAiActionList actions[MAGICTECH_AI_ACTION_COUNT];
 } MagicTechAi;

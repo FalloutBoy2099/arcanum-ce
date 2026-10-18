@@ -624,7 +624,7 @@ void sector_object_node_insert_sorted(SectorObjectList* list, ObjectNode* new_no
 }
 
 // 0x4F2230
-void sector_object_sort_offsets_get(int64_t obj, int* a2, int* a3)
+void sector_object_sort_offsets_get(int64_t obj, int* sort_x_ptr, int* sort_y_ptr)
 {
     int obj_type;
     int offset_x;
@@ -645,7 +645,7 @@ void sector_object_sort_offsets_get(int64_t obj, int* a2, int* a3)
         offset_y = obj_field_int32_get(obj, OBJ_F_OFFSET_Y);
     }
 
-    location_offsets_to_sort_axes(offset_x, offset_y, a2, a3);
+    location_offsets_to_sort_axes(offset_x, offset_y, sort_x_ptr, sort_y_ptr);
 }
 
 // 0x4F22B0

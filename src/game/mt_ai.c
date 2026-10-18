@@ -35,10 +35,10 @@ static void mt_ai_candidate_item_add(int64_t item_obj);
 static void flush_actions(MagicTechAi* magictech_ai, int action);
 
 // 0x5B7558
-static int dword_5B7558 = -1;
+static int mt_ai_current_action = -1;
 
 // 0x5B755C
-static const char* off_5B755C[MAGICTECH_AI_ACTION_COUNT] = {
+static const char* mt_ai_action_names[MAGICTECH_AI_ACTION_COUNT] = {
     /*            MAGICTECH_AI_ACTION_FLEE */ "AIFlee",
     /*          MAGICTECH_AI_ACTION_SUMMON */ "AISummon",
     /*       MAGICTECH_AI_ACTION_DEFENSIVE */ "AIDefensive",
@@ -163,17 +163,17 @@ int mt_ai_action_score_compare_descending(const void* va, const void* vb)
 // 0x4CC310
 int mt_ai_current_action_spell_score(int spl)
 {
-    return dword_5B7558 >= 0 && dword_5B7558 < MAGICTECH_AI_ACTION_COUNT && mt_ai_initialized
-        ? magictech_spells[spl].ai.values[dword_5B7558]
+    return mt_ai_current_action >= 0 && mt_ai_current_action < MAGICTECH_AI_ACTION_COUNT && mt_ai_initialized
+        ? magictech_spells[spl].ai.values[mt_ai_current_action]
         : -1;
 }
 
 // 0x4CC350
 bool mt_ai_action_list_load(int action, MagicTechAiActionList* list)
 {
-    dword_5B7558 = action;
+    mt_ai_current_action = action;
     if (action >= 0 && action < MAGICTECH_AI_ACTION_COUNT) {
-        return mt_ai_current_action_candidates_build(list, off_5B755C[action]);
+        return mt_ai_current_action_candidates_build(list, mt_ai_action_names[action]);
     } else {
         return false;
     }
@@ -230,9 +230,9 @@ void mt_ai_cache_slots_reset(void)
     for (slot = 0; slot < MAX_MT_AI; slot++) {
         magictech_ai = &(mt_ai_cache[slot]);
         magictech_ai->obj = OBJ_HANDLE_NULL;
-        magictech_ai->field_28 = 0;
+        magictech_ai->cached_preferred_spell = 0;
         magictech_ai->leader_obj = OBJ_HANDLE_NULL;
-        magictech_ai->field_18 = OBJ_HANDLE_NULL;
+        magictech_ai->target_obj = OBJ_HANDLE_NULL;
         magictech_ai->field_2C = 0;
 
         for (action = 0; action < MAGICTECH_AI_ACTION_COUNT; action++) {
@@ -263,9 +263,9 @@ void mt_ai_create_internal(MagicTechAi* magictech_ai, int64_t obj, int action)
 {
     magictech_ai->obj = obj;
     magictech_ai->action = action;
-    magictech_ai->field_18 = OBJ_HANDLE_NULL;
-    magictech_ai->field_28 = 0;
-    magictech_ai->field_20 = -1;
+    magictech_ai->target_obj = OBJ_HANDLE_NULL;
+    magictech_ai->cached_preferred_spell = 0;
+    magictech_ai->preferred_spell = -1;
     magictech_ai->field_2C = 0;
 }
 
@@ -278,8 +278,8 @@ void mt_ai_cache_slot_free(int slot)
     magictech_ai = &(mt_ai_cache[slot]);
     magictech_ai->obj = OBJ_HANDLE_NULL;
     magictech_ai->leader_obj = OBJ_HANDLE_NULL;
-    magictech_ai->field_28 = 0;
-    magictech_ai->field_18 = OBJ_HANDLE_NULL;
+    magictech_ai->cached_preferred_spell = 0;
+    magictech_ai->target_obj = OBJ_HANDLE_NULL;
     magictech_ai->field_2C = 0;
 
     for (action = 0; action < MAGICTECH_AI_ACTION_COUNT; action++) {
@@ -317,10 +317,10 @@ void mt_ai_populate(MagicTechAi* magictech_ai)
     }
 
     tmp->leader_obj = critter_pc_leader_get(magictech_ai->obj);
-    tmp->field_18 = magictech_ai->field_18;
+    tmp->target_obj = magictech_ai->target_obj;
 
     mt_ai_entries_cnt = 0;
-    dword_5B7558 = tmp->action;
+    mt_ai_current_action = tmp->action;
 
     if (combat_critter_is_combat_mode_active(tmp->obj)
         && ai_critter_fatigue_ratio(tmp->obj) <= 50) {
@@ -336,9 +336,9 @@ void mt_ai_populate(MagicTechAi* magictech_ai)
     }
 
     if (mt_ai_entries_cnt > 0) {
-        flush_actions(tmp, dword_5B7558);
-        tmp->field_20 = mt_ai_tmp_entries[0].spell;
-        tmp->field_28 = mt_ai_tmp_entries[0].spell;
+        flush_actions(tmp, mt_ai_current_action);
+        tmp->preferred_spell = mt_ai_tmp_entries[0].spell;
+        tmp->cached_preferred_spell = mt_ai_tmp_entries[0].spell;
     }
 
     copy_actions(tmp, magictech_ai);
@@ -461,8 +461,8 @@ void mt_ai_item_actions_collect(MagicTechAi* magictech_ai, int64_t item_obj)
         for (index = 0; index < 5; index++) {
             spell = obj_field_int32_get(item_obj, 100 + index);
             if (spell != 10000
-                && magictech_spells[spell].ai.values[dword_5B7558] != -1
-                && magictech_item_effective_power_check(magictech_ai->obj, magictech_ai->field_18, item_obj)) {
+                && magictech_spells[spell].ai.values[mt_ai_current_action] != -1
+                && magictech_item_effective_power_check(magictech_ai->obj, magictech_ai->target_obj, item_obj)) {
                 mt_ai_candidate_item_spell_add(spell, item_obj);
             }
         }

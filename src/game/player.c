@@ -16,7 +16,7 @@
 static ObjectID player_pc_oid;
 
 // 0x5D1150
-static int64_t qword_5D1150;
+static int64_t player_default_prototype_obj;
 
 // 0x5D1158
 static int64_t player_pc_obj;
@@ -44,7 +44,7 @@ void player_reset(void)
         player_pc_oid.type = OID_TYPE_NULL;
     }
 
-    qword_5D1150 = OBJ_HANDLE_NULL;
+    player_default_prototype_obj = OBJ_HANDLE_NULL;
 }
 
 // 0x40D720
@@ -54,7 +54,7 @@ void player_exit(void)
         player_pc_obj = OBJ_HANDLE_NULL;
     }
 
-    qword_5D1150 = OBJ_HANDLE_NULL;
+    player_default_prototype_obj = OBJ_HANDLE_NULL;
 }
 
 // 0x40D760
@@ -124,7 +124,7 @@ void player_create(void)
     int64_t y;
     int64_t loc;
 
-    qword_5D1150 = proto_default_for_type_get(OBJ_TYPE_PC);
+    player_default_prototype_obj = proto_default_for_type_get(OBJ_TYPE_PC);
 
     map = map_current_map();
     if (map == 0
@@ -139,7 +139,7 @@ void player_create(void)
     tig_debug_printf("player_create: loc: X: %d, Y: %d\n",
         (int)LOCATION_GET_X(loc),
         (int)LOCATION_GET_Y(loc));
-    if (!object_create(qword_5D1150, loc, &player_pc_obj)) {
+    if (!object_create(player_default_prototype_obj, loc, &player_pc_obj)) {
         tig_debug_printf("player_create: Error: failed to create player!\n");
         exit(EXIT_FAILURE);
     }

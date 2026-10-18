@@ -71,7 +71,7 @@ typedef enum WmapUiState {
      * NOTE: Not implemented in the original code. Looks like the idea was to
      * allow moving/updating individual waypoints on the path.
      */
-    WMAP_UI_STATE_1,
+    WMAP_UI_STATE_WAYPOINT_DRAG,
 
     /**
      * Moving along the route.
@@ -114,8 +114,8 @@ typedef struct WmapNote {
     /* 0000 */ int id;
     /* 0004 */ unsigned int flags;
     /* 0008 */ WmapCoords coords;
-    /* 0010 */ int64_t field_10;
-    /* 0018 */ TigRect field_18;
+    /* 0010 */ int64_t location;
+    /* 0018 */ TigRect bounds;
     /* 0028 */ WmapNoteType type;
     /* 002C */ char str[250];
     /* 0128 */ TigVideoBuffer* video_buffer;
@@ -132,24 +132,24 @@ typedef struct WmapTile {
 typedef struct WmapInfo {
     /* 0000 */ unsigned int flags;
     /* 0004 */ TigRect rect;
-    /* 0014 */ TigRect field_14;
-    /* 0024 */ int field_24;
-    /* 0028 */ int field_28;
-    /* 002C */ int field_2C;
-    /* 0030 */ int field_30;
-    /* 0034 */ int field_34;
-    /* 0038 */ int field_38;
-    /* 003C */ WmapCoords field_3C;
+    /* 0014 */ TigRect interactive_rect;
+    /* 0024 */ int viewport_half_width;
+    /* 0028 */ int viewport_half_height;
+    /* 002C */ int center_x_max;
+    /* 0030 */ int center_y_max;
+    /* 0034 */ int scroll_x;
+    /* 0038 */ int scroll_y;
+    /* 003C */ WmapCoords player_coordinates;
     /* 0044 */ bool navigatable;
     /* 0048 */ void (*refresh)(void);
     /* 004C */ void (*refresh_rect)(TigRect* rect);
     /* 0050 */ void (*field_50)(int direction, int, int, int);
-    /* 0054 */ int field_54;
+    /* 0054 */ int compass_art_number;
     /* 0058 */ int map_width;
     /* 005C */ int map_height;
-    /* 0060 */ int field_60;
-    /* 0064 */ int field_64;
-    /* 0068 */ char field_68[TIG_MAX_PATH];
+    /* 0060 */ int scroll_x_max;
+    /* 0064 */ int scroll_y_max;
+    /* 0068 */ char tile_directory[TIG_MAX_PATH];
     /* 016C */ int tile_width;
     /* 0170 */ int tile_height;
     /* 0174 */ int num_tiles;
@@ -160,14 +160,14 @@ typedef struct WmapInfo {
     /* 0188 */ WmapNote* notes;
     /* 018C */ int field_18C;
     /* 0190 */ int* num_notes;
-    /* 0194 */ int field_194;
-    /* 0198 */ int field_198;
+    /* 0194 */ int next_note_id;
+    /* 0198 */ int hovered_note_id;
     /* 019C */ int field_19C;
     /* 01A0 */ int field_1A0;
     /* 01A4 */ char str[260];
-    /* 02A8 */ TigRect field_2A8;
+    /* 02A8 */ TigRect overview_image_rect;
     /* 02B8 */ TigVideoBuffer* video_buffer;
-    /* 02BC */ void (*field_2BC)(int x, int y, WmapCoords* coords);
+    /* 02BC */ void (*screen_to_map_coordinates)(int x, int y, WmapCoords* coords);
 } WmapInfo;
 
 typedef struct WmapRouteWaypoint {
@@ -183,7 +183,7 @@ typedef struct WmapRoute {
     /* 0000 */ WmapRouteWaypoint waypoints[MOVEMENT_ROUTE_CAPACITY];
     /* 03C0 */ int length;
     /* 03C4 */ int field_3C4;
-    /* 03C8 */ int field_3C8;
+    /* 03C8 */ int waypoint_edit_enabled;
     /* 03CC */ int field_3CC;
 } WmapRoute;
 
@@ -228,7 +228,7 @@ static void wmap_ui_navigate(int x, int y);
 static void wmap_ui_scroll_at_edges(int x, int y);
 static void wmap_ui_mode_set(WmapUiMode mode);
 static bool wmap_load_townmap_info(void);
-static void wmap_ui_tile_render_state_init(WmapTile* a1);
+static void wmap_ui_tile_render_state_init(WmapTile* tile);
 static bool wmap_ui_tile_art_lock(int tile);
 static void wmap_ui_tile_art_unlock(int tile);
 static void wmap_ui_tile_art_unload(int tile);
@@ -252,7 +252,7 @@ static void wmap_ui_note_changed_hook_stub(int a1, int a2);
 static WmapNote* wmap_ui_note_find_by_id(int id);
 static bool find_note_by_coords(WmapCoords* coords, int* id_ptr);
 static bool find_note_by_coords_mode(WmapCoords* coords, int* id_ptr, WmapUiMode mode);
-static bool wmap_ui_coords_snap_to_player(WmapCoords* coords, int64_t* a2);
+static bool wmap_ui_coords_snap_to_player(WmapCoords* coords, int64_t* location_ptr);
 static void wmap_ui_new_note_edit_begin(WmapCoords* coords);
 static void wmap_ui_note_edit_begin(WmapNote* note);
 static void wmap_ui_note_edit_end(bool a1);
@@ -268,8 +268,8 @@ static bool wmap_ui_note_has_nonspace_text(const char* str);
 static bool wmap_ui_route_destination_add(WmapCoords* coords);
 static bool wmap_ui_route_waypoint_hit_test(WmapCoords* coords, int* idx_ptr);
 static void wmap_ui_waypoint_drag_hook_stub(int a1, WmapCoords* coords);
-static void wmap_ui_route_waypoint_remove(int a1);
-static void wmap_ui_waypoint_travel_value_set(int a1, int a2, bool a3);
+static void wmap_ui_route_waypoint_remove(int waypoint_index);
+static void wmap_ui_waypoint_travel_value_set(int waypoint_index, int travel_value, bool refresh);
 static void wmap_ui_selected_waypoint_snap(void);
 static void wmap_ui_waypoint_snap_to_known_area(WmapRouteWaypoint* wp);
 static void wmap_ui_travel_time_refresh(void);
@@ -277,7 +277,7 @@ static void wmap_ui_selected_waypoint_value_hook_stub(int a1);
 static bool wmap_ui_travel_arrival_apply(int64_t loc);
 static void wmap_ui_nearby_area_discover(int64_t pc_obj, int64_t loc);
 static void wmap_ui_destination_to_nearest_area(WmapCoords* coords, int64_t* loc_ptr);
-static int64_t wmap_ui_direct_travel_hours_estimate(WmapCoords* a1, WmapCoords* a2, DateTime* datetime);
+static int64_t wmap_ui_direct_travel_hours_estimate(WmapCoords* from_coords, WmapCoords* to_coords, DateTime* datetime);
 static void wmap_ui_town_notes_load(void);
 static void wmap_ui_town_notes_clear(void);
 static int wmap_ui_compass_arrow_frame_calc(WmapCoords* a, WmapCoords* b);
@@ -293,7 +293,7 @@ static void wmap_ui_note_blit(WmapNote* note, TigRect* a2, TigRect* a3);
 static void wmap_note_vbid_lock(WmapNote* note);
 static void wmap_ui_tile_buffer_draw(TigVideoBuffer* video_buffer, TigRect* rect);
 static void wmap_town_refresh_rect(TigRect* rect);
-static void wmap_ui_route_draw(WmapInfo* a1, TigRect* a2, TigRect* a3);
+static void wmap_ui_route_draw(WmapInfo* map_info, TigRect* a2, TigRect* a3);
 static void wmap_ui_note_icon_draw(int type, WmapCoords* coords, TigRect* a3, TigRect* a4, WmapInfo* wmap_info, bool completed);
 static bool wmap_marker_input(TigMessage* msg);
 static void wmap_marker_close(void);
@@ -311,10 +311,10 @@ static int wmap_ui_spell = -1;
 static TigRect wmap_ui_canvas_frame = { 150, 52, 501, 365 };
 
 // 0x5C9A78
-static TigRect stru_5C9A78 = { 662, 248, 130, 130 };
+static TigRect wmap_ui_compass_rect = { 662, 248, 130, 130 };
 
 // 0x5C9A88
-static TigRect stru_5C9A88 = { 391, 403, 10, 12 };
+static TigRect wmap_ui_navigation_dead_zone = { 391, 403, 10, 12 };
 
 // 0x5C9A98
 static TigRect wmap_ui_lat_long_frame[] = {
@@ -394,22 +394,22 @@ static TextEdit wmap_marker_edit = { 0, wmap_marker_description, sizeof(wmap_mar
 static tig_color_t dword_64E030;
 
 // 0x64E034
-static tig_color_t dword_64E034;
+static tig_color_t wmap_ui_selected_waypoint_color;
 
 // 0x64E03C
-static tig_color_t dword_64E03C;
+static tig_color_t wmap_ui_color_key;
 
 // 0x64E048
 static WmapRoute wmap_ui_routes[WMAP_ROUTE_TYPE_COUNT];
 
 // 0x64E7E8
-static WmapCoords stru_64E7E8;
+static WmapCoords wmap_ui_mouse_coordinates;
 
 // 0x64E7F0
 static mes_file_handle_t wmap_ui_worldmap_mes_file;
 
 // 0x64E7F4
-static TigVideoBuffer* dword_64E7F4;
+static TigVideoBuffer* wmap_ui_coordinate_text_buffer;
 
 // 0x64E7F8
 static TownMapInfo wmap_ui_tmi;
@@ -433,13 +433,13 @@ static int wmap_ui_current_path_step;
 static tig_color_t dword_65E970;
 
 // 0x65E974
-static tig_color_t dword_65E974;
+static tig_color_t wmap_ui_waypoint_color;
 
 // 0x65E978
 static WmapNote wmap_ui_town_notes[200];
 
 // 0x66D6F8
-static int dword_66D6F8;
+static int wmap_ui_sector_x_origin;
 
 // 0x66D6FC
 static mes_file_handle_t wmap_ui_worldmap_info_mes_file;
@@ -454,7 +454,7 @@ static WmapNote wmap_ui_new_note;
 static tig_sound_handle_t wmap_ui_music_handle;
 
 // 0x66D850
-static int64_t qword_66D850;
+static int64_t wmap_ui_known_area_search_radius;
 
 // 0x66D858
 static int wmap_ui_offset_x;
@@ -487,7 +487,7 @@ static int wmap_ui_town_notes_count;
 static int wmap_ui_world_map_id;
 
 // 0x66D880
-static int dword_66D880;
+static int wmap_ui_world_travel_available;
 
 // 0x66D888
 static int64_t wmap_ui_obj;
@@ -716,9 +716,9 @@ bool wmap_ui_init(GameInitInfo* init_info)
     wmap_ui_nav_cvr_width = art_frame_data.width;
     wmap_ui_nav_cvr_height = art_frame_data.height;
     dword_65E970 = tig_color_make(50, 160, 50);
-    dword_65E974 = tig_color_make(160, 50, 50);
+    wmap_ui_waypoint_color = tig_color_make(160, 50, 50);
     dword_64E030 = tig_color_make(50, 50, 235);
-    dword_64E034 = tig_color_make(50, 50, 110);
+    wmap_ui_selected_waypoint_color = tig_color_make(50, 50, 110);
 
     for (index = 0; index < WMAP_UI_MODE_COUNT; index++) {
         if (wmap_ui_mode_info[index].rect.y > wmap_ui_window_frame.y) {
@@ -729,9 +729,9 @@ bool wmap_ui_init(GameInitInfo* init_info)
     wmap_ui_canvas_frame.y -= wmap_ui_window_frame.y;
     wmap_ui_lat_long_frame[0].y -= wmap_ui_window_frame.y;
     wmap_ui_lat_long_frame[1].y -= wmap_ui_window_frame.y;
-    stru_5C9A78.y -= wmap_ui_window_frame.y;
+    wmap_ui_compass_rect.y -= wmap_ui_window_frame.y;
     wmap_ui_pc_lens_frame.y -= wmap_ui_window_frame.y;
-    dword_64E03C = tig_color_make(0, 0, 255);
+    wmap_ui_color_key = tig_color_make(0, 0, 255);
 
     for (index = 0; index < WMAP_NOTE_TYPE_COUNT; index++) {
         wmap_note_type_info[index].enabled = true;
@@ -815,7 +815,7 @@ bool wmap_ui_init(GameInitInfo* init_info)
     for (index = 0; index < WMAP_ROUTE_TYPE_COUNT; index++) {
         wmap_ui_routes[index].length = 0;
         wmap_ui_routes[index].field_3C4 = 1;
-        wmap_ui_routes[index].field_3C8 = 1;
+        wmap_ui_routes[index].waypoint_edit_enabled = 1;
     }
 
     wmap_ui_initialized = true;
@@ -896,7 +896,7 @@ void wmap_ui_town_notes_save(void)
     }
 
     if (tig_file_fwrite(&wmap_ui_num_town_notes, sizeof(wmap_ui_num_town_notes), 1, stream) == 1) {
-        if (tig_file_fwrite(&(wmap_ui_mode_info[WMAP_UI_MODE_TOWN].field_194), sizeof(wmap_ui_mode_info[WMAP_UI_MODE_TOWN].field_194), 1, stream) == 1) {
+        if (tig_file_fwrite(&(wmap_ui_mode_info[WMAP_UI_MODE_TOWN].next_note_id), sizeof(wmap_ui_mode_info[WMAP_UI_MODE_TOWN].next_note_id), 1, stream) == 1) {
             for (index = 0; index < wmap_ui_num_town_notes; index++) {
                 if (!wmap_ui_town_note_save(&(wmap_ui_town_notes[index]), stream)) {
                     success = false;
@@ -965,13 +965,13 @@ void wmap_ui_reset(void)
                 }
                 *wmap_ui_mode_info[index].num_notes = 0;
             }
-            wmap_ui_mode_info[index].field_198 = -1;
+            wmap_ui_mode_info[index].hovered_note_id = -1;
         }
 
         for (index = 0; index < WMAP_ROUTE_TYPE_COUNT; index++) {
             wmap_ui_routes[index].length = 0;
             wmap_ui_routes[index].field_3C4 = 1;
-            wmap_ui_routes[index].field_3C8 = 1;
+            wmap_ui_routes[index].waypoint_edit_enabled = 1;
         }
 
         wmap_ui_selected_waypoint = -1;
@@ -1031,7 +1031,7 @@ bool wmap_ui_save(TigFile* stream)
 bool wmap_ui_town_note_save(WmapNote* note, TigFile* stream)
 {
     MapMarkerRecord record = { note->id, note->flags, note->coords.x, note->coords.y,
-        { note->field_18.x, note->field_18.y, note->field_18.width, note->field_18.height }, note->type };
+        { note->bounds.x, note->bounds.y, note->bounds.width, note->bounds.height }, note->type };
     memcpy(record.text, note->str, sizeof(record.text));
     return map_marker_record_save(&record, stream);
 }
@@ -1103,11 +1103,11 @@ bool wmap_ui_town_note_load(WmapNote* note, TigFile* stream)
     note->id = record.id;
     note->flags = record.flags;
     note->coords = (WmapCoords){ record.x, record.y };
-    note->field_18 = (TigRect){ record.bounds[0], record.bounds[1], record.bounds[2], record.bounds[3] };
+    note->bounds = (TigRect){ record.bounds[0], record.bounds[1], record.bounds[2], record.bounds[3] };
     note->type = record.type;
     memcpy(note->str, record.text, sizeof(note->str));
     note->video_buffer = NULL;
-    note->field_10 = 0;
+    note->location = 0;
 
     return true;
 }
@@ -1158,7 +1158,7 @@ void wmap_ui_select(int64_t obj, int spell)
     wmap_ui_current_path_step = 0;
     wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].length = 0;
     wmap_ui_selecting = true;
-    dword_66D880 = 0;
+    wmap_ui_world_travel_available = 0;
     wmap_ui_spell = spell;
     wmap_ui_open_internal();
 }
@@ -1343,7 +1343,7 @@ bool wmap_load_worldmap_info(void)
             }
         }
 
-        tig_str_parse_str_value(&str, wmap_ui_mode_info[WMAP_UI_MODE_WORLD].field_68, sizeof(wmap_ui_mode_info[WMAP_UI_MODE_WORLD].field_68));
+        tig_str_parse_str_value(&str, wmap_ui_mode_info[WMAP_UI_MODE_WORLD].tile_directory, sizeof(wmap_ui_mode_info[WMAP_UI_MODE_WORLD].tile_directory));
 
         if (!wmap_ui_tile_art_lock(0)) {
             tig_debug_printf("wmap_load_worldmap_info: ERROR: wmap_ui_mode_tile_art_lock failed!\n");
@@ -1382,7 +1382,7 @@ bool wmap_load_worldmap_info(void)
         wmap_ui_mode_info[WMAP_UI_MODE_WORLD].num_vert_tiles = 8;
         wmap_ui_mode_info[WMAP_UI_MODE_WORLD].tile_width = 250;
         wmap_ui_mode_info[WMAP_UI_MODE_WORLD].tile_height = 250;
-        wmap_ui_mode_info[WMAP_UI_MODE_WORLD].field_68[0] = '\0';
+        wmap_ui_mode_info[WMAP_UI_MODE_WORLD].tile_directory[0] = '\0';
         wmap_ui_mode_info[WMAP_UI_MODE_WORLD].map_width = wmap_ui_mode_info[WMAP_UI_MODE_WORLD].tile_width * wmap_ui_mode_info[WMAP_UI_MODE_WORLD].num_hor_tiles;
         wmap_ui_mode_info[WMAP_UI_MODE_WORLD].map_height = wmap_ui_mode_info[WMAP_UI_MODE_WORLD].tile_height * wmap_ui_mode_info[WMAP_UI_MODE_WORLD].num_vert_tiles;
         wmap_ui_mode_info[WMAP_UI_MODE_WORLD].str[0] = '\0';
@@ -1391,23 +1391,23 @@ bool wmap_load_worldmap_info(void)
     for (idx = 0; idx < WMAP_UI_MODE_COUNT; idx++) {
         wmap_info = &(wmap_ui_mode_info[idx]);
         if (wmap_info->rect.width > 0) {
-            wmap_info->field_24 = wmap_info->rect.width / 2;
-            wmap_info->field_28 = wmap_info->rect.height / 2;
-            wmap_info->field_2C = wmap_ui_mode_info[WMAP_UI_MODE_WORLD].num_hor_tiles * wmap_ui_mode_info[WMAP_UI_MODE_WORLD].tile_width - wmap_info->field_24;
-            wmap_info->field_30 = wmap_ui_mode_info[WMAP_UI_MODE_WORLD].num_vert_tiles * wmap_ui_mode_info[WMAP_UI_MODE_WORLD].tile_height - wmap_info->field_28;
+            wmap_info->viewport_half_width = wmap_info->rect.width / 2;
+            wmap_info->viewport_half_height = wmap_info->rect.height / 2;
+            wmap_info->center_x_max = wmap_ui_mode_info[WMAP_UI_MODE_WORLD].num_hor_tiles * wmap_ui_mode_info[WMAP_UI_MODE_WORLD].tile_width - wmap_info->viewport_half_width;
+            wmap_info->center_y_max = wmap_ui_mode_info[WMAP_UI_MODE_WORLD].num_vert_tiles * wmap_ui_mode_info[WMAP_UI_MODE_WORLD].tile_height - wmap_info->viewport_half_height;
         }
 
         if (wmap_info->num_notes != NULL && idx != 2) {
             *wmap_info->num_notes = 0;
         }
 
-        wmap_info->field_198 = -1;
+        wmap_info->hovered_note_id = -1;
     }
 
     wmap_ui_selected_waypoint = -1;
     wmap_ui_note_width = wmap_note_type_info[WMAP_NOTE_TYPE_LOC].width;
     wmap_ui_note_height = wmap_note_type_info[WMAP_NOTE_TYPE_LOC].height;
-    qword_66D850 = 320;
+    wmap_ui_known_area_search_radius = 320;
     wmap_ui_info_loaded_hook_stub();
 
     wmap_ui_info_loaded = true;
@@ -1423,11 +1423,11 @@ void wmap_ui_info_loaded_hook_stub(void)
 // 0x560EF0
 void wmap_ui_travel_context_refresh(void)
 {
-    dword_66D880 = 0;
+    wmap_ui_world_travel_available = 0;
     wmap_ui_townmap = townmap_get(sector_id_from_loc(obj_field_int64_get(player_get_local_pc_obj(), OBJ_F_LOCATION)));
     if (map_current_map() == wmap_ui_world_map_id) {
         if (wmap_ui_townmap == TOWNMAP_NONE) {
-            dword_66D880 = 1;
+            wmap_ui_world_travel_available = 1;
         }
     }
 }
@@ -1468,7 +1468,7 @@ void wmap_ui_close(void)
         for (index = 0; index < WMAP_NOTE_TYPE_COUNT; index++) {
             tig_font_destroy(wmap_note_type_info[index].font);
         }
-        tig_video_buffer_destroy(dword_64E7F4);
+        tig_video_buffer_destroy(wmap_ui_coordinate_text_buffer);
         wmap_ui_created = 0;
         wmap_ui_obj = OBJ_HANDLE_NULL;
         wmap_ui_spell = -1;
@@ -1519,7 +1519,7 @@ bool wmap_ui_create(void)
     }
 
     if (!wmap_load_worldmap_info()) {
-        if (wmap_ui_mode_info[WMAP_UI_MODE_WORLD].field_68[0] == '\0'
+        if (wmap_ui_mode_info[WMAP_UI_MODE_WORLD].tile_directory[0] == '\0'
             && wmap_ui_townmap == TOWNMAP_NONE) {
             MesFileEntry mes_file_entry;
             UiMessage ui_message;
@@ -1533,25 +1533,25 @@ bool wmap_ui_create(void)
         }
 
         if (is_default_wmap()) {
-            wmap_ui_mode_info[wmap_ui_mode].field_60 = 2000 - wmap_ui_mode_info[wmap_ui_mode].rect.width;
-            wmap_ui_mode_info[wmap_ui_mode].field_64 = 2000 - wmap_ui_mode_info[wmap_ui_mode].rect.height;
+            wmap_ui_mode_info[wmap_ui_mode].scroll_x_max = 2000 - wmap_ui_mode_info[wmap_ui_mode].rect.width;
+            wmap_ui_mode_info[wmap_ui_mode].scroll_y_max = 2000 - wmap_ui_mode_info[wmap_ui_mode].rect.height;
         } else {
             int64_t limit_x;
             int64_t limit_y;
 
             location_limits_get(&limit_x, &limit_y);
-            wmap_ui_mode_info[wmap_ui_mode].field_60 = (int)(limit_x / 64) - wmap_ui_mode_info[wmap_ui_mode].rect.width;
-            wmap_ui_mode_info[wmap_ui_mode].field_64 = (int)(limit_y / 64) - wmap_ui_mode_info[wmap_ui_mode].rect.height;
+            wmap_ui_mode_info[wmap_ui_mode].scroll_x_max = (int)(limit_x / 64) - wmap_ui_mode_info[wmap_ui_mode].rect.width;
+            wmap_ui_mode_info[wmap_ui_mode].scroll_y_max = (int)(limit_y / 64) - wmap_ui_mode_info[wmap_ui_mode].rect.height;
         }
 
         if (is_default_wmap()) {
-            dword_66D6F8 = 2000;
+            wmap_ui_sector_x_origin = 2000;
         } else {
             int64_t limit_x;
             int64_t limit_y;
 
             location_limits_get(&limit_x, &limit_y);
-            dword_66D6F8 = (int)(limit_x / 64);
+            wmap_ui_sector_x_origin = (int)(limit_x / 64);
         }
 
         if (dword_66D9CC == 0) {
@@ -1634,10 +1634,10 @@ bool wmap_ui_create(void)
     vb_create_info.flags = TIG_VIDEO_BUFFER_CREATE_COLOR_KEY | TIG_VIDEO_BUFFER_CREATE_SYSTEM_MEMORY;
     vb_create_info.width = wmap_note_type_icon_max_width + 203;
     vb_create_info.height = 50;
-    vb_create_info.background_color = dword_64E03C;
-    vb_create_info.color_key = dword_64E03C;
+    vb_create_info.background_color = wmap_ui_color_key;
+    vb_create_info.color_key = wmap_ui_color_key;
 
-    if (tig_video_buffer_create(&vb_create_info, &dword_64E7F4) != TIG_OK) {
+    if (tig_video_buffer_create(&vb_create_info, &wmap_ui_coordinate_text_buffer) != TIG_OK) {
         tig_debug_printf("wmap_ui_create: ERROR: tig_video_buffer_create failed!\n");
         exit(EXIT_SUCCESS); // FIXME: Should be `EXIT_FAILURE`.
     }
@@ -1654,7 +1654,7 @@ bool wmap_ui_create(void)
     }
 
     wmap_ui_position_from_location_set(loc);
-    wmap_ui_scroll_origin_set(&(wmap_ui_mode_info[wmap_ui_mode].field_3C), false);
+    wmap_ui_scroll_origin_set(&(wmap_ui_mode_info[wmap_ui_mode].player_coordinates), false);
 
     mode = wmap_ui_mode;
     wmap_ui_mode = -1;
@@ -1662,7 +1662,7 @@ bool wmap_ui_create(void)
 
     dword_5C9B18 = -1;
     wmap_ui_compass_arrow_frame_set(1);
-    wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].field_3C8 = dword_66D880 != 0;
+    wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].waypoint_edit_enabled = wmap_ui_world_travel_available != 0;
     wmap_ui_created = true;
 
     return true;
@@ -1693,15 +1693,15 @@ void wmap_ui_position_from_location_set(int64_t location)
 // 0x561490
 void wmap_ui_location_to_coords(int64_t location, WmapCoords* coords)
 {
-    coords->x = dword_66D6F8 - ((location >> 6) & 0x3FFFFFF);
+    coords->x = wmap_ui_sector_x_origin - ((location >> 6) & 0x3FFFFFF);
     coords->y = (location >> 32) >> 6;
 }
 
 // 0x5614C0
 void wmap_ui_current_position_set(int x, int y)
 {
-    wmap_ui_mode_info[wmap_ui_mode].field_3C.x = x;
-    wmap_ui_mode_info[wmap_ui_mode].field_3C.y = y;
+    wmap_ui_mode_info[wmap_ui_mode].player_coordinates.x = x;
+    wmap_ui_mode_info[wmap_ui_mode].player_coordinates.y = y;
 }
 
 // 0x5614F0
@@ -1731,7 +1731,7 @@ bool wmap_ui_state_set(WmapUiState state)
     if (wmap_ui_state != state) {
         switch (state) {
         case WMAP_UI_STATE_NORMAL:
-            wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].field_3C8 = dword_66D880 != 0;
+            wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].waypoint_edit_enabled = wmap_ui_world_travel_available != 0;
             break;
         case WMAP_UI_STATE_MOVING:
             if (!wmap_ui_player_prepare_for_travel()) {
@@ -1760,7 +1760,7 @@ bool wmap_ui_state_set(WmapUiState state)
         }
 
         switch (wmap_ui_state) {
-        case WMAP_UI_STATE_1:
+        case WMAP_UI_STATE_WAYPOINT_DRAG:
             wmap_ui_selected_waypoint_snap();
             refresh = true;
             break;
@@ -1775,7 +1775,7 @@ bool wmap_ui_state_set(WmapUiState state)
             timeevent_clear_all_typed(TIMEEVENT_TYPE_WORLDMAP);
             wmap_ui_state = state;
             intgame_pc_lens_do(PC_LENS_MODE_PASSTHROUGH, &wmap_ui_pc_lens);
-            wmap_ui_coords_to_location(&(wmap_info->field_3C), &loc);
+            wmap_ui_coords_to_location(&(wmap_info->player_coordinates), &loc);
             wmap_ui_teleport(loc);
             wmap_ui_travel_arrival_apply(loc);
             break;
@@ -1806,7 +1806,7 @@ void wmap_ui_coords_to_location(WmapCoords* coords, int64_t* loc_ptr)
     int x;
     int y;
 
-    x = ((dword_66D6F8 - coords->x) << 6) + 32;
+    x = ((wmap_ui_sector_x_origin - coords->x) << 6) + 32;
     y = (coords->y << 6) + 32;
     *loc_ptr = location_make(x, y);
 }
@@ -1859,11 +1859,11 @@ bool wmap_ui_message_filter(TigMessage* msg)
                 return wmap_ui_pan_active;
             }
             wmap_ui_pan_active = wmap_ui_state != WMAP_UI_STATE_MOVING
-                && wmap_ui_state != WMAP_UI_STATE_1
-                && msg->data.mouse.x >= wmap_info->field_14.x
-                && msg->data.mouse.y >= wmap_info->field_14.y
-                && msg->data.mouse.x < wmap_info->field_14.x + wmap_info->field_14.width
-                && msg->data.mouse.y < wmap_info->field_14.y + wmap_info->field_14.height;
+                && wmap_ui_state != WMAP_UI_STATE_WAYPOINT_DRAG
+                && msg->data.mouse.x >= wmap_info->interactive_rect.x
+                && msg->data.mouse.y >= wmap_info->interactive_rect.y
+                && msg->data.mouse.x < wmap_info->interactive_rect.x + wmap_info->interactive_rect.width
+                && msg->data.mouse.y < wmap_info->interactive_rect.y + wmap_info->interactive_rect.height;
             wmap_ui_pan_moved = false;
             wmap_ui_pan_x = msg->data.mouse.x;
             wmap_ui_pan_y = msg->data.mouse.y;
@@ -1872,10 +1872,10 @@ bool wmap_ui_message_filter(TigMessage* msg)
             if (wmap_ui_pan_active) {
                 return true;
             }
-            if (msg->data.mouse.x < wmap_info->field_14.x
-                || msg->data.mouse.y < wmap_info->field_14.y
-                || msg->data.mouse.x >= wmap_info->field_14.x + wmap_info->field_14.width
-                || msg->data.mouse.y >= wmap_info->field_14.y + wmap_info->field_14.height) {
+            if (msg->data.mouse.x < wmap_info->interactive_rect.x
+                || msg->data.mouse.y < wmap_info->interactive_rect.y
+                || msg->data.mouse.x >= wmap_info->interactive_rect.x + wmap_info->interactive_rect.width
+                || msg->data.mouse.y >= wmap_info->interactive_rect.y + wmap_info->interactive_rect.height) {
                 if (wmap_ui_state == WMAP_UI_STATE_NAVIGATING) {
                     wmap_ui_navigate(msg->data.mouse.x, msg->data.mouse.y);
                     return true;
@@ -1883,26 +1883,26 @@ bool wmap_ui_message_filter(TigMessage* msg)
                 return false;
             }
 
-            if (wmap_info->field_2BC != NULL) {
-                wmap_info->field_2BC(msg->data.mouse.x, msg->data.mouse.y, &stru_64E7E8);
+            if (wmap_info->screen_to_map_coordinates != NULL) {
+                wmap_info->screen_to_map_coordinates(msg->data.mouse.x, msg->data.mouse.y, &wmap_ui_mouse_coordinates);
             }
 
             switch (wmap_ui_mode) {
             case WMAP_UI_MODE_WORLD:
                 switch (wmap_ui_state) {
                 case WMAP_UI_STATE_NORMAL: {
-                    if (wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].field_3C8) {
-                        if (wmap_ui_route_waypoint_hit_test(&stru_64E7E8, &wmap_ui_selected_waypoint)) {
+                    if (wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].waypoint_edit_enabled) {
+                        if (wmap_ui_route_waypoint_hit_test(&wmap_ui_mouse_coordinates, &wmap_ui_selected_waypoint)) {
                             wmap_ui_selected_waypoint_value_hook_stub(wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].waypoints[wmap_ui_selected_waypoint].field_4);
-                            wmap_ui_state_set(WMAP_UI_STATE_1);
-                            wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].field_3C8 = 0;
+                            wmap_ui_state_set(WMAP_UI_STATE_WAYPOINT_DRAG);
+                            wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].waypoint_edit_enabled = 0;
                             return true;
                         }
 
-                        if (wmap_ui_destination_coords_check(&stru_64E7E8) && wmap_ui_route_destination_add(&stru_64E7E8)) {
+                        if (wmap_ui_destination_coords_check(&wmap_ui_mouse_coordinates) && wmap_ui_route_destination_add(&wmap_ui_mouse_coordinates)) {
                             wmap_ui_selected_waypoint = wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].length - 1;
-                            wmap_ui_state_set(WMAP_UI_STATE_1);
-                            wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].field_3C8 = 0;
+                            wmap_ui_state_set(WMAP_UI_STATE_WAYPOINT_DRAG);
+                            wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].waypoint_edit_enabled = 0;
                             return true;
                         }
 
@@ -1911,26 +1911,26 @@ bool wmap_ui_message_filter(TigMessage* msg)
 
                     return true;
                 }
-                case WMAP_UI_STATE_1:
-                    if (!dword_66D880) {
+                case WMAP_UI_STATE_WAYPOINT_DRAG:
+                    if (!wmap_ui_world_travel_available) {
                         return true;
                     }
 
                     wmap_ui_scroll_at_edges(msg->data.mouse.x, msg->data.mouse.y);
 
-                    if (!wmap_ui_destination_coords_check(&stru_64E7E8)) {
+                    if (!wmap_ui_destination_coords_check(&wmap_ui_mouse_coordinates)) {
                         return true;
                     }
 
-                    wmap_ui_waypoint_drag_hook_stub(wmap_ui_selected_waypoint, &stru_64E7E8);
+                    wmap_ui_waypoint_drag_hook_stub(wmap_ui_selected_waypoint, &wmap_ui_mouse_coordinates);
 
                     return true;
                 case WMAP_UI_STATE_EDITING: {
                     int id;
-                    if (find_note_by_coords(&stru_64E7E8, &id)) {
+                    if (find_note_by_coords(&wmap_ui_mouse_coordinates, &id)) {
                         wmap_ui_note_edit_by_id(id);
                     } else {
-                        wmap_ui_new_note_edit_begin(&stru_64E7E8);
+                        wmap_ui_new_note_edit_begin(&wmap_ui_mouse_coordinates);
                     }
                     return true;
                 }
@@ -1943,16 +1943,16 @@ bool wmap_ui_message_filter(TigMessage* msg)
             case WMAP_UI_MODE_TOWN:
                 switch (wmap_ui_state) {
                 case WMAP_UI_STATE_NORMAL:
-                    if (wmap_ui_routes[WMAP_ROUTE_TYPE_TOWN].field_3C8) {
-                        if (wmap_ui_route_waypoint_hit_test(&stru_64E7E8, &wmap_ui_selected_waypoint)) {
+                    if (wmap_ui_routes[WMAP_ROUTE_TYPE_TOWN].waypoint_edit_enabled) {
+                        if (wmap_ui_route_waypoint_hit_test(&wmap_ui_mouse_coordinates, &wmap_ui_selected_waypoint)) {
                             wmap_ui_selected_waypoint_value_hook_stub(wmap_ui_routes[WMAP_ROUTE_TYPE_TOWN].waypoints[wmap_ui_selected_waypoint].field_4);
-                            wmap_ui_routes[WMAP_ROUTE_TYPE_TOWN].field_3C8 = 0;
+                            wmap_ui_routes[WMAP_ROUTE_TYPE_TOWN].waypoint_edit_enabled = 0;
                             return true;
                         }
 
-                        if (wmap_ui_destination_coords_check(&stru_64E7E8) && wmap_ui_route_destination_add(&stru_64E7E8)) {
+                        if (wmap_ui_destination_coords_check(&wmap_ui_mouse_coordinates) && wmap_ui_route_destination_add(&wmap_ui_mouse_coordinates)) {
                             wmap_ui_selected_waypoint = wmap_ui_routes[WMAP_ROUTE_TYPE_TOWN].length - 1;
-                            wmap_ui_routes[WMAP_ROUTE_TYPE_TOWN].field_3C8 = 0;
+                            wmap_ui_routes[WMAP_ROUTE_TYPE_TOWN].waypoint_edit_enabled = 0;
                             return true;
                         }
                     }
@@ -1972,8 +1972,8 @@ bool wmap_ui_message_filter(TigMessage* msg)
             }
             switch (wmap_ui_mode) {
             case WMAP_UI_MODE_WORLD:
-                wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].field_3C8 = dword_66D880 != 0;
-                if (wmap_ui_state == WMAP_UI_STATE_1 || wmap_ui_state == WMAP_UI_STATE_NAVIGATING) {
+                wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].waypoint_edit_enabled = wmap_ui_world_travel_available != 0;
+                if (wmap_ui_state == WMAP_UI_STATE_WAYPOINT_DRAG || wmap_ui_state == WMAP_UI_STATE_NAVIGATING) {
                     wmap_ui_state_set(WMAP_UI_STATE_NORMAL);
                 }
 
@@ -1982,12 +1982,12 @@ bool wmap_ui_message_filter(TigMessage* msg)
                 // subsequent "mouse up" event to the destination map (which
                 // may have unexpected consequences like starting a dialog).
                 if (wmap_ui_selecting) {
-                    wmap_info->field_2BC(msg->data.mouse.x, msg->data.mouse.y, &stru_64E7E8);
+                    wmap_info->screen_to_map_coordinates(msg->data.mouse.x, msg->data.mouse.y, &wmap_ui_mouse_coordinates);
 
                     int64_t loc;
-                    wmap_ui_coords_to_location(&stru_64E7E8, &loc);
+                    wmap_ui_coords_to_location(&wmap_ui_mouse_coordinates, &loc);
 
-                    int area = area_get_nearest_known_area(loc, player_get_local_pc_obj(), qword_66D850);
+                    int area = area_get_nearest_known_area(loc, player_get_local_pc_obj(), wmap_ui_known_area_search_radius);
                     if (area <= 0) {
                         return true;
                     }
@@ -2021,20 +2021,20 @@ bool wmap_ui_message_filter(TigMessage* msg)
                 break;
             case WMAP_UI_MODE_CONTINENT:
                 if (wmap_ui_townmap == TOWNMAP_NONE
-                    && msg->data.mouse.x >= wmap_info->field_14.x
-                    && msg->data.mouse.y >= wmap_info->field_14.y
-                    && msg->data.mouse.x < wmap_info->field_14.x + wmap_info->field_14.width
-                    && msg->data.mouse.y < wmap_info->field_14.y + wmap_info->field_14.height
+                    && msg->data.mouse.x >= wmap_info->interactive_rect.x
+                    && msg->data.mouse.y >= wmap_info->interactive_rect.y
+                    && msg->data.mouse.x < wmap_info->interactive_rect.x + wmap_info->interactive_rect.width
+                    && msg->data.mouse.y < wmap_info->interactive_rect.y + wmap_info->interactive_rect.height
                     && wmap_ui_state == WMAP_UI_STATE_NORMAL) {
-                    wmap_ui_overview_to_map_coords(msg->data.mouse.x, msg->data.mouse.y, &stru_64E7E8);
+                    wmap_ui_overview_to_map_coords(msg->data.mouse.x, msg->data.mouse.y, &wmap_ui_mouse_coordinates);
                     wmap_ui_mode_set(WMAP_UI_MODE_WORLD);
-                    wmap_ui_scroll_origin_set(&stru_64E7E8, 0);
+                    wmap_ui_scroll_origin_set(&wmap_ui_mouse_coordinates, 0);
                     wmap_ui_current_rect_refresh();
                 }
                 break;
             case WMAP_UI_MODE_TOWN:
-                wmap_ui_routes[WMAP_ROUTE_TYPE_TOWN].field_3C8 = 1;
-                if (wmap_ui_state == WMAP_UI_STATE_1 || wmap_ui_state == WMAP_UI_STATE_NAVIGATING) {
+                wmap_ui_routes[WMAP_ROUTE_TYPE_TOWN].waypoint_edit_enabled = 1;
+                if (wmap_ui_state == WMAP_UI_STATE_WAYPOINT_DRAG || wmap_ui_state == WMAP_UI_STATE_NAVIGATING) {
                     wmap_ui_state_set(WMAP_UI_STATE_NORMAL);
                 }
                 break;
@@ -2114,16 +2114,16 @@ bool wmap_ui_message_filter(TigMessage* msg)
                 wmap_ui_scroll_by(dx, dy);
                 return true;
             }
-            if (msg->data.mouse.x >= wmap_info->field_14.x
-                && msg->data.mouse.y >= wmap_info->field_14.y
-                && msg->data.mouse.x < wmap_info->field_14.x + wmap_info->field_14.width
-                && msg->data.mouse.y < wmap_info->field_14.y + wmap_info->field_14.height) {
+            if (msg->data.mouse.x >= wmap_info->interactive_rect.x
+                && msg->data.mouse.y >= wmap_info->interactive_rect.y
+                && msg->data.mouse.x < wmap_info->interactive_rect.x + wmap_info->interactive_rect.width
+                && msg->data.mouse.y < wmap_info->interactive_rect.y + wmap_info->interactive_rect.height) {
                 if (wmap_ui_mode == WMAP_UI_MODE_WORLD || wmap_ui_mode == WMAP_UI_MODE_CONTINENT) {
-                    wmap_info->field_2BC(msg->data.mouse.x, msg->data.mouse.y, &stru_64E7E8);
+                    wmap_info->screen_to_map_coordinates(msg->data.mouse.x, msg->data.mouse.y, &wmap_ui_mouse_coordinates);
                 }
 
                 if (wmap_ui_mode != WMAP_UI_MODE_TOWN) {
-                    wmap_ui_draw_coords(&stru_64E7E8);
+                    wmap_ui_draw_coords(&wmap_ui_mouse_coordinates);
                 }
 
                 inside = true;
@@ -2134,13 +2134,13 @@ bool wmap_ui_message_filter(TigMessage* msg)
                 switch (wmap_ui_state) {
                 case WMAP_UI_STATE_NORMAL:
                     if (inside) {
-                        wmap_info->field_2BC(msg->data.mouse.x, msg->data.mouse.y, &stru_64E7E8);
+                        wmap_info->screen_to_map_coordinates(msg->data.mouse.x, msg->data.mouse.y, &wmap_ui_mouse_coordinates);
 
                         int id;
-                        if (find_note_by_coords(&stru_64E7E8, &id)) {
-                            if (wmap_info->field_198 != id) {
+                        if (find_note_by_coords(&wmap_ui_mouse_coordinates, &id)) {
+                            if (wmap_info->hovered_note_id != id) {
                                 WmapNote* note = wmap_ui_note_find_by_id(id);
-                                wmap_info->field_198 = id;
+                                wmap_info->hovered_note_id = id;
                                 intgame_message_window_display_str(-1, (note->flags & 0x2) != 0
                                     && note->id > 0 && note->id < area_count() ? area_get_description(note->id) : note->str);
                             }
@@ -2148,17 +2148,17 @@ bool wmap_ui_message_filter(TigMessage* msg)
                         }
                     }
 
-                    if (wmap_info->field_198 != -1) {
-                        wmap_info->field_198 = -1;
+                    if (wmap_info->hovered_note_id != -1) {
+                        wmap_info->hovered_note_id = -1;
                         intgame_message_window_clear();
                     }
 
                     return true;
-                case WMAP_UI_STATE_1:
+                case WMAP_UI_STATE_WAYPOINT_DRAG:
                     if (wmap_info) {
                         wmap_ui_scroll_at_edges(msg->data.mouse.x, msg->data.mouse.y);
-                        if (wmap_ui_destination_coords_check(&stru_64E7E8)) {
-                            wmap_ui_waypoint_drag_hook_stub(wmap_ui_selected_waypoint, &stru_64E7E8);
+                        if (wmap_ui_destination_coords_check(&wmap_ui_mouse_coordinates)) {
+                            wmap_ui_waypoint_drag_hook_stub(wmap_ui_selected_waypoint, &wmap_ui_mouse_coordinates);
                         }
                     }
 
@@ -2168,19 +2168,19 @@ bool wmap_ui_message_filter(TigMessage* msg)
                 }
             case WMAP_UI_MODE_CONTINENT: {
                 if (inside) {
-                    wmap_info->field_2BC(msg->data.mouse.x, msg->data.mouse.y, &stru_64E7E8);
+                    wmap_info->screen_to_map_coordinates(msg->data.mouse.x, msg->data.mouse.y, &wmap_ui_mouse_coordinates);
 
                     int id;
-                    if (find_note_by_coords(&stru_64E7E8, &id)) {
-                        if (wmap_info->field_198 != id) {
+                    if (find_note_by_coords(&wmap_ui_mouse_coordinates, &id)) {
+                        if (wmap_info->hovered_note_id != id) {
                             WmapNote* note = wmap_ui_note_find_by_id(id);
-                            wmap_info->field_198 = id;
+                            wmap_info->hovered_note_id = id;
                             intgame_message_window_display_str(-1, (note->flags & 0x2) != 0
                                 && note->id > 0 && note->id < area_count() ? area_get_description(note->id) : note->str);
                         }
                     } else {
-                        if (wmap_info->field_198 != -1) {
-                            wmap_info->field_198 = -1;
+                        if (wmap_info->hovered_note_id != -1) {
+                            wmap_info->hovered_note_id = -1;
                             intgame_message_window_clear();
                         }
                     }
@@ -2192,28 +2192,28 @@ bool wmap_ui_message_filter(TigMessage* msg)
                 switch (wmap_ui_state) {
                 case WMAP_UI_STATE_NORMAL:
                     if (inside) {
-                        wmap_info->field_2BC(msg->data.mouse.x, msg->data.mouse.y, &stru_64E7E8);
+                        wmap_info->screen_to_map_coordinates(msg->data.mouse.x, msg->data.mouse.y, &wmap_ui_mouse_coordinates);
 
                         int id;
-                        if (find_note_by_coords(&stru_64E7E8, &id)) {
-                            if (wmap_info->field_198 != id) {
+                        if (find_note_by_coords(&wmap_ui_mouse_coordinates, &id)) {
+                            if (wmap_info->hovered_note_id != id) {
                                 WmapNote* note = wmap_ui_note_find_by_id(id);
-                                wmap_info->field_198 = id;
+                                wmap_info->hovered_note_id = id;
                                 intgame_message_window_display_str(-1, note->str);
                             }
                         }
                     } else {
-                        if (wmap_info->field_198 != -1) {
-                            wmap_info->field_198 = -1;
+                        if (wmap_info->hovered_note_id != -1) {
+                            wmap_info->hovered_note_id = -1;
                             intgame_message_window_clear();
                         }
                     }
 
                     return true;
-                case WMAP_UI_STATE_1:
+                case WMAP_UI_STATE_WAYPOINT_DRAG:
                     if (inside) {
                         wmap_ui_scroll_at_edges(msg->data.mouse.x, msg->data.mouse.y);
-                        if (!wmap_ui_destination_coords_check(&stru_64E7E8)) {
+                        if (!wmap_ui_destination_coords_check(&wmap_ui_mouse_coordinates)) {
                             return true;
                         }
                     }
@@ -2266,7 +2266,7 @@ bool wmap_ui_message_filter(TigMessage* msg)
 
             if (msg->data.button.button_handle == wmap_ui_navigate_button_info.button_handle) {
                 if (wmap_info->navigatable && !wmap_ui_navigating) {
-                    wmap_ui_scroll_origin_set(&(wmap_info->field_3C), true);
+                    wmap_ui_scroll_origin_set(&(wmap_info->player_coordinates), true);
                 } else {
                     wmap_ui_navigating = false;
                 }
@@ -2279,7 +2279,7 @@ bool wmap_ui_message_filter(TigMessage* msg)
                 }
 
                 if (wmap_ui_state == WMAP_UI_STATE_NORMAL) {
-                    if (dword_66D880) {
+                    if (wmap_ui_world_travel_available) {
                         WmapRouteType route_type = wmap_ui_mode == WMAP_UI_MODE_TOWN
                             ? WMAP_ROUTE_TYPE_TOWN
                             : WMAP_ROUTE_TYPE_WORLD;
@@ -2384,7 +2384,7 @@ bool wmap_ui_message_filter(TigMessage* msg)
         if (input_binding_matches_keyboard(INPUT_ACTION_CENTER_CAMERA, msg)) {
             if (wmap_ui_state != WMAP_UI_STATE_MOVING) {
                 gsound_play_sfx(0, 1);
-                wmap_ui_scroll_origin_set(&(wmap_info->field_3C), true);
+                wmap_ui_scroll_origin_set(&(wmap_info->player_coordinates), true);
             }
             return true;
         }
@@ -2503,7 +2503,7 @@ void wmap_ui_area_note_add(int id)
 
     note.id = id;
     note.flags = 0x2;
-    note.field_10 = 0;
+    note.location = 0;
     note.type = WMAP_NOTE_TYPE_LOC;
 
     name = area_get_name(id);
@@ -2532,7 +2532,7 @@ void wmap_ui_draw_coords(WmapCoords* coords)
     y = wmap_ui_offset_y + coords->y;
 
     for (index = 0; index < 2; index++) {
-        if (tig_video_buffer_fill(dword_64E7F4, &wmap_ui_coordinate_text_rect, dword_64E03C) == TIG_OK) {
+        if (tig_video_buffer_fill(wmap_ui_coordinate_text_buffer, &wmap_ui_coordinate_text_rect, wmap_ui_color_key) == TIG_OK) {
             tig_window_fill(wmap_ui_window,
                 &wmap_ui_lat_long_frame[index],
                 tig_color_make(0, 0, 0));
@@ -2558,7 +2558,7 @@ void wmap_ui_draw_coords(WmapCoords* coords)
             snprintf(str, sizeof(str), "%lld %s", (long long)(coordinate < 0 ? -coordinate : coordinate), direction_label.str);
 
             tig_font_push(wmap_note_type_info[WMAP_NOTE_TYPE_NOTE].font);
-            if (tig_font_write(dword_64E7F4, str, &wmap_ui_coordinate_text_rect, &dst_rect) == TIG_OK) {
+            if (tig_font_write(wmap_ui_coordinate_text_buffer, str, &wmap_ui_coordinate_text_rect, &dst_rect) == TIG_OK) {
                 dst_rect.x = wmap_ui_lat_long_frame[index].x;
                 dst_rect.y = wmap_ui_lat_long_frame[index].y;
 
@@ -2569,7 +2569,7 @@ void wmap_ui_draw_coords(WmapCoords* coords)
 
                 tig_window_copy_from_vbuffer(wmap_ui_window,
                     &dst_rect,
-                    dword_64E7F4,
+                    wmap_ui_coordinate_text_buffer,
                     &src_rect);
             }
             tig_font_pop();
@@ -2584,24 +2584,24 @@ void wmap_ui_navigate(int x, int y)
         return;
     }
 
-    if (x >= stru_5C9A88.x
-        && y >= stru_5C9A88.y
-        && x < stru_5C9A88.x + stru_5C9A88.width
-        && y < stru_5C9A88.y + stru_5C9A88.height) {
+    if (x >= wmap_ui_navigation_dead_zone.x
+        && y >= wmap_ui_navigation_dead_zone.y
+        && x < wmap_ui_navigation_dead_zone.x + wmap_ui_navigation_dead_zone.width
+        && y < wmap_ui_navigation_dead_zone.y + wmap_ui_navigation_dead_zone.height) {
         return;
     }
 
     wmap_ui_navigating = true;
 
-    if (y < stru_5C9A88.y) {
+    if (y < wmap_ui_navigation_dead_zone.y) {
         wmap_ui_scroll_internal(0, 8);
-    } else if (y > stru_5C9A88.y + stru_5C9A88.height) {
+    } else if (y > wmap_ui_navigation_dead_zone.y + wmap_ui_navigation_dead_zone.height) {
         wmap_ui_scroll_internal(4, 8);
     }
 
-    if (x < stru_5C9A88.x) {
+    if (x < wmap_ui_navigation_dead_zone.x) {
         wmap_ui_scroll_internal(6, 8);
-    } else if (x > stru_5C9A88.x + stru_5C9A88.width) {
+    } else if (x > wmap_ui_navigation_dead_zone.x + wmap_ui_navigation_dead_zone.width) {
         wmap_ui_scroll_internal(2, 8);
     }
 }
@@ -2609,15 +2609,15 @@ void wmap_ui_navigate(int x, int y)
 // 0x562AF0
 void wmap_ui_scroll_at_edges(int x, int y)
 {
-    if (y < wmap_ui_mode_info[wmap_ui_mode].field_14.y + 23) {
+    if (y < wmap_ui_mode_info[wmap_ui_mode].interactive_rect.y + 23) {
         wmap_ui_scroll_internal(0, 10);
-    } else if (y > wmap_ui_mode_info[wmap_ui_mode].field_14.y + wmap_ui_mode_info[wmap_ui_mode].field_14.height - 23) {
+    } else if (y > wmap_ui_mode_info[wmap_ui_mode].interactive_rect.y + wmap_ui_mode_info[wmap_ui_mode].interactive_rect.height - 23) {
         wmap_ui_scroll_internal(4, 10);
     }
 
-    if (x < wmap_ui_mode_info[wmap_ui_mode].field_14.x + 23) {
+    if (x < wmap_ui_mode_info[wmap_ui_mode].interactive_rect.x + 23) {
         wmap_ui_scroll_internal(6, 10);
-    } else if (x > wmap_ui_mode_info[wmap_ui_mode].field_14.x + wmap_ui_mode_info[wmap_ui_mode].field_14.width - 23) {
+    } else if (x > wmap_ui_mode_info[wmap_ui_mode].interactive_rect.x + wmap_ui_mode_info[wmap_ui_mode].interactive_rect.width - 23) {
         wmap_ui_scroll_internal(2, 10);
     }
 }
@@ -2684,7 +2684,7 @@ void wmap_ui_mode_set(WmapUiMode mode)
         }
         break;
     default:
-        if (dword_66D880) {
+        if (wmap_ui_world_travel_available) {
             if (wmap_ui_travel_button_info.button_handle != TIG_BUTTON_HANDLE_INVALID) {
                 tig_button_show(wmap_ui_travel_button_info.button_handle);
             }
@@ -2698,12 +2698,12 @@ void wmap_ui_mode_set(WmapUiMode mode)
 
     if (wmap_ui_window != TIG_WINDOW_HANDLE_INVALID) {
         v2 = mode;
-        if (!dword_66D880) {
+        if (!wmap_ui_world_travel_available) {
             v2 = 2;
         }
 
-        if (wmap_ui_mode_info[v2].field_54 != -1) {
-            tig_art_interface_id_create(wmap_ui_mode_info[v2].field_54, 0, 0, 0, &art_id);
+        if (wmap_ui_mode_info[v2].compass_art_number != -1) {
+            tig_art_interface_id_create(wmap_ui_mode_info[v2].compass_art_number, 0, 0, 0, &art_id);
 
             if (tig_art_anim_data(art_id, &art_anim_data) == TIG_OK
                 && tig_art_frame_data(art_id, &art_frame_data) == TIG_OK) {
@@ -2712,8 +2712,8 @@ void wmap_ui_mode_set(WmapUiMode mode)
                 src_rect.width = art_frame_data.width;
                 src_rect.height = art_frame_data.height;
 
-                dst_rect.x = stru_5C9A78.x;
-                dst_rect.y = stru_5C9A78.y;
+                dst_rect.x = wmap_ui_compass_rect.x;
+                dst_rect.y = wmap_ui_compass_rect.y;
                 dst_rect.width = art_frame_data.width;
                 dst_rect.height = art_frame_data.height;
 
@@ -2726,7 +2726,7 @@ void wmap_ui_mode_set(WmapUiMode mode)
         }
 
         wmap_ui_mode_info[wmap_ui_mode].refresh();
-        wmap_ui_draw_coords(&stru_64E7E8);
+        wmap_ui_draw_coords(&wmap_ui_mouse_coordinates);
         wmap_ui_draw_travel_time();
     }
 }
@@ -2752,12 +2752,12 @@ bool wmap_load_townmap_info(void)
         &x,
         &y);
 
-    wmap_info->field_3C.x = x;
-    wmap_info->field_3C.y = y;
-    wmap_info->field_34 = 0;
-    wmap_info->field_38 = 0;
+    wmap_info->player_coordinates.x = x;
+    wmap_info->player_coordinates.y = y;
+    wmap_info->scroll_x = 0;
+    wmap_info->scroll_y = 0;
 
-    strcpy(wmap_info->field_68, townmap_name(wmap_ui_townmap));
+    strcpy(wmap_info->tile_directory, townmap_name(wmap_ui_townmap));
     wmap_info->num_hor_tiles = wmap_ui_tmi.num_hor_tiles;
     wmap_info->num_vert_tiles = wmap_ui_tmi.num_vert_tiles;
     wmap_info->num_tiles = wmap_ui_tmi.num_hor_tiles * wmap_ui_tmi.num_vert_tiles;
@@ -2782,22 +2782,22 @@ bool wmap_load_townmap_info(void)
         wmap_info->tiles[index].rect.height = wmap_info->tile_height;
     }
 
-    wmap_info->field_2C = wmap_info->num_hor_tiles * wmap_info->tile_width - wmap_info->field_24;
-    wmap_info->field_60 = wmap_info->num_hor_tiles * wmap_info->tile_width - wmap_info->rect.width;
-    wmap_info->field_30 = wmap_info->num_vert_tiles * wmap_info->tile_height - wmap_info->field_28;
-    wmap_info->field_64 = wmap_info->num_vert_tiles * wmap_info->tile_height - wmap_info->rect.height;
+    wmap_info->center_x_max = wmap_info->num_hor_tiles * wmap_info->tile_width - wmap_info->viewport_half_width;
+    wmap_info->scroll_x_max = wmap_info->num_hor_tiles * wmap_info->tile_width - wmap_info->rect.width;
+    wmap_info->center_y_max = wmap_info->num_vert_tiles * wmap_info->tile_height - wmap_info->viewport_half_height;
+    wmap_info->scroll_y_max = wmap_info->num_vert_tiles * wmap_info->tile_height - wmap_info->rect.height;
 
-    wmap_ui_scroll_origin_set(&(wmap_info->field_3C), false);
+    wmap_ui_scroll_origin_set(&(wmap_info->player_coordinates), false);
 
     return true;
 }
 
 // 0x562F90
-void wmap_ui_tile_render_state_init(WmapTile* a1)
+void wmap_ui_tile_render_state_init(WmapTile* tile)
 {
-    a1->flags = 0;
-    a1->field_18 = NULL;
-    a1->field_1C = 0;
+    tile->flags = 0;
+    tile->field_18 = NULL;
+    tile->field_1C = 0;
 }
 
 // 0x562FA0
@@ -2827,20 +2827,20 @@ bool wmap_ui_mode_tile_art_lock(WmapUiMode mode, int tile)
         if (mode == 2) {
             snprintf(path, sizeof(path),
                 "townmap\\%s\\%s%06d.bmp",
-                wmap_ui_mode_info[mode].field_68,
-                wmap_ui_mode_info[mode].field_68,
+                wmap_ui_mode_info[mode].tile_directory,
+                wmap_ui_mode_info[mode].tile_directory,
                 tile);
             if (!tig_file_exists(path, NULL)) {
                 snprintf(path, sizeof(path),
                     "townmap\\%s\\%s%06d.bmp",
-                    wmap_ui_mode_info[mode].field_68,
-                    wmap_ui_mode_info[mode].field_68,
+                    wmap_ui_mode_info[mode].tile_directory,
+                    wmap_ui_mode_info[mode].tile_directory,
                     0);
             }
         } else {
             snprintf(path, sizeof(path),
                 "%s%03d",
-                wmap_ui_mode_info[mode].field_68,
+                wmap_ui_mode_info[mode].tile_directory,
                 tile + 1);
         }
 
@@ -3052,24 +3052,24 @@ void wmap_ui_scroll_origin_set(WmapCoords* coords, bool a2)
 
     wmap_info = &(wmap_ui_mode_info[wmap_ui_mode]);
 
-    v1 = coords->x - wmap_info->field_24;
+    v1 = coords->x - wmap_info->viewport_half_width;
     if (v1 < 0) {
         v1 = 0;
-    } else if (v1 > wmap_info->field_24 + wmap_info->field_2C) {
-        v1 = wmap_info->field_2C;
+    } else if (v1 > wmap_info->viewport_half_width + wmap_info->center_x_max) {
+        v1 = wmap_info->center_x_max;
     }
 
-    v2 = coords->y - wmap_info->field_28;
+    v2 = coords->y - wmap_info->viewport_half_height;
     if (v2 < 0) {
         v2 = 0;
-    } else if (v2 > wmap_info->field_24 + wmap_info->field_30) {
-        v2 = wmap_info->field_30;
+    } else if (v2 > wmap_info->viewport_half_width + wmap_info->center_y_max) {
+        v2 = wmap_info->center_y_max;
     }
 
-    if (v1 != wmap_info->field_34
-        || v2 != wmap_info->field_38) {
-        wmap_info->field_34 = v1;
-        wmap_info->field_38 = v2;
+    if (v1 != wmap_info->scroll_x
+        || v2 != wmap_info->scroll_y) {
+        wmap_info->scroll_x = v1;
+        wmap_info->scroll_y = v2;
 
         if (a2) {
             wmap_info->refresh();
@@ -3216,8 +3216,8 @@ void wmap_ui_scroll_internal(int direction, int scale)
 // 0x563AC0
 void wmap_ui_mouse_to_map_coords(int x, int y, WmapCoords* coords)
 {
-    coords->x = x + wmap_ui_mode_info[wmap_ui_mode].field_34 - wmap_ui_mode_info[wmap_ui_mode].rect.x;
-    coords->y = y + wmap_ui_mode_info[wmap_ui_mode].field_38 - wmap_ui_mode_info[wmap_ui_mode].rect.y - wmap_ui_window_frame.y;
+    coords->x = x + wmap_ui_mode_info[wmap_ui_mode].scroll_x - wmap_ui_mode_info[wmap_ui_mode].rect.x;
+    coords->y = y + wmap_ui_mode_info[wmap_ui_mode].scroll_y - wmap_ui_mode_info[wmap_ui_mode].rect.y - wmap_ui_window_frame.y;
 }
 
 // 0x563B10
@@ -3248,8 +3248,8 @@ void wmap_ui_overview_to_map_coords(int x, int y, WmapCoords* coords)
 // 0x563C00
 void wmap_ui_screen_to_scrolled_coords(int x, int y, WmapCoords* coords)
 {
-    coords->x = x + wmap_ui_mode_info[wmap_ui_mode].field_34 - wmap_ui_mode_info[wmap_ui_mode].rect.x;
-    coords->y = y + wmap_ui_mode_info[wmap_ui_mode].field_38 - wmap_ui_mode_info[wmap_ui_mode].rect.y - wmap_ui_window_frame.y;
+    coords->x = x + wmap_ui_mode_info[wmap_ui_mode].scroll_x - wmap_ui_mode_info[wmap_ui_mode].rect.x;
+    coords->y = y + wmap_ui_mode_info[wmap_ui_mode].scroll_y - wmap_ui_mode_info[wmap_ui_mode].rect.y - wmap_ui_window_frame.y;
 }
 
 // 0x563C60
@@ -3291,10 +3291,10 @@ bool wmap_ui_note_insert_or_update(WmapNote* note)
 // 0x563D50
 void wmap_ui_note_bounds_update(WmapNote* note)
 {
-    note->field_18.x = note->coords.x;
-    note->field_18.y = note->coords.y;
-    note->field_18.width = wmap_note_type_icon_max_width + 203;
-    note->field_18.height = 50;
+    note->bounds.x = note->coords.x;
+    note->bounds.y = note->coords.y;
+    note->bounds.width = wmap_note_type_icon_max_width + 203;
+    note->bounds.height = 50;
 }
 
 // 0x563D80
@@ -3380,24 +3380,24 @@ bool find_note_by_coords_mode(WmapCoords* coords, int* id_ptr, WmapUiMode mode)
 }
 
 // 0x563F00
-bool wmap_ui_coords_snap_to_player(WmapCoords* coords, int64_t* a2)
+bool wmap_ui_coords_snap_to_player(WmapCoords* coords, int64_t* location_ptr)
 {
     int64_t v1;
     int64_t pc_location;
 
-    if (a2 == NULL) {
+    if (location_ptr == NULL) {
         return false;
     }
 
     wmap_ui_coords_to_location(coords, &v1);
     pc_location = obj_field_int64_get(player_get_local_pc_obj(), OBJ_F_LOCATION);
-    if (location_dist(v1, pc_location) < qword_66D850) {
+    if (location_dist(v1, pc_location) < wmap_ui_known_area_search_radius) {
         wmap_ui_location_to_coords(pc_location, coords);
-        *a2 = pc_location;
+        *location_ptr = pc_location;
         return true;
     }
 
-    *a2 = 0;
+    *location_ptr = 0;
     return false;
 }
 
@@ -3408,20 +3408,20 @@ void wmap_ui_new_note_edit_begin(WmapCoords* coords)
     wmap_ui_new_note.type = wmap_ui_selected_note_icon;
     wmap_ui_new_note.coords = *coords;
     wmap_ui_note_bounds_update(&wmap_ui_new_note);
-    wmap_ui_new_note.field_10 = 0;
-    wmap_ui_coords_snap_to_player(&(wmap_ui_new_note.coords), &(wmap_ui_new_note.field_10));
+    wmap_ui_new_note.location = 0;
+    wmap_ui_coords_snap_to_player(&(wmap_ui_new_note.coords), &(wmap_ui_new_note.location));
     wmap_ui_note_edit_begin(&wmap_ui_new_note);
 }
 
 // 0x564000
-void wmap_ui_note_icon_select(int a1)
+void wmap_ui_note_icon_select(int icon_index)
 {
     int v1[3];
 
     v1[0] = WMAP_NOTE_TYPE_NOTE;
     v1[1] = WMAP_NOTE_TYPE_SKULL;
     v1[2] = WMAP_NOTE_TYPE_CHEST;
-    wmap_ui_selected_note_icon = v1[a1];
+    wmap_ui_selected_note_icon = v1[icon_index];
 }
 
 // 0x564030
@@ -3490,7 +3490,7 @@ bool wmap_note_add_mode(WmapNote* note, WmapUiMode mode)
 
     note_index = *wmap_ui_mode_info[mode].num_notes;
 
-    int id = wmap_ui_mode_info[mode].field_194;
+    int id = wmap_ui_mode_info[mode].next_note_id;
     if (mode == WMAP_UI_MODE_WORLD && id <= area_count()) id = area_count() + 1;
     // The world-note counter was not persisted by older saves. Allocate above
     // every current ID instead of overwriting a loaded personal pin.
@@ -3502,7 +3502,7 @@ bool wmap_note_add_mode(WmapNote* note, WmapUiMode mode)
     }
     if (id < 0 || id == INT_MAX) return false;
     note->id = id;
-    wmap_ui_mode_info[mode].field_194 = id + 1;
+    wmap_ui_mode_info[mode].next_note_id = id + 1;
     note->flags &= ~0x4;
     wmap_ui_mode_info[mode].notes[note_index] = *note;
     wmap_ui_note_bounds_update(&(wmap_ui_mode_info[mode].notes[note_index]));
@@ -3629,7 +3629,7 @@ bool wmap_ui_route_destination_add(WmapCoords* coords)
     int steps;
     UiMessage ui_message;
 
-    if (dword_66D880) {
+    if (wmap_ui_world_travel_available) {
         if (wmap_ui_mode == WMAP_UI_MODE_TOWN) {
             route_type = WMAP_ROUTE_TYPE_TOWN;
         }
@@ -3674,7 +3674,7 @@ bool wmap_ui_route_destination_add(WmapCoords* coords)
         }
     } else {
         if (wp_idx == 0) {
-            wmap_ui_coords_to_location(&(wmap_ui_mode_info[wmap_ui_mode].field_3C), &from);
+            wmap_ui_coords_to_location(&(wmap_ui_mode_info[wmap_ui_mode].player_coordinates), &from);
         } else {
             start = wmap_ui_routes[route_type].waypoints[wp_idx - 1].start + wmap_ui_routes[route_type].waypoints[wp_idx - 1].steps;
             from = wmap_ui_routes[route_type].waypoints[wp_idx - 1].loc;
@@ -3754,7 +3754,7 @@ void wmap_ui_waypoint_drag_hook_stub(int a1, WmapCoords* coords)
 }
 
 // 0x564840
-void wmap_ui_route_waypoint_remove(int a1)
+void wmap_ui_route_waypoint_remove(int waypoint_index)
 {
     WmapRouteType route_type;
     int index;
@@ -3762,10 +3762,10 @@ void wmap_ui_route_waypoint_remove(int a1)
     route_type = wmap_ui_mode == WMAP_UI_MODE_TOWN
         ? WMAP_ROUTE_TYPE_TOWN
         : WMAP_ROUTE_TYPE_WORLD;
-    if (wmap_ui_routes[route_type].length > 0 && a1 < wmap_ui_routes[route_type].length) {
+    if (wmap_ui_routes[route_type].length > 0 && waypoint_index < wmap_ui_routes[route_type].length) {
         wmap_ui_routes[route_type].length--;
 
-        for (index = a1; index < wmap_ui_routes[route_type].length; index++) {
+        for (index = waypoint_index; index < wmap_ui_routes[route_type].length; index++) {
             wmap_ui_routes[route_type].waypoints[index] = wmap_ui_routes[route_type].waypoints[index + 1];
         }
 
@@ -3779,22 +3779,22 @@ void wmap_ui_route_waypoint_remove(int a1)
 }
 
 // 0x5648E0
-void wmap_ui_waypoint_travel_value_set(int a1, int a2, bool a3)
+void wmap_ui_waypoint_travel_value_set(int waypoint_index, int travel_value, bool a3)
 {
     WmapRouteType route_type;
 
-    if (a1 == -1) {
+    if (waypoint_index == -1) {
         return;
     }
 
     route_type = wmap_ui_mode == WMAP_UI_MODE_TOWN
         ? WMAP_ROUTE_TYPE_TOWN
         : WMAP_ROUTE_TYPE_WORLD;
-    if (wmap_ui_routes[route_type].waypoints[a1].field_4 == a2) {
+    if (wmap_ui_routes[route_type].waypoints[waypoint_index].field_4 == travel_value) {
         return;
     }
 
-    wmap_ui_routes[route_type].waypoints[a1].field_4 = a2;
+    wmap_ui_routes[route_type].waypoints[waypoint_index].field_4 = travel_value;
 
     if (a3) {
         wmap_ui_travel_time_refresh();
@@ -3815,7 +3815,7 @@ void wmap_ui_waypoint_snap_to_known_area(WmapRouteWaypoint* wp)
 {
     int area;
 
-    area = area_get_nearest_known_area(wp->loc, player_get_local_pc_obj(), qword_66D850);
+    area = area_get_nearest_known_area(wp->loc, player_get_local_pc_obj(), wmap_ui_known_area_search_radius);
     if (area > 0) {
         wp->loc = area_get_location(area);
         wmap_ui_location_to_coords(wp->loc, &(wp->coords));
@@ -3843,7 +3843,7 @@ static void wmap_ui_draw_travel_time(void)
     int days;
     int index;
 
-    if (wmap_ui_window == TIG_WINDOW_HANDLE_INVALID || dword_64E7F4 == NULL) {
+    if (wmap_ui_window == TIG_WINDOW_HANDLE_INVALID || wmap_ui_coordinate_text_buffer == NULL) {
         return;
     }
 
@@ -3854,7 +3854,7 @@ static void wmap_ui_draw_travel_time(void)
     tig_window_blit_art(wmap_ui_window, &blit_info);
 
     // Town movement and teleport selection do not use world travel time.
-    if (wmap_ui_mode == WMAP_UI_MODE_TOWN || !dword_66D880 || wmap_ui_selecting || route->length == 0) {
+    if (wmap_ui_mode == WMAP_UI_MODE_TOWN || !wmap_ui_world_travel_available || wmap_ui_selecting || route->length == 0) {
         wmap_ui_travel_time_valid = false;
         return;
     }
@@ -3944,7 +3944,7 @@ bool wmap_ui_travel_arrival_apply(int64_t loc)
     }
 
     if (wmap_ui_teleport(loc)) {
-        wmap_ui_location_to_coords(loc, &(wmap_info->field_3C));
+        wmap_ui_location_to_coords(loc, &(wmap_info->player_coordinates));
     }
 
     if (wmap_info->refresh != NULL) {
@@ -4013,7 +4013,7 @@ void wmap_ui_mark_townmap(int64_t obj)
 
     object_examine(obj, OBJ_HANDLE_NULL, note.str);
     wmap_ui_note_bounds_update(&note);
-    note.field_10 = 0;
+    note.location = 0;
     note.flags = 0x2;
     note.type = WMAP_NOTE_TYPE_QUEST;
 
@@ -4044,12 +4044,12 @@ bool wmap_ui_bkg_process_callback(TimeEvent* timeevent)
     wmap_info = &(wmap_ui_mode_info[wmap_ui_mode]);
 
     if (wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].length > 0) {
-        v8 = wmap_info->field_3C;
+        v8 = wmap_info->player_coordinates;
 
-        v6 = wmap_info->field_3C;
+        v6 = wmap_info->player_coordinates;
         wmap_ui_world_route_step(&v6);
         wmap_ui_destination_to_nearest_area(&v6, &loc);
-        wmap_info->field_3C = v6;
+        wmap_info->player_coordinates = v6;
 
         wmap_ui_nearby_area_discover(player_get_local_pc_obj(), loc);
 
@@ -4073,13 +4073,13 @@ bool wmap_ui_bkg_process_callback(TimeEvent* timeevent)
             }
         }
 
-        wmap_ui_scroll_origin_set(&wmap_info->field_3C, false);
-        wmap_ui_compass_arrow_frame_set(wmap_ui_compass_arrow_frame_calc(&wmap_info->field_3C, &wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].waypoints[0].coords));
+        wmap_ui_scroll_origin_set(&wmap_info->player_coordinates, false);
+        wmap_ui_compass_arrow_frame_set(wmap_ui_compass_arrow_frame_calc(&wmap_info->player_coordinates, &wmap_ui_routes[WMAP_ROUTE_TYPE_WORLD].waypoints[0].coords));
         wmap_ui_travel_time_refresh();
         wmap_ui_mode_info[wmap_ui_mode].refresh();
     }
 
-    wmap_ui_direct_travel_hours_estimate(&v8, &(wmap_info->field_3C), &v9);
+    wmap_ui_direct_travel_hours_estimate(&v8, &(wmap_info->player_coordinates), &v9);
     if (!v0) {
         timeevent_inc_datetime(&v9);
     }
@@ -4112,11 +4112,11 @@ void wmap_ui_destination_to_nearest_area(WmapCoords* coords, int64_t* loc_ptr)
     int y;
     int area;
 
-    x = ((dword_66D6F8 - coords->x) << 6) + 32;
+    x = ((wmap_ui_sector_x_origin - coords->x) << 6) + 32;
     y = (coords->y << 6) + 32;
     *loc_ptr = location_make(x, y);
 
-    area = area_get_nearest_known_area(*loc_ptr, player_get_local_pc_obj(), qword_66D850);
+    area = area_get_nearest_known_area(*loc_ptr, player_get_local_pc_obj(), wmap_ui_known_area_search_radius);
     if (area > 0) {
         if (!area_is_known(player_get_local_pc_obj(), area)) {
             *loc_ptr = area_get_location(area);
@@ -4126,14 +4126,14 @@ void wmap_ui_destination_to_nearest_area(WmapCoords* coords, int64_t* loc_ptr)
 }
 
 // 0x564EE0
-int64_t wmap_ui_direct_travel_hours_estimate(WmapCoords* a1, WmapCoords* a2, DateTime* datetime)
+int64_t wmap_ui_direct_travel_hours_estimate(WmapCoords* from_coords, WmapCoords* to_coords, DateTime* datetime)
 {
     int64_t v1;
     int64_t v2;
     int v3;
 
-    wmap_ui_coords_to_location(a1, &v1);
-    wmap_ui_coords_to_location(a2, &v2);
+    wmap_ui_coords_to_location(from_coords, &v1);
+    wmap_ui_coords_to_location(to_coords, &v2);
     v3 = (int)(location_dist(v1, v2) / 64);
 
     if (datetime != NULL) {
@@ -4185,7 +4185,7 @@ void wmap_ui_town_notes_load(void)
         for (index = 0; index < wmap_ui_num_town_notes; index++) wmap_ui_note_buffer_free(&wmap_ui_town_notes[index]);
 
         if (tig_file_fread(&wmap_ui_num_town_notes, sizeof(wmap_ui_num_town_notes), 1, stream) == 1
-            && tig_file_fread(&(wmap_ui_mode_info[WMAP_UI_MODE_TOWN].field_194), sizeof(wmap_ui_mode_info[WMAP_UI_MODE_TOWN].field_194), 1, stream) == 1
+            && tig_file_fread(&(wmap_ui_mode_info[WMAP_UI_MODE_TOWN].next_note_id), sizeof(wmap_ui_mode_info[WMAP_UI_MODE_TOWN].next_note_id), 1, stream) == 1
             && wmap_ui_num_town_notes >= 0 && wmap_ui_num_town_notes <= SDL_arraysize(wmap_ui_town_notes)) {
             for (index = 0; index < wmap_ui_num_town_notes; index++) {
                 if (!wmap_ui_town_note_load(&(wmap_ui_town_notes[index]), stream)) {
@@ -4298,7 +4298,7 @@ void wmap_ui_overview_draw(void)
         return;
     }
 
-    if (!wmap_ui_tile_art_load(wmap_ui_mode_info[WMAP_UI_MODE_WORLD].str, &(wmap_ui_mode_info[WMAP_UI_MODE_WORLD].video_buffer), &(wmap_ui_mode_info[WMAP_UI_MODE_WORLD].field_2A8))) {
+    if (!wmap_ui_tile_art_load(wmap_ui_mode_info[WMAP_UI_MODE_WORLD].str, &(wmap_ui_mode_info[WMAP_UI_MODE_WORLD].video_buffer), &(wmap_ui_mode_info[WMAP_UI_MODE_WORLD].overview_image_rect))) {
         return;
     }
 
@@ -4310,7 +4310,7 @@ void wmap_ui_overview_draw(void)
 
     vb_blit_info.flags = 0;
     vb_blit_info.src_video_buffer = wmap_ui_mode_info[WMAP_UI_MODE_WORLD].video_buffer;
-    vb_blit_info.src_rect = &(wmap_ui_mode_info[WMAP_UI_MODE_WORLD].field_2A8);
+    vb_blit_info.src_rect = &(wmap_ui_mode_info[WMAP_UI_MODE_WORLD].overview_image_rect);
     vb_blit_info.dst_rect = &vb_dst_rect;
 
     if (tig_window_vbid_get(wmap_ui_window, &vb_blit_info.dst_video_buffer) != TIG_OK
@@ -4350,8 +4350,8 @@ void wmap_ui_overview_draw(void)
         tig_window_fill(wmap_ui_window, &tmp_rect, tig_color_make(255, 255, 0));
     }
 
-    tmp_rect.x = vb_dst_rect.x + wmap_ui_mode_info[WMAP_UI_MODE_WORLD].field_3C.x;
-    tmp_rect.y = vb_dst_rect.y + wmap_ui_mode_info[WMAP_UI_MODE_WORLD].field_3C.y + wmap_ui_window_frame.y;
+    tmp_rect.x = vb_dst_rect.x + wmap_ui_mode_info[WMAP_UI_MODE_WORLD].player_coordinates.x;
+    tmp_rect.y = vb_dst_rect.y + wmap_ui_mode_info[WMAP_UI_MODE_WORLD].player_coordinates.y + wmap_ui_window_frame.y;
     wmap_ui_overview_position_project_legacy(tmp_rect.x, tmp_rect.y, &coords);
     tmp_rect.x = vb_dst_rect.x + coords.x;
     tmp_rect.y = vb_dst_rect.y + coords.y;
@@ -4448,12 +4448,12 @@ void wmap_world_refresh_rect(TigRect* rect)
 
     tig_window_fill(wmap_ui_window, &tmp_rect, tig_color_make(0, 0, 0));
 
-    if (wmap_info->field_68[0] == '\0') {
+    if (wmap_info->tile_directory[0] == '\0') {
         return;
     }
 
-    offset_x = wmap_info->field_34;
-    offset_y = wmap_info->field_38;
+    offset_x = wmap_info->scroll_x;
+    offset_y = wmap_info->scroll_y;
 
     art_blit_info.flags = 0;
     art_blit_info.src_rect = &src_rect;
@@ -4554,8 +4554,8 @@ void wmap_world_refresh_rect(TigRect* rect)
         wmap_ui_note_icon_draw(WMAP_NOTE_TYPE_NEW_LOC, &coords, &tmp_rect, rect, wmap_info, false);
     }
 
-    offset_x = wmap_info->field_3C.x - wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].width / 2 - wmap_info->field_34;
-    offset_y = wmap_info->field_3C.y + wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].height / -2 - wmap_info->field_38;
+    offset_x = wmap_info->player_coordinates.x - wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].width / 2 - wmap_info->scroll_x;
+    offset_y = wmap_info->player_coordinates.y + wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].height / -2 - wmap_info->scroll_y;
 
     vb_dst_rect.x = offset_x + tmp_rect.x;
     vb_dst_rect.y = offset_y + tmp_rect.y;
@@ -4571,7 +4571,7 @@ void wmap_world_refresh_rect(TigRect* rect)
         art_blit_info.art_id = wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].art_id;
         art_blit_info.src_rect = &vb_dst_rect;
         art_blit_info.dst_rect = &dst_rect;
-        art_blit_info.dst_video_buffer = dword_64E7F4;
+        art_blit_info.dst_video_buffer = wmap_ui_coordinate_text_buffer;
         tig_window_blit_art(wmap_ui_window, &art_blit_info);
     }
 
@@ -4613,8 +4613,8 @@ void wmap_ui_note_blit(WmapNote* note, TigRect* a2, TigRect* a3)
     if ((note->flags & 0x4) != 0) {
         x = 0;
         y = 0;
-        dx = a2->x + note->coords.x - wmap_ui_mode_info[wmap_ui_mode].field_34;
-        dy = a2->y + note->coords.y - wmap_ui_mode_info[wmap_ui_mode].field_38;
+        dx = a2->x + note->coords.x - wmap_ui_mode_info[wmap_ui_mode].scroll_x;
+        dy = a2->y + note->coords.y - wmap_ui_mode_info[wmap_ui_mode].scroll_y;
 
         if (wmap_ui_mode == WMAP_UI_MODE_WORLD && note->id <= area_count()) {
             area_get_wm_offset(note->id, &x, &y);
@@ -4625,8 +4625,8 @@ void wmap_ui_note_blit(WmapNote* note, TigRect* a2, TigRect* a3)
 
         dst_rect.x = x;
         dst_rect.y = y;
-        dst_rect.width = note->field_18.width;
-        dst_rect.height = note->field_18.height;
+        dst_rect.width = note->bounds.width;
+        dst_rect.height = note->bounds.height;
 
         if (tig_rect_intersection(&dst_rect, a3, &dst_rect) == TIG_OK) {
             src_rect.x = dst_rect.x - x;
@@ -4655,8 +4655,8 @@ void wmap_note_vbid_lock(WmapNote* note)
         vb_create_info.flags = TIG_VIDEO_BUFFER_LOCKED | TIG_VIDEO_BUFFER_VIDEO_MEMORY;
         vb_create_info.width = wmap_note_type_icon_max_width + 203;
         vb_create_info.height = 50;
-        vb_create_info.background_color = dword_64E03C;
-        vb_create_info.color_key = dword_64E03C;
+        vb_create_info.background_color = wmap_ui_color_key;
+        vb_create_info.color_key = wmap_ui_color_key;
         if (tig_video_buffer_create(&vb_create_info, &(note->video_buffer)) != TIG_OK) {
             tig_debug_printf("wmap_note_vbid_lock: ERROR: tig_video_buffer_create failed!\n");
             exit(EXIT_SUCCESS); // FIXME: Should be EXIT_FAILURE.
@@ -4664,7 +4664,7 @@ void wmap_note_vbid_lock(WmapNote* note)
 
         note->flags |= 0x4;
 
-        wmap_ui_tile_buffer_draw(note->video_buffer, &(note->field_18));
+        wmap_ui_tile_buffer_draw(note->video_buffer, &(note->bounds));
         TigFont font = *(TigFont*)wmap_note_type_info[note->type].font;
         if ((note->flags & MAP_MARKER_COMPLETED) != 0) font.color = tig_color_make(128, 128, 128);
         char title[MAP_MARKER_TITLE_SIZE], body[MAP_MARKER_BODY_SIZE];
@@ -4705,8 +4705,8 @@ void wmap_ui_tile_buffer_draw(TigVideoBuffer* video_buffer, TigRect* rect)
     src_rect.width = 5;
     src_rect.height = 5;
 
-    offset_x = wmap_ui_mode_info[WMAP_UI_MODE_WORLD].field_34;
-    offset_y = wmap_ui_mode_info[WMAP_UI_MODE_WORLD].field_38;
+    offset_x = wmap_ui_mode_info[WMAP_UI_MODE_WORLD].scroll_x;
+    offset_y = wmap_ui_mode_info[WMAP_UI_MODE_WORLD].scroll_y;
 
     vb_blit_info.flags = TIG_VIDEO_BUFFER_BLIT_BLEND_ALPHA_CONST;
     vb_blit_info.src_rect = &src_rect;
@@ -4801,8 +4801,8 @@ void wmap_town_refresh_rect(TigRect* rect)
         rect = &(wmap_ui_mode_info[WMAP_UI_MODE_TOWN].rect);
     }
 
-    offset_x = wmap_ui_mode_info[WMAP_UI_MODE_TOWN].field_34;
-    offset_y = wmap_ui_mode_info[WMAP_UI_MODE_TOWN].field_38;
+    offset_x = wmap_ui_mode_info[WMAP_UI_MODE_TOWN].scroll_x;
+    offset_y = wmap_ui_mode_info[WMAP_UI_MODE_TOWN].scroll_y;
     bounds = wmap_ui_mode_info[WMAP_UI_MODE_TOWN].rect;
 
     vb_blit_info.flags = 0;
@@ -4897,8 +4897,8 @@ void wmap_town_refresh_rect(TigRect* rect)
         offset_x = wmap_ui_mode_info[WMAP_UI_MODE_TOWN].notes[note].coords.x;
         offset_y = wmap_ui_mode_info[WMAP_UI_MODE_TOWN].notes[note].coords.y;
 
-        offset_x -= wmap_note_type_info[WMAP_NOTE_TYPE_QUEST].width / 2 + wmap_ui_mode_info[WMAP_UI_MODE_TOWN].field_34;
-        offset_y -= wmap_note_type_info[WMAP_NOTE_TYPE_QUEST].height / 2 + wmap_ui_mode_info[WMAP_UI_MODE_TOWN].field_38;
+        offset_x -= wmap_note_type_info[WMAP_NOTE_TYPE_QUEST].width / 2 + wmap_ui_mode_info[WMAP_UI_MODE_TOWN].scroll_x;
+        offset_y -= wmap_note_type_info[WMAP_NOTE_TYPE_QUEST].height / 2 + wmap_ui_mode_info[WMAP_UI_MODE_TOWN].scroll_y;
 
         vb_dst_rect.x = bounds.x + offset_x;
         vb_dst_rect.y = bounds.y + offset_y;
@@ -4913,15 +4913,15 @@ void wmap_town_refresh_rect(TigRect* rect)
             art_blit_info.flags = 0;
             art_blit_info.art_id = wmap_note_type_info[WMAP_NOTE_TYPE_QUEST].art_id;
             art_blit_info.src_rect = &vb_dst_rect;
-            art_blit_info.dst_video_buffer = dword_64E7F4;
+            art_blit_info.dst_video_buffer = wmap_ui_coordinate_text_buffer;
             art_blit_info.dst_rect = &art_dst_rect;
             tig_window_blit_art(wmap_ui_window, &art_blit_info);
         }
     }
 
     wmap_ui_route_draw(&(wmap_ui_mode_info[WMAP_UI_MODE_TOWN]), &bounds, &dirty_rect);
-    offset_x = wmap_ui_mode_info[WMAP_UI_MODE_TOWN].field_3C.x - wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].width / 2 - wmap_ui_mode_info[WMAP_UI_MODE_TOWN].field_34;
-    offset_y = wmap_ui_mode_info[WMAP_UI_MODE_TOWN].field_3C.y - wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].height / 2 - wmap_ui_mode_info[WMAP_UI_MODE_TOWN].field_38;
+    offset_x = wmap_ui_mode_info[WMAP_UI_MODE_TOWN].player_coordinates.x - wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].width / 2 - wmap_ui_mode_info[WMAP_UI_MODE_TOWN].scroll_x;
+    offset_y = wmap_ui_mode_info[WMAP_UI_MODE_TOWN].player_coordinates.y - wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].height / 2 - wmap_ui_mode_info[WMAP_UI_MODE_TOWN].scroll_y;
 
     vb_dst_rect.x = bounds.x + offset_x;
     vb_dst_rect.y = bounds.y + offset_y;
@@ -4936,7 +4936,7 @@ void wmap_town_refresh_rect(TigRect* rect)
         art_blit_info.flags = 0;
         art_blit_info.art_id = wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].art_id;
         art_blit_info.src_rect = &vb_dst_rect;
-        art_blit_info.dst_video_buffer = dword_64E7F4;
+        art_blit_info.dst_video_buffer = wmap_ui_coordinate_text_buffer;
         art_blit_info.dst_rect = &art_dst_rect;
         tig_window_blit_art(wmap_ui_window, &art_blit_info);
     }
@@ -4946,8 +4946,8 @@ void wmap_town_refresh_rect(TigRect* rect)
     while (node != NULL) {
         loc = obj_field_int64_get(node->obj, OBJ_F_LOCATION);
         townmap_loc_to_coords(&wmap_ui_tmi, loc, &offset_x, &offset_y);
-        offset_x -= wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].width / 2 + wmap_ui_mode_info[WMAP_UI_MODE_TOWN].field_34;
-        offset_y -= wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].height / 2 + wmap_ui_mode_info[WMAP_UI_MODE_TOWN].field_38;
+        offset_x -= wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].width / 2 + wmap_ui_mode_info[WMAP_UI_MODE_TOWN].scroll_x;
+        offset_y -= wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].height / 2 + wmap_ui_mode_info[WMAP_UI_MODE_TOWN].scroll_y;
 
         vb_dst_rect.x = bounds.x + offset_x;
         vb_dst_rect.y = bounds.y + offset_y;
@@ -4962,7 +4962,7 @@ void wmap_town_refresh_rect(TigRect* rect)
             art_blit_info.flags = 0;
             art_blit_info.art_id = wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].art_id;
             art_blit_info.src_rect = &vb_dst_rect;
-            art_blit_info.dst_video_buffer = dword_64E7F4;
+            art_blit_info.dst_video_buffer = wmap_ui_coordinate_text_buffer;
             art_blit_info.dst_rect = &art_dst_rect;
             tig_window_blit_art(wmap_ui_window, &art_blit_info);
         }
@@ -4978,8 +4978,8 @@ void wmap_town_refresh_rect(TigRect* rect)
             if (!player_is_local_pc_obj(node->obj)) {
                 loc = obj_field_int64_get(node->obj, OBJ_F_LOCATION);
                 townmap_loc_to_coords(&wmap_ui_tmi, loc, &offset_x, &offset_y);
-                offset_x -= wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].width / 2 + wmap_ui_mode_info[WMAP_UI_MODE_TOWN].field_34;
-                offset_y -= wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].height / 2 + wmap_ui_mode_info[WMAP_UI_MODE_TOWN].field_38;
+                offset_x -= wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].width / 2 + wmap_ui_mode_info[WMAP_UI_MODE_TOWN].scroll_x;
+                offset_y -= wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].height / 2 + wmap_ui_mode_info[WMAP_UI_MODE_TOWN].scroll_y;
 
                 vb_dst_rect.x = bounds.x + offset_x;
                 vb_dst_rect.y = bounds.y + offset_y;
@@ -4994,7 +4994,7 @@ void wmap_town_refresh_rect(TigRect* rect)
                     art_blit_info.flags = 0;
                     art_blit_info.art_id = wmap_note_type_info[WMAP_NOTE_TYPE_CROSS].art_id;
                     art_blit_info.src_rect = &vb_dst_rect;
-                    art_blit_info.dst_video_buffer = dword_64E7F4;
+                    art_blit_info.dst_video_buffer = wmap_ui_coordinate_text_buffer;
                     art_blit_info.dst_rect = &art_dst_rect;
                     tig_window_blit_art(wmap_ui_window, &art_blit_info);
                 }
@@ -5019,7 +5019,7 @@ void wmap_town_refresh_rect(TigRect* rect)
 }
 
 // 0x566A80
-void wmap_ui_route_draw(WmapInfo* a1, TigRect* a2, TigRect* a3)
+void wmap_ui_route_draw(WmapInfo* map_info, TigRect* a2, TigRect* a3)
 {
     WmapRouteType route_type;
     TigArtBlitInfo art_blit_info;
@@ -5048,8 +5048,8 @@ void wmap_ui_route_draw(WmapInfo* a1, TigRect* a2, TigRect* a3)
     line_style_info.style = TIG_LINE_STYLE_DASHED;
     tig_draw_set_line_style(&line_style_info);
 
-    x1 = a2->x + a1->field_3C.x - a1->field_34;
-    y1 = a2->y + a1->field_3C.y - a1->field_38;
+    x1 = a2->x + map_info->player_coordinates.x - map_info->scroll_x;
+    y1 = a2->y + map_info->player_coordinates.y - map_info->scroll_y;
 
     src_rect.x = 0;
     src_rect.y = 0;
@@ -5059,11 +5059,11 @@ void wmap_ui_route_draw(WmapInfo* a1, TigRect* a2, TigRect* a3)
     art_blit_info.flags = 0;
     art_blit_info.art_id = wmap_note_type_info[WMAP_NOTE_TYPE_NOTE].art_id;
     art_blit_info.src_rect = &src_rect;
-    art_blit_info.dst_video_buffer = dword_64E7F4;
+    art_blit_info.dst_video_buffer = wmap_ui_coordinate_text_buffer;
 
     for (index = 0; index < wmap_ui_routes[route_type].length; index++) {
-        x2 = a2->x + wmap_ui_routes[route_type].waypoints[index].coords.x - a1->field_34;
-        y2 = a2->y + wmap_ui_routes[route_type].waypoints[index].coords.y - a1->field_38;
+        x2 = a2->x + wmap_ui_routes[route_type].waypoints[index].coords.x - map_info->scroll_x;
+        y2 = a2->y + wmap_ui_routes[route_type].waypoints[index].coords.y - map_info->scroll_y;
 
         line.x1 = x1;
         line.y1 = y1;
@@ -5073,7 +5073,7 @@ void wmap_ui_route_draw(WmapInfo* a1, TigRect* a2, TigRect* a3)
         if (tig_line_intersection(a3, &line) == TIG_OK) {
             tig_window_line(wmap_ui_window,
                 &line,
-                index == wmap_ui_selected_waypoint ? dword_64E034 : dword_65E974);
+                index == wmap_ui_selected_waypoint ? wmap_ui_selected_waypoint_color : wmap_ui_waypoint_color);
         }
 
         src_rect.x = x2 - wmap_note_type_info[WMAP_NOTE_TYPE_WAYPOINT].width / 2;
@@ -5101,7 +5101,7 @@ void wmap_ui_route_draw(WmapInfo* a1, TigRect* a2, TigRect* a3)
 void wmap_ui_get_current_location(int64_t* loc_ptr)
 {
     if (wmap_ui_created && wmap_ui_state == WMAP_UI_STATE_MOVING) {
-        wmap_ui_coords_to_location(&wmap_ui_mode_info[wmap_ui_mode].field_3C, loc_ptr);
+        wmap_ui_coords_to_location(&wmap_ui_mode_info[wmap_ui_mode].player_coordinates, loc_ptr);
     } else {
         *loc_ptr = obj_field_int64_get(player_get_local_pc_obj(), OBJ_F_LOCATION);
     }
@@ -5116,8 +5116,8 @@ void wmap_ui_note_icon_draw(int type, WmapCoords* coords, TigRect* a3, TigRect* 
     TigRect src_rect;
     TigRect dst_rect;
 
-    dx = coords->x - wmap_note_type_info[type].width / 2 - wmap_info->field_34;
-    dy = coords->y - wmap_note_type_info[type].height / 2 - wmap_info->field_38;
+    dx = coords->x - wmap_note_type_info[type].width / 2 - wmap_info->scroll_x;
+    dy = coords->y - wmap_note_type_info[type].height / 2 - wmap_info->scroll_y;
 
     src_rect.x = a3->x + dx;
     src_rect.y = a3->y + dy;
@@ -5132,7 +5132,7 @@ void wmap_ui_note_icon_draw(int type, WmapCoords* coords, TigRect* a3, TigRect* 
         art_blit_info.flags = completed ? TIG_ART_BLT_BLEND_COLOR_CONST : 0;
         art_blit_info.color = tig_color_make(128, 128, 128);
         art_blit_info.art_id = wmap_note_type_info[type].art_id;
-        art_blit_info.dst_video_buffer = dword_64E7F4;
+        art_blit_info.dst_video_buffer = wmap_ui_coordinate_text_buffer;
         art_blit_info.src_rect = &src_rect;
         art_blit_info.dst_rect = &dst_rect;
         tig_window_blit_art(wmap_ui_window, &art_blit_info);
@@ -5148,26 +5148,26 @@ void wmap_ui_scroll_by(int dx, int dy)
 
     wmap_info = &(wmap_ui_mode_info[wmap_ui_mode]);
 
-    offset_x = wmap_info->field_34;
-    offset_y = wmap_info->field_38;
+    offset_x = wmap_info->scroll_x;
+    offset_y = wmap_info->scroll_y;
 
-    wmap_info->field_34 += dx;
-    wmap_info->field_38 += dy;
+    wmap_info->scroll_x += dx;
+    wmap_info->scroll_y += dy;
 
-    if (wmap_info->field_34 < 0) {
-        wmap_info->field_34 = 0;
-    } else if (wmap_info->field_34 > wmap_info->field_60) {
-        wmap_info->field_34 = wmap_info->field_60;
+    if (wmap_info->scroll_x < 0) {
+        wmap_info->scroll_x = 0;
+    } else if (wmap_info->scroll_x > wmap_info->scroll_x_max) {
+        wmap_info->scroll_x = wmap_info->scroll_x_max;
     }
 
-    if (wmap_info->field_38 < 0) {
-        wmap_info->field_38 = 0;
-    } else if (wmap_info->field_38 > wmap_info->field_64) {
-        wmap_info->field_38 = wmap_info->field_64;
+    if (wmap_info->scroll_y < 0) {
+        wmap_info->scroll_y = 0;
+    } else if (wmap_info->scroll_y > wmap_info->scroll_y_max) {
+        wmap_info->scroll_y = wmap_info->scroll_y_max;
     }
 
-    dx = wmap_info->field_34 - offset_x;
-    dy = wmap_info->field_38 - offset_y;
+    dx = wmap_info->scroll_x - offset_x;
+    dy = wmap_info->scroll_y - offset_y;
     if (dx == 0 && dy == 0) {
         return;
     }
@@ -5342,7 +5342,7 @@ static void wmap_marker_open(WmapNote* note, WmapCoords coords, int mouse_x, int
 static void wmap_marker_refresh(void)
 {
     if (wmap_ui_mode == WMAP_UI_MODE_TOWN) wmap_ui_town_notes_save();
-    wmap_ui_mode_info[wmap_ui_mode].field_198 = -1;
+    wmap_ui_mode_info[wmap_ui_mode].hovered_note_id = -1;
     wmap_ui_mode_info[wmap_ui_mode].refresh();
     intgame_message_window_clear();
 }
@@ -5423,9 +5423,9 @@ static bool wmap_marker_input(TigMessage* msg)
         hrp_apply(&centered, GRAVITY_CENTER_HORIZONTAL | GRAVITY_CENTER_VERTICAL);
         int x = msg->data.mouse.x - centered.x, y = msg->data.mouse.y - centered.y;
         WmapInfo* info = &wmap_ui_mode_info[wmap_ui_mode];
-        if (ui_search_bar_contains(&info->field_14, x, y)) {
+        if (ui_search_bar_contains(&info->interactive_rect, x, y)) {
             WmapCoords coords;
-            info->field_2BC(x, y, &coords);
+            info->screen_to_map_coordinates(x, y, &coords);
             wmap_marker_swallow_event = TIG_MESSAGE_MOUSE_RIGHT_BUTTON_UP;
             WmapNote* note = NULL;
             for (int i = *info->num_notes - 1; i >= 0; i--) {

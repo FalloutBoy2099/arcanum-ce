@@ -9,9 +9,9 @@
 #include "game/trap.h"
 #include <tig/performance.h>
 static int path_cost_tbl[4096], path_backtrack_tbl[4096];
-static tig_timestamp_t dword_5DE5F8;
-static int dword_5DE5FC;
-static tig_duration_t dword_5DE600;
+static tig_timestamp_t path_budget_window_start;
+static int path_budget_search_count;
+static tig_duration_t path_budget_elapsed_milliseconds;
 static int path_limit=10, path_time_limit=250;
 static int reference_path_dist(int src, int dst, int width);
 static int reference_rotation(int a1, int a2, int a3);
@@ -34,22 +34,22 @@ int reference_astar(PathCreateInfo* path_create_info)
     int best_estimated_cost;
 
     if (obj_field_int32_get(path_create_info->obj, OBJ_F_TYPE) == OBJ_TYPE_NPC) {
-        if (dword_5DE5F8 == 0
-            || tig_timer_elapsed(dword_5DE5F8) >= 1000) {
-            tig_timer_now(&dword_5DE5F8);
-            dword_5DE5FC = 0;
-            dword_5DE600 = 0;
+        if (path_budget_window_start == 0
+            || tig_timer_elapsed(path_budget_window_start) >= 1000) {
+            tig_timer_now(&path_budget_window_start);
+            path_budget_search_count = 0;
+            path_budget_elapsed_milliseconds = 0;
         }
 
-        if (dword_5DE5FC > path_limit) {
+        if (path_budget_search_count > path_limit) {
             return 0;
         }
 
-        if (dword_5DE600 > path_time_limit) {
+        if (path_budget_elapsed_milliseconds > path_time_limit) {
             return 0;
         }
 
-        dword_5DE5FC++;
+        path_budget_search_count++;
 
         tig_timer_now(&timestamp);
     } else {
@@ -61,7 +61,7 @@ int reference_astar(PathCreateInfo* path_create_info)
     to_x = LOCATION_GET_X(path_create_info->to);
     to_y = LOCATION_GET_Y(path_create_info->to);
 
-    if ((path_create_info->flags & PATH_FLAG_0x0008) != 0) {
+    if ((path_create_info->flags & PATH_FLAG_IGNORE_TILE_BLOCKING) != 0) {
         v1 = true;
     }
 
@@ -127,7 +127,7 @@ int reference_astar(PathCreateInfo* path_create_info)
         // If no node has been found, path is not reachable.
         if (current_index == -1) {
             if (timestamp != 0) {
-                dword_5DE600 += tig_timer_elapsed(timestamp);
+                path_budget_elapsed_milliseconds += tig_timer_elapsed(timestamp);
             }
 
             return 0;
@@ -162,7 +162,7 @@ int reference_astar(PathCreateInfo* path_create_info)
             if ((path_create_info->flags & PATH_FLAG_IGNORE_BLOCKERS) == 0) {
                 if (adjacent_loc != path_create_info->to
                     || (path_create_info->flags & PATH_FLAG_STOP_BEFORE_DESTINATION) == 0) {
-                    if ((path_create_info->flags & PATH_FLAG_0x0008) == 0
+                    if ((path_create_info->flags & PATH_FLAG_IGNORE_TILE_BLOCKING) == 0
                         && tile_is_blocking(adjacent_loc, v1)) {
                         path_cost_tbl[neighbor_index] = -32768;
                         continue;
@@ -254,7 +254,7 @@ int reference_astar(PathCreateInfo* path_create_info)
     // If the number of steps exceeds allowed maximum, there is no valid path.
     if (step > path_create_info->max_rotations) {
         if (timestamp != 0) {
-            dword_5DE600 += tig_timer_elapsed(timestamp);
+            path_budget_elapsed_milliseconds += tig_timer_elapsed(timestamp);
         }
 
         return 0;
@@ -271,7 +271,7 @@ int reference_astar(PathCreateInfo* path_create_info)
     }
 
     if (timestamp != 0) {
-        dword_5DE600 += tig_timer_elapsed(timestamp);
+        path_budget_elapsed_milliseconds += tig_timer_elapsed(timestamp);
     }
 
     // Return the number of steps in the computed path.

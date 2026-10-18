@@ -26,7 +26,7 @@ static int path_make_local_astar(PathCreateInfo* path_create_info);
 static int path_dist(int src, int dst, int width);
 static int path_grid_direction_between_indices(int a1, int a2, int a3);
 static void path_straight_sample_offset(int64_t x, int64_t y, StraightPathState* a5);
-static void path_line_points_enumerate(int64_t from_x, int64_t from_y, int64_t to_x, int64_t to_y, StraightPathState* a5, void (*fn)(int64_t, int64_t, StraightPathState*));
+static void path_line_points_enumerate(int64_t from_x, int64_t from_y, int64_t to_x, int64_t to_y, StraightPathState* state, void (*fn)(int64_t, int64_t, StraightPathState*));
 static int path_make_straight_offsets(int64_t from, int64_t to, int8_t* rotations);
 static int path_worldmap_destination_adjust(WmapPathInfo* path_info);
 static int path_worldmap_astar(WmapPathInfo* path_info);
@@ -55,13 +55,13 @@ static int wmap_path_backtrack_tbl[756];
 static int wmap_path_cost_tbl[256];
 
 // 0x5DE5F8
-static tig_timestamp_t dword_5DE5F8;
+static tig_timestamp_t path_budget_window_start;
 
 // 0x5DE5FC
-static int dword_5DE5FC;
+static int path_budget_search_count;
 
 // 0x5DE600
-static tig_duration_t dword_5DE600;
+static tig_duration_t path_budget_elapsed_milliseconds;
 
 // 0x41F3C0
 static int path_make_impl(PathCreateInfo* path_create_info);
@@ -89,13 +89,13 @@ static int path_make_impl(PathCreateInfo* path_create_info)
         return path_try_nearby_destination(path_create_info);
     }
 
-    path_create_info->field_24 = 0;
+    path_create_info->range_or_partial_path_length = 0;
 
     if (path_create_info->from == path_create_info->to) {
         return 0;
     }
 
-    if ((path_create_info->flags & PATH_FLAG_0x0008) != 0) {
+    if ((path_create_info->flags & PATH_FLAG_IGNORE_TILE_BLOCKING) != 0) {
         v1 = true;
     }
 
@@ -108,7 +108,7 @@ static int path_make_impl(PathCreateInfo* path_create_info)
     }
 
     if ((path_create_info->flags & (PATH_FLAG_IGNORE_BLOCKERS | PATH_FLAG_STOP_BEFORE_DESTINATION)) == 0) {
-        if ((path_create_info->flags & PATH_FLAG_0x0008) == 0
+        if ((path_create_info->flags & PATH_FLAG_IGNORE_TILE_BLOCKING) == 0
             && tile_is_blocking(path_create_info->to, v1)) {
             return 0;
         }
@@ -192,7 +192,7 @@ int path_try_nearby_destination(PathCreateInfo* path_create_info)
         return 0;
     }
 
-    range = path_create_info->field_24 - (int)dist;
+    range = path_create_info->range_or_partial_path_length - (int)dist;
     base_rot = location_rot(path_create_info->from, path_create_info->to);
 
     v2 = 0;
@@ -206,8 +206,8 @@ int path_try_nearby_destination(PathCreateInfo* path_create_info)
             break;
         }
 
-        if (v2 < path_create_info->field_24) {
-            v2 = path_create_info->field_24;
+        if (v2 < path_create_info->range_or_partial_path_length) {
+            v2 = path_create_info->range_or_partial_path_length;
             loc = path_create_info->to;
         }
     }
@@ -238,7 +238,7 @@ int path_make_direct_local(PathCreateInfo* path_create_info)
         return 0;
     }
 
-    if ((path_create_info->flags & PATH_FLAG_0x0008) != 0) {
+    if ((path_create_info->flags & PATH_FLAG_IGNORE_TILE_BLOCKING) != 0) {
         v1 = true;
     }
 
@@ -257,7 +257,7 @@ int path_make_direct_local(PathCreateInfo* path_create_info)
         if ((path_create_info->flags & PATH_FLAG_IGNORE_BLOCKERS) == 0) {
             if (adjacent_loc != path_create_info->to
                 || (path_create_info->flags & PATH_FLAG_STOP_BEFORE_DESTINATION) == 0) {
-                if ((path_create_info->flags & PATH_FLAG_0x0008) == 0
+                if ((path_create_info->flags & PATH_FLAG_IGNORE_TILE_BLOCKING) == 0
                     && tile_is_blocking(adjacent_loc, v1)) {
                     break;
                 }
@@ -287,7 +287,7 @@ int path_make_direct_local(PathCreateInfo* path_create_info)
     }
 
     if (loc != path_create_info->to) {
-        path_create_info->field_24 = idx;
+        path_create_info->range_or_partial_path_length = idx;
         return 0;
     }
 
@@ -318,22 +318,22 @@ int path_make_local_astar(PathCreateInfo* path_create_info)
     uint64_t counted_comparisons = 0;
 
     if (obj_field_int32_get(path_create_info->obj, OBJ_F_TYPE) == OBJ_TYPE_NPC) {
-        if (dword_5DE5F8 == 0
-            || tig_timer_elapsed(dword_5DE5F8) >= 1000) {
-            tig_timer_now(&dword_5DE5F8);
-            dword_5DE5FC = 0;
-            dword_5DE600 = 0;
+        if (path_budget_window_start == 0
+            || tig_timer_elapsed(path_budget_window_start) >= 1000) {
+            tig_timer_now(&path_budget_window_start);
+            path_budget_search_count = 0;
+            path_budget_elapsed_milliseconds = 0;
         }
 
-        if (dword_5DE5FC >= path_limit) {
+        if (path_budget_search_count >= path_limit) {
             return 0;
         }
 
-        if (dword_5DE600 >= path_time_limit) {
+        if (path_budget_elapsed_milliseconds >= path_time_limit) {
             return 0;
         }
 
-        dword_5DE5FC++;
+        path_budget_search_count++;
 
         tig_timer_now(&timestamp);
     } else {
@@ -345,7 +345,7 @@ int path_make_local_astar(PathCreateInfo* path_create_info)
     to_x = LOCATION_GET_X(path_create_info->to);
     to_y = LOCATION_GET_Y(path_create_info->to);
 
-    if ((path_create_info->flags & PATH_FLAG_0x0008) != 0) {
+    if ((path_create_info->flags & PATH_FLAG_IGNORE_TILE_BLOCKING) != 0) {
         v1 = true;
     }
 
@@ -398,7 +398,7 @@ int path_make_local_astar(PathCreateInfo* path_create_info)
         // If no node has been found, path is not reachable.
         if (current_index == -1) {
             if (timestamp != 0) {
-                dword_5DE600 += tig_timer_elapsed(timestamp);
+                path_budget_elapsed_milliseconds += tig_timer_elapsed(timestamp);
             }
 
             return 0;
@@ -433,7 +433,7 @@ int path_make_local_astar(PathCreateInfo* path_create_info)
             if ((path_create_info->flags & PATH_FLAG_IGNORE_BLOCKERS) == 0) {
                 if (adjacent_loc != path_create_info->to
                     || (path_create_info->flags & PATH_FLAG_STOP_BEFORE_DESTINATION) == 0) {
-                    if ((path_create_info->flags & PATH_FLAG_0x0008) == 0
+                    if ((path_create_info->flags & PATH_FLAG_IGNORE_TILE_BLOCKING) == 0
                         && tile_is_blocking(adjacent_loc, v1)) {
                         path_cost_tbl[neighbor_index] = -32768;
                         path_open_set_remove(&path_open_set, neighbor_index);
@@ -534,7 +534,7 @@ int path_make_local_astar(PathCreateInfo* path_create_info)
     // If the number of steps exceeds allowed maximum, there is no valid path.
     if (step > path_create_info->max_rotations) {
         if (timestamp != 0) {
-            dword_5DE600 += tig_timer_elapsed(timestamp);
+            path_budget_elapsed_milliseconds += tig_timer_elapsed(timestamp);
         }
 
         return 0;
@@ -551,7 +551,7 @@ int path_make_local_astar(PathCreateInfo* path_create_info)
     }
 
     if (timestamp != 0) {
-        dword_5DE600 += tig_timer_elapsed(timestamp);
+        path_budget_elapsed_milliseconds += tig_timer_elapsed(timestamp);
     }
 
     // Return the number of steps in the computed path.
@@ -685,7 +685,7 @@ void path_straight_sample_offset(int64_t x, int64_t y, StraightPathState* state)
 }
 
 // 0x4203B0
-void path_line_points_enumerate(int64_t from_x, int64_t from_y, int64_t to_x, int64_t to_y, StraightPathState* a5, void (*fn)(int64_t, int64_t, StraightPathState*))
+void path_line_points_enumerate(int64_t from_x, int64_t from_y, int64_t to_x, int64_t to_y, StraightPathState* state, void (*fn)(int64_t, int64_t, StraightPathState*))
 {
     int64_t dx;
     int64_t dy;
@@ -719,7 +719,7 @@ void path_line_points_enumerate(int64_t from_x, int64_t from_y, int64_t to_x, in
 
     if (ddx <= ddy) {
         err = ddx - ddy / 2;
-        fn(from_x, from_y, a5);
+        fn(from_x, from_y, state);
         while (from_y != to_y) {
             if (err >= 0) {
                 from_x += sx;
@@ -728,11 +728,11 @@ void path_line_points_enumerate(int64_t from_x, int64_t from_y, int64_t to_x, in
 
             err += ddx;
             from_y += sy;
-            fn(from_x, from_y, a5);
+            fn(from_x, from_y, state);
         }
     } else {
         err = ddy - ddx / 2;
-        fn(from_x, from_y, a5);
+        fn(from_x, from_y, state);
         while (from_x != to_x) {
             if (err >= 0) {
                 from_y += sy;
@@ -741,7 +741,7 @@ void path_line_points_enumerate(int64_t from_x, int64_t from_y, int64_t to_x, in
 
             err += ddy;
             from_x += sx;
-            fn(from_x, from_y, a5);
+            fn(from_x, from_y, state);
         }
     }
 }
@@ -827,7 +827,7 @@ int wmap_path_make(WmapPathInfo* path_info)
     }
 
     if (sec != path_info->to) {
-        path_info->field_18 = idx;
+        path_info->partial_path_length = idx;
         return 0;
     }
 

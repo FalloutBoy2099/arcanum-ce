@@ -181,7 +181,7 @@ static void art_header_frame_data_free(TigArtHeader* hdr);
 static bool art_read_header(TigArtHeader* hdr, TigFile* stream);
 
 // 0x5BE880
-static int dword_5BE880[16] = {
+static int tig_art_canonical_tile_transition_masks[16] = {
     0,
     1,
     8,
@@ -201,7 +201,7 @@ static int dword_5BE880[16] = {
 };
 
 // 0x5BE8C0
-static int dword_5BE8C0[16] = {
+static int tig_art_mirrored_tile_transition_masks[16] = {
     0,
     1,
     2,
@@ -221,7 +221,7 @@ static int dword_5BE8C0[16] = {
 };
 
 // 0x5BE900
-static int dword_5BE900[32] = {
+static int tig_art_critter_body_type_properties[32] = {
     0,
     0,
     1,
@@ -1492,7 +1492,7 @@ int tig_art_tile_id_transition_mask_get(tig_art_id_t art_id)
 
     int v1 = (art_id >> 12) & 0xF;
     if ((tig_art_id_flags_get(art_id) & 1) != 0) {
-        v1 = dword_5BE8C0[v1];
+        v1 = tig_art_mirrored_tile_transition_masks[v1];
     }
     return v1;
 }
@@ -1509,10 +1509,10 @@ tig_art_id_t tig_art_tile_id_transition_mask_set(tig_art_id_t art_id, int value)
         value = 0;
     }
 
-    if (value != dword_5BE880[value]) {
+    if (value != tig_art_canonical_tile_transition_masks[value]) {
         if (tig_art_tile_id_flippable_get(art_id)) {
             art_id = tig_art_id_flags_set(art_id, tig_art_id_flags_get(art_id) | 1);
-            value = dword_5BE880[value];
+            value = tig_art_canonical_tile_transition_masks[value];
         }
     }
 
@@ -1531,7 +1531,7 @@ int tig_art_tile_id_variant_get(tig_art_id_t art_id)
 
     int v1 = (art_id >> 9) & 7;
     int v2 = tig_art_tile_id_transition_mask_get(art_id);
-    if (dword_5BE8C0[v2] == dword_5BE880[v2]) {
+    if (tig_art_mirrored_tile_transition_masks[v2] == tig_art_canonical_tile_transition_masks[v2]) {
         if ((tig_art_id_flags_get(art_id) & 1) != 0) {
             v1 += 8;
         }
@@ -1556,12 +1556,12 @@ tig_art_id_t tig_art_tile_id_variant_set(tig_art_id_t art_id, int value)
 
     v1 = tig_art_tile_id_transition_mask_get(art_id);
     if (value < 8) {
-        if (dword_5BE8C0[v1] == dword_5BE880[v1]) {
+        if (tig_art_mirrored_tile_transition_masks[v1] == tig_art_canonical_tile_transition_masks[v1]) {
             art_id = tig_art_id_flags_set(art_id, tig_art_id_flags_get(art_id) & ~1);
         }
         art_id = (art_id & ~0xE00) | (value << 9);
     } else {
-        if (dword_5BE8C0[v1] == dword_5BE880[v1]) {
+        if (tig_art_mirrored_tile_transition_masks[v1] == tig_art_canonical_tile_transition_masks[v1]) {
             if (tig_art_tile_id_flippable_get(art_id)) {
                 art_id = tig_art_id_flags_set(art_id, tig_art_id_flags_get(art_id) | 1);
             }
@@ -1895,9 +1895,9 @@ int tig_art_monster_id_specie_get(tig_art_id_t art_id)
 }
 
 // 0x503F50
-int tig_art_critter_body_type_property_get(int a1)
+int tig_art_critter_body_type_property_get(int body_type)
 {
-    return dword_5BE900[a1];
+    return tig_art_critter_body_type_properties[body_type];
 }
 
 // 0x503F60

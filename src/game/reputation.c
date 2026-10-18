@@ -53,7 +53,7 @@ static bool reputation_parse(const char* path, int start, int end);
  *
  * 0x5B69C0
  */
-static const char* off_5B69C0[GAME_RP_COUNT] = {
+static const char* reputation_mes_filenames[GAME_RP_COUNT] = {
     /* GAME_RP_NPC_M2M */ "game_rp_npc_m2m",
     /* GAME_RP_NPC_M2F */ "game_rp_npc_m2f",
     /* GAME_RP_NPC_F2F */ "game_rp_npc_f2f",
@@ -82,7 +82,7 @@ static ReputationInfo* reputations;
 static mes_file_handle_t* reputation_mes_files;
 
 // 0x5FC8B8
-static int dword_5FC8B8[1000];
+static int reputation_candidate_indices[1000];
 
 /**
  * Called when the game is initialized.
@@ -138,7 +138,7 @@ bool reputation_mod_load(void)
 
     // Load reputation-specific greetings.
     for (index = 0; index < GAME_RP_COUNT; index++) {
-        snprintf(path, sizeof(path), "mes\\%s.mes", off_5B69C0[index]);
+        snprintf(path, sizeof(path), "mes\\%s.mes", reputation_mes_filenames[index]);
         mes_load(path, &(reputation_mes_files[index]));
     }
 
@@ -569,7 +569,7 @@ int reputation_pick(int64_t pc_obj, int64_t npc_obj)
                 // hatred, positive adjustment - love, amiable, courteous).
                 if ((effect->adj < 0 && reaction_type > REACTION_NEUTRAL)
                     || (effect->adj > 0 && reaction_type < REACTION_NEUTRAL)) {
-                    dword_5FC8B8[selected_cnt++] = idx;
+                    reputation_candidate_indices[selected_cnt++] = idx;
                     break;
                 }
             }
@@ -578,7 +578,7 @@ int reputation_pick(int64_t pc_obj, int64_t npc_obj)
 
     // Randomly select one of the eligible reputations.
     return selected_cnt > 0
-        ? rep_idx_to_num(dword_5FC8B8[random_between(0, selected_cnt - 1)])
+        ? rep_idx_to_num(reputation_candidate_indices[random_between(0, selected_cnt - 1)])
         : 0;
 }
 

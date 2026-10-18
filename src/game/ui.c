@@ -155,10 +155,10 @@ void ui_set_skill_training(int64_t obj, int skill, int training)
 }
 
 // 0x460410
-void ui_dialog_script_and_greeting(int64_t a1, int64_t a2)
+void ui_dialog_script_and_greeting(int64_t pc_obj, int64_t npc_obj)
 {
     if (ui_callbacks.dialog_script_and_greeting != NULL) {
-        ui_callbacks.dialog_script_and_greeting(a1, a2);
+        ui_callbacks.dialog_script_and_greeting(pc_obj, npc_obj);
     }
 }
 
@@ -207,10 +207,10 @@ void ui_spell_maintain_refresh(void)
 }
 
 // 0x4604F0
-void ui_object_examine_and_select(int64_t a1, int64_t a2)
+void ui_object_examine_and_select(int64_t obj, int64_t observer_obj)
 {
     if (ui_callbacks.object_examine_and_select != NULL) {
-        ui_callbacks.object_examine_and_select(a1, a2);
+        ui_callbacks.object_examine_and_select(obj, observer_obj);
     }
 }
 
@@ -231,26 +231,26 @@ void ui_end_game(void)
 }
 
 // 0x460540
-void ui_hotkey_slot_clear(int a1)
+void ui_hotkey_slot_clear(int slot)
 {
     if (ui_callbacks.hotkey_slot_clear != NULL) {
-        ui_callbacks.hotkey_slot_clear(a1);
+        ui_callbacks.hotkey_slot_clear(slot);
     }
 }
 
 // 0x460560
-void ui_item_location_assign(int64_t a1, int64_t a2, int a3)
+void ui_item_location_assign(int64_t item_obj, int64_t owner_obj, int inventory_location)
 {
     if (ui_callbacks.item_location_assign != NULL) {
-        ui_callbacks.item_location_assign(a1, a2, a3);
+        ui_callbacks.item_location_assign(item_obj, owner_obj, inventory_location);
     }
 }
 
 // 0x460590
-int ui_item_hotkey_bind(int64_t a1, int a2)
+int ui_item_hotkey_bind(int64_t item_obj, int slot)
 {
     if (ui_callbacks.item_hotkey_bind != NULL) {
-        return ui_callbacks.item_hotkey_bind(a1, a2);
+        return ui_callbacks.item_hotkey_bind(item_obj, slot);
     } else {
         return 0;
     }
@@ -315,10 +315,10 @@ void ui_message_schedule_delayed(UiMessage* ui_message, unsigned int millisecond
 }
 
 // 0x4606C0
-void ui_numbered_feedback_display(int a1)
+void ui_numbered_feedback_display(int message_id)
 {
     if (ui_callbacks.numbered_feedback_display != NULL) {
-        ui_callbacks.numbered_feedback_display(a1);
+        ui_callbacks.numbered_feedback_display(message_id);
     }
 }
 
@@ -467,10 +467,10 @@ void ui_schematic_feedback(bool success, int64_t primary_obj, int64_t secondary_
 }
 
 // 0x460930
-void ui_character_sheet_open(int64_t a1, int64_t a2)
+void ui_character_sheet_open(int64_t pc_obj, int64_t target_obj)
 {
     if (ui_callbacks.character_sheet_open != NULL) {
-        ui_callbacks.character_sheet_open(a1, a2);
+        ui_callbacks.character_sheet_open(pc_obj, target_obj);
     }
 }
 
@@ -483,10 +483,10 @@ void ui_item_transaction_process(InventoryTransactionPacket* pkt)
 }
 
 // 0x460980
-void ui_inventory_drag_begin(int64_t a1)
+void ui_inventory_drag_begin(int64_t item_obj)
 {
     if (ui_callbacks.inventory_drag_begin != NULL) {
-        ui_callbacks.inventory_drag_begin(a1);
+        ui_callbacks.inventory_drag_begin(item_obj);
     }
 }
 
@@ -517,16 +517,16 @@ void ui_end_dialog(int64_t pc_obj, int a3)
 // 0x460AB0
 void ui_optional_event_dispatch(int a1, int a2, void* a3)
 {
-    if (ui_callbacks.field_F8 != NULL) {
-        ui_callbacks.field_F8(a1, a2, a3);
+    if (ui_callbacks.optional_event_callback != NULL) {
+        ui_callbacks.optional_event_callback(a1, a2, a3);
     }
 }
 
 // 0x460AD0
-void ui_mainmenu_return(int a1)
+void ui_mainmenu_return(int result)
 {
     if (ui_callbacks.mainmenu_return != NULL) {
-        ui_callbacks.mainmenu_return(a1);
+        ui_callbacks.mainmenu_return(result);
     }
 }
 
@@ -539,10 +539,10 @@ void ui_refresh_cursor(void)
 }
 
 // 0x460B00
-int ui_target_skill_resolve(int a1, TargetDescriptor* td)
+int ui_target_skill_resolve(int skill, TargetDescriptor* td)
 {
     if (ui_callbacks.target_skill_resolve != NULL) {
-        return ui_callbacks.target_skill_resolve(a1, td);
+        return ui_callbacks.target_skill_resolve(skill, td);
     } else {
         return 0;
     }
@@ -641,38 +641,38 @@ int64_t ui_inventory_target_object_get(void)
 }
 
 // 0x460C30
-void ui_hovered_object_refresh(int64_t a1)
+void ui_hovered_object_refresh(int64_t obj)
 {
     if (ui_callbacks.hovered_object_refresh != NULL) {
-        ui_callbacks.hovered_object_refresh(a1);
+        ui_callbacks.hovered_object_refresh(obj);
     }
 }
 
 // 0x460C50
-int ui_inventory_open_preconditions_check(int64_t a1, int64_t a2, int a3)
+int ui_inventory_open_preconditions_check(int64_t pc_obj, int64_t target_obj, int mode)
 {
     if (ui_callbacks.inventory_open_preconditions_check != NULL) {
-        return ui_callbacks.inventory_open_preconditions_check(a1, a2, a3);
+        return ui_callbacks.inventory_open_preconditions_check(pc_obj, target_obj, mode);
     } else {
         return 0;
     }
 }
 
 // 0x460C80
-int ui_inventory_game_mode_select(int64_t a1, int64_t a2, int a3)
+int ui_inventory_game_mode_select(int64_t pc_obj, int64_t target_obj, int mode)
 {
     if (ui_callbacks.inventory_game_mode_select != NULL) {
-        return ui_callbacks.inventory_game_mode_select(a1, a2, a3);
+        return ui_callbacks.inventory_game_mode_select(pc_obj, target_obj, mode);
     } else {
         return 0;
     }
 }
 
 // 0x460CB0
-void ui_inventory_target_prepare(int64_t a1, int64_t a2, int a3)
+void ui_inventory_target_prepare(int64_t pc_obj, int64_t target_obj, int mode)
 {
     if (ui_callbacks.inventory_target_prepare != NULL) {
-        ui_callbacks.inventory_target_prepare(a1, a2, a3);
+        ui_callbacks.inventory_target_prepare(pc_obj, target_obj, mode);
     }
 }
 
@@ -689,56 +689,56 @@ bool ui_inven_create(int64_t pc_obj, int64_t target_obj, int mode)
 // 0x460D10
 void ui_reserved_string_callback_144_dispatch(const char* a1)
 {
-    if (ui_callbacks.field_144 != NULL) {
-        ui_callbacks.field_144(a1);
+    if (ui_callbacks.reserved_string_callback_144 != NULL) {
+        ui_callbacks.reserved_string_callback_144(a1);
     }
 }
 
 // 0x460D30
 void ui_reserved_string_callback_148_dispatch(const char* a1)
 {
-    if (ui_callbacks.field_148 != NULL) {
-        ui_callbacks.field_148(a1);
+    if (ui_callbacks.reserved_string_callback_148 != NULL) {
+        ui_callbacks.reserved_string_callback_148(a1);
     }
 }
 
 // 0x460D50
 void ui_reserved_string_pair_callback_14c_dispatch(const char* a1, const char* a2)
 {
-    if (ui_callbacks.field_14C != NULL) {
-        ui_callbacks.field_14C(a1, a2);
+    if (ui_callbacks.reserved_string_pair_callback_14c != NULL) {
+        ui_callbacks.reserved_string_pair_callback_14c(a1, a2);
     }
 }
 
 // 0x460D70
 void ui_reserved_string_pair_callback_150_dispatch(const char* a1, const char* a2)
 {
-    if (ui_callbacks.field_150 != NULL) {
-        ui_callbacks.field_150(a1, a2);
+    if (ui_callbacks.reserved_string_pair_callback_150 != NULL) {
+        ui_callbacks.reserved_string_pair_callback_150(a1, a2);
     }
 }
 
 // 0x460D90
 void ui_reserved_integer_pair_callback_154_dispatch(int a1, int a2)
 {
-    if (ui_callbacks.field_154 != NULL) {
-        ui_callbacks.field_154(a1, a2);
+    if (ui_callbacks.reserved_integer_pair_callback_154 != NULL) {
+        ui_callbacks.reserved_integer_pair_callback_154(a1, a2);
     }
 }
 
 // 0x460DB0
 void ui_reserved_string_pair_callback_158_dispatch(const char* a1, const char* a2)
 {
-    if (ui_callbacks.field_158 != NULL) {
-        ui_callbacks.field_158(a1, a2);
+    if (ui_callbacks.reserved_string_pair_callback_158 != NULL) {
+        ui_callbacks.reserved_string_pair_callback_158(a1, a2);
     }
 }
 
 // 0x460DD0
 void ui_reserved_callback_15c_dispatch(void)
 {
-    if (ui_callbacks.field_15C != NULL) {
-        ui_callbacks.field_15C();
+    if (ui_callbacks.reserved_callback_15c != NULL) {
+        ui_callbacks.reserved_callback_15c();
     }
 }
 

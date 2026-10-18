@@ -31,7 +31,7 @@ typedef struct CompactUiComponent {
     /* 0028 */ int r;
     /* 002C */ int g;
     /* 0030 */ int b;
-    /* 0034 */ int field_34;
+    /* 0034 */ int background_color;
 } CompactUiComponent;
 
 static bool compact_ui_health_bar_init(CompactUiComponent* comp);
@@ -334,7 +334,7 @@ void compact_ui_health_bar_draw(int a1)
     rect1.height = 102;
     tig_window_fill(compact_ui_components[0].window_handle,
         &rect1,
-        compact_ui_components[0].field_34);
+        compact_ui_components[0].background_color);
 
     rect2.x = 0;
     rect2.y = 0;

@@ -106,7 +106,7 @@ typedef struct TargetContext {
 typedef struct TargetDescriptorEvaluation {
     /* 0000 */ int64_t source_obj;
     /* 0008 */ int64_t self_obj;
-    /* 0010 */ TargetDescriptor* td;
+    /* 0010 */ TargetDescriptor* descriptor;
     /* 0014 */ int field_14;
 } TargetDescriptorEvaluation;
 

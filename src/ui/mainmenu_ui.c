@@ -75,11 +75,11 @@ static void mainmenu_ui_create_options(void);
 static void mainmenu_ui_new_game_panels_close(void);
 static void mainmenu_ui_destroy_options(void);
 static bool mainmenu_ui_press_options(tig_button_handle_t button_handle);
-static void mainmenu_ui_options_tab_select(int a1);
+static void mainmenu_ui_options_tab_select(int tab);
 static void mainmenu_ui_load_game_create(void);
 static void mainmenu_ui_load_game_panels_close(void);
 static void mainmenu_ui_load_game_destroy(void);
-static void mainmenu_ui_list_top_index_set(int a1);
+static void mainmenu_ui_list_top_index_set(int top_index);
 static void mainmenu_ui_current_window_refresh(TigRect* rect);
 static bool mainmenu_ui_load_game_execute(int btn);
 static bool mainmenu_ui_load_game_button_pressed(tig_button_handle_t button_handle);
@@ -152,7 +152,7 @@ static void mainmenu_ui_refresh_button_text(int btn, unsigned int flags);
 static void mainmenu_ui_art_animation_schedule(void);
 static void mainmenu_ui_navigation_action_process(int a1);
 static void mainmenu_ui_scrollbar_refresh(void);
-static void mainmenu_ui_scroll_to(int a1);
+static void mainmenu_ui_scroll_to(int top_index);
 static void mainmenu_ui_textedit_end(void);
 static void mainmenu_ui_textedit_on_enter(TextEdit* textedit);
 static void mainmenu_ui_textedit_on_change(TextEdit* textedit);
@@ -232,7 +232,7 @@ static bool stru_5C36B0[6][2] = {
     /*        MM_TYPE_IN_PLAY */ { true, false },
     /* MM_TYPE_IN_PLAY_LOCKED */ { true, false },
     /*        MM_TYPE_OPTIONS */ { true, false },
-    /*              MM_TYPE_5 */ { false, false },
+    /*              MM_TYPE_IN_PLAY_WITHOUT_LOAD */ { false, false },
 };
 
 // 0x5C36E0
@@ -252,7 +252,7 @@ static MainMenuButtonInfo mainmenu_ui_mainmenu_in_play_locked_buttons[] = {
 };
 
 // 0x5C3860
-static MainMenuButtonInfo stru_5C3860[] = {
+static MainMenuButtonInfo mainmenu_without_load_buttons[] = {
     { 410, 143, -1, TIG_BUTTON_HANDLE_INVALID, MM_WINDOW_SAVE_GAME, 0, 0, { 0 }, -1 },
     { 410, 243, -1, TIG_BUTTON_HANDLE_INVALID, MM_WINDOW_OPTIONS, 0, 0, { 0 }, -1 },
     { 410, 293, -1, TIG_BUTTON_HANDLE_INVALID, -1, 0, 0, { 0 }, -1 },
@@ -582,7 +582,7 @@ static MainMenuWindowInfo mainmenu_ui_mainmenu_in_play_locked_window_info = {
 };
 
 // 0x5C4338
-static MainMenuWindowInfo stru_5C4338 = {
+static MainMenuWindowInfo mainmenu_without_load_window = {
     329,
     NULL,
     NULL,
@@ -593,8 +593,8 @@ static MainMenuWindowInfo stru_5C4338 = {
     NULL,
     NULL,
     30,
-    SDL_arraysize(stru_5C3860),
-    stru_5C3860,
+    SDL_arraysize(mainmenu_without_load_buttons),
+    mainmenu_without_load_buttons,
     0,
     0,
     0xD,
@@ -1011,7 +1011,7 @@ static TigRect mainmenu_ui_shared_char_background_rect = { 66, 343, 186, 19 };
 static TigRect stru_5C4F40 = { 22, 331, 276, 40 };
 
 // 0x5C4F50
-static TigRect stru_5C4F50[15] = {
+static TigRect mainmenu_character_summary_stat_rects[15] = {
     { 346, 46, 50, 15 },
     { 346, 66, 50, 15 },
     { 346, 86, 50, 15 },
@@ -1087,7 +1087,7 @@ static MainMenuButtonInfo stru_5C5100 = {
 };
 
 // 0x5C5130
-static int dword_5C5130[] = {
+static int mainmenu_character_summary_stats[] = {
     STAT_STRENGTH,
     STAT_CONSTITUTION,
     STAT_DEXTERITY,
@@ -1109,7 +1109,7 @@ static int dword_5C5130[] = {
 static struct {
     int body_type;
     bool available_for_female;
-} stru_5C5170[] = {
+} mainmenu_race_body_options[] = {
     /*     RACE_HUMAN */ { TIG_ART_CRITTER_BODY_TYPE_HUMAN, true },
     /*     RACE_DWARF */ { TIG_ART_CRITTER_BODY_TYPE_DWARF, false },
     /*       RACE_ELF */ { TIG_ART_CRITTER_BODY_TYPE_ELF, true },
@@ -1264,7 +1264,7 @@ static MainMenuWindowInfo* main_menu_window_info[MM_WINDOW_COUNT] = {
     /*                MM_WINDOW_CHAREDIT */ &mainmenu_ui_charedit_info,
     /*                    MM_WINDOW_SHOP */ &mainmenu_ui_shop_info,
     /*                 MM_WINDOW_CREDITS */ &mainmenu_ui_credits_window_info,
-    /*                      MM_WINDOW_26 */ &stru_5C4338,
+    /*                      MM_WINDOW_MAINMENU_WITHOUT_LOAD */ &mainmenu_without_load_window,
 };
 
 // 0x64B870
@@ -1325,7 +1325,7 @@ static mes_file_handle_t mainmenu_ui_rules_mainmenu_mes_file;
 static int dword_64C378;
 
 // 0x64C37C
-static char* dword_64C37C;
+static char* mainmenu_save_list_module_name;
 
 // 0x64C380
 static bool mainmenu_ui_initialized;
@@ -1334,10 +1334,10 @@ static bool mainmenu_ui_initialized;
 static bool mainmenu_ui_active;
 
 // 0x64C388
-static bool dword_64C388;
+static bool mainmenu_initial_start_in_progress;
 
 // 0x64C38C
-static bool dword_64C38C;
+static bool mainmenu_skip_history_push;
 
 // 0x64C390
 
@@ -1369,10 +1369,10 @@ static int mainmenu_default_layer_grayscale[3];
 static bool mainmenu_ui_was_compact_interface;
 
 // 0x64C43C
-static int dword_64C43C;
+static int mainmenu_creation_count;
 
 // 0x64C440
-static int dword_64C440;
+static int mainmenu_selected_options_tab;
 
 // 0x64C444
 static bool mainmenu_ui_gsi_loaded;
@@ -1384,7 +1384,7 @@ static int mainmenu_ui_progressbar_max_value;
 static int mainmenu_ui_progressbar_value;
 
 // 0x64C450
-static bool dword_64C450;
+static bool mainmenu_load_returns_to_game;
 
 // 0x64C454
 static ChareditMode mainmenu_character_edit_mode;
@@ -1502,14 +1502,14 @@ bool mainmenu_ui_init(GameInitInfo* init_info)
     mainmenu_ui_initialized = true;
     mainmenu_ui_window_type = MM_WINDOW_0;
 
-    dword_64C388 = true;
+    mainmenu_initial_start_in_progress = true;
     mainmenu_ui_start(MM_TYPE_DEFAULT);
-    dword_64C388 = false;
+    mainmenu_initial_start_in_progress = false;
 
     gamelib_thumbnail_size_set(468, 300);
     mainmenu_ui_start_new_game = false;
     mainmenu_ui_pregen_characters_probe();
-    dword_64C37C = NULL;
+    mainmenu_save_list_module_name = NULL;
 
     return true;
 }
@@ -1611,8 +1611,8 @@ void mainmenu_ui_start(MainMenuType type)
             mainmenu_ui_open();
             object_hover_obj_set(OBJ_HANDLE_NULL);
             break;
-        case MM_TYPE_5:
-            mainmenu_ui_window_type = MM_WINDOW_26;
+        case MM_TYPE_IN_PLAY_WITHOUT_LOAD:
+            mainmenu_ui_window_type = MM_WINDOW_MAINMENU_WITHOUT_LOAD;
             dword_5C4004 = false;
             mainmenu_ui_open();
             object_hover_obj_set(OBJ_HANDLE_NULL);
@@ -1907,12 +1907,12 @@ void mainmenu_ui_open(void)
         }
 
         if (mainmenu_ui_active) {
-            if (!dword_64C38C) {
+            if (!mainmenu_skip_history_push) {
                 mainmenu_ui_push_window_stack(mainmenu_ui_window_type);
             }
         }
 
-        dword_64C38C = false;
+        mainmenu_skip_history_push = false;
     }
 }
 
@@ -2051,7 +2051,7 @@ void mainmenu_ui_create_mainmenu(void)
 {
     mainmenu_ui_window_type = MM_WINDOW_MAINMENU;
     mainmenu_ui_create_window();
-    ++dword_64C43C;
+    ++mainmenu_creation_count;
     mainmenu_ui_draw_version();
 }
 
@@ -2171,7 +2171,7 @@ void mainmenu_ui_create_options(void)
     mainmenu_ui_new_game_panels_close();
     mainmenu_ui_window_type = MM_WINDOW_OPTIONS;
     mainmenu_ui_create_window_func(false);
-    dword_64C440 = 0;
+    mainmenu_selected_options_tab = 0;
     options_ui_start(OPTIONS_UI_TAB_GAME, mainmenu_ui_window_handle, stru_5C36B0[mainmenu_ui_type][1] == 0);
     mainmenu_ui_draw_version();
 
@@ -2238,13 +2238,13 @@ bool mainmenu_ui_press_options(tig_button_handle_t button_handle)
 }
 
 // 0x541E20
-void mainmenu_ui_options_tab_select(int a1)
+void mainmenu_ui_options_tab_select(int tab)
 {
-    if (dword_64C440 != a1 && options_ui_load_module()) {
+    if (mainmenu_selected_options_tab != tab && options_ui_load_module()) {
         options_ui_close();
 
-        dword_64C440 = a1;
-        switch (dword_64C440) {
+        mainmenu_selected_options_tab = tab;
+        switch (mainmenu_selected_options_tab) {
         case 0:
             options_ui_start(OPTIONS_UI_TAB_GAME, mainmenu_ui_window_handle, stru_5C36B0[mainmenu_ui_type][1] == 0);
             break;
@@ -2278,8 +2278,8 @@ void mainmenu_ui_load_game_create(void)
 
     mainmenu_ui_load_game_panels_close();
 
-    if (dword_64C37C) {
-        gamelib_savelist_create_module(dword_64C37C, &mainmenu_ui_gsl);
+    if (mainmenu_save_list_module_name) {
+        gamelib_savelist_create_module(mainmenu_save_list_module_name, &mainmenu_ui_gsl);
     } else {
         gamelib_savelist_create(&mainmenu_ui_gsl);
     }
@@ -2344,7 +2344,7 @@ void mainmenu_ui_load_game_create(void)
     mainmenu_save_list_scrollbar_info.content_rect.height = 232;
     scrollbar_ui_control_create(&mainmenu_save_list_scrollbar, &mainmenu_save_list_scrollbar_info, mainmenu_ui_window_handle);
 
-    dword_64C450 = false;
+    mainmenu_load_returns_to_game = false;
 
     pc_obj = player_get_local_pc_obj();
 
@@ -2366,7 +2366,7 @@ void mainmenu_ui_load_game_create(void)
         intgame_pc_lens_do(PC_LENS_MODE_BLACKOUT, &pc_lens);
     } else {
         intgame_pc_lens_do(PC_LENS_MODE_PASSTHROUGH, &pc_lens);
-        dword_64C450 = true;
+        mainmenu_load_returns_to_game = true;
     }
 
     scrollbar_ui_control_redraw(mainmenu_save_list_scrollbar);
@@ -2392,9 +2392,9 @@ void mainmenu_ui_load_game_destroy(void)
     gamelib_savelist_destroy(&mainmenu_ui_gsl);
 
     intgame_pc_lens_do(PC_LENS_MODE_NONE, NULL);
-    if (dword_64C37C != NULL)
-        FREE(dword_64C37C);
-    dword_64C37C = NULL;
+    if (mainmenu_save_list_module_name != NULL)
+        FREE(mainmenu_save_list_module_name);
+    mainmenu_save_list_module_name = NULL;
 }
 
 // 0x542280
@@ -3664,7 +3664,7 @@ void mainmenu_ui_last_save_create(void)
     } else {
         mainmenu_ui_active = true;
         mainmenu_ui_close(true);
-        dword_64C38C = true;
+        mainmenu_skip_history_push = true;
     }
 
     tig_mouse_show();
@@ -3679,7 +3679,7 @@ void mainmenu_ui_intro_create(void)
     mainmenu_history_discard_current(&mainmenu_ui_history);
     mainmenu_ui_window_type = MM_WINDOW_SINGLE_PLAYER;
     mainmenu_ui_open();
-    dword_64C38C = true;
+    mainmenu_skip_history_push = true;
 }
 
 // 0x544640
@@ -3689,7 +3689,7 @@ void mainmenu_ui_credits_create(void)
     mainmenu_history_discard_current(&mainmenu_ui_history);
     mainmenu_ui_window_type = MM_WINDOW_MAINMENU;
     mainmenu_ui_open();
-    dword_64C38C = true;
+    mainmenu_skip_history_push = true;
     slide_ui_start(SLIDE_UI_TYPE_CREDITS);
 
     if (mainmenu_ui_active) {
@@ -3929,12 +3929,12 @@ void mainmenu_ui_character_summary_draw(int64_t obj, TigRect* rect)
         font = mainmenu_normal_body_fonts[0];
         tig_font_push(font);
         for (index = 0; index < 15; index++) {
-            if (tig_window_fill(mainmenu_ui_window_handle, &(stru_5C4F50[index]), tig_color_make(0, 0, 0)) == TIG_OK) {
+            if (tig_window_fill(mainmenu_ui_window_handle, &(mainmenu_character_summary_stat_rects[index]), tig_color_make(0, 0, 0)) == TIG_OK) {
                 snprintf(str, sizeof(str),
                     "%s: %d",
-                    stat_short_name(dword_5C5130[index]),
-                    stat_level_get(obj, dword_5C5130[index]));
-                mainmenu_ui_text_draw(str, &(stru_5C4F50[index]), font, 0);
+                    stat_short_name(mainmenu_character_summary_stats[index]),
+                    stat_level_get(obj, mainmenu_character_summary_stats[index]));
+                mainmenu_ui_text_draw(str, &(mainmenu_character_summary_stat_rects[index]), font, 0);
             }
         }
         tig_font_pop();
@@ -4091,11 +4091,11 @@ bool mainmenu_ui_new_char_set_gender(int64_t obj, int gender)
 
     race = stat_level_get(obj, STAT_RACE);
     if (gender == GENDER_FEMALE
-        && !stru_5C5170[race].available_for_female) {
+        && !mainmenu_race_body_options[race].available_for_female) {
         return false;
     }
 
-    object_set_gender_and_race(obj, stru_5C5170[race].body_type, gender, race);
+    object_set_gender_and_race(obj, mainmenu_race_body_options[race].body_type, gender, race);
     object_set_current_aid(obj, obj_field_int32_get(obj, OBJ_F_CURRENT_AID));
 
     if (portrait_find_first(obj, &portrait)) {
@@ -4127,13 +4127,13 @@ bool mainmenu_ui_new_char_prev_race(int64_t obj)
         if (stat_level_get(obj, STAT_GENDER) == GENDER_FEMALE) {
             do {
                 race--;
-            } while (race >= 0 && !stru_5C5170[race].available_for_female);
+            } while (race >= 0 && !mainmenu_race_body_options[race].available_for_female);
 
             if (race < 0) {
                 return false;
             }
 
-            if (!stru_5C5170[race].available_for_female) {
+            if (!mainmenu_race_body_options[race].available_for_female) {
                 return false;
             }
         } else {
@@ -4146,7 +4146,7 @@ bool mainmenu_ui_new_char_prev_race(int64_t obj)
     } else {
         race = 7;
         if (stat_level_get(obj, STAT_GENDER) == GENDER_FEMALE) {
-            while (race >= 0 && !stru_5C5170[race].available_for_female) {
+            while (race >= 0 && !mainmenu_race_body_options[race].available_for_female) {
                 race--;
             }
 
@@ -4154,7 +4154,7 @@ bool mainmenu_ui_new_char_prev_race(int64_t obj)
                 return false;
             }
 
-            if (!stru_5C5170[race].available_for_female) {
+            if (!mainmenu_race_body_options[race].available_for_female) {
                 return false;
             }
         }
@@ -4174,12 +4174,12 @@ void mainmenu_ui_new_char_set_race(int64_t obj, int race)
 
     gender = stat_level_get(obj, STAT_GENDER);
     if (gender == GENDER_FEMALE) {
-        gender = !stru_5C5170[race].available_for_female
+        gender = !mainmenu_race_body_options[race].available_for_female
             ? GENDER_MALE
             : GENDER_FEMALE;
     }
 
-    object_set_gender_and_race(obj, stru_5C5170[race].body_type, gender, race);
+    object_set_gender_and_race(obj, mainmenu_race_body_options[race].body_type, gender, race);
     object_set_current_aid(obj, obj_field_int32_get(obj, OBJ_F_CURRENT_AID));
 
     if (portrait_find_first(obj, &portrait)) {
@@ -4197,14 +4197,14 @@ bool mainmenu_ui_new_char_next_race(int64_t obj)
         if (stat_level_get(obj, STAT_GENDER) == GENDER_FEMALE) {
             do {
                 race++;
-            } while (race < 7 && !stru_5C5170[race].available_for_female);
+            } while (race < 7 && !mainmenu_race_body_options[race].available_for_female);
 
             if (race >= 8) {
                 // FIXME: Unreachable.
                 return false;
             }
 
-            if (!stru_5C5170[race].available_for_female) {
+            if (!mainmenu_race_body_options[race].available_for_female) {
                 race = RACE_HUMAN;
             }
         } else {
@@ -4213,7 +4213,7 @@ bool mainmenu_ui_new_char_next_race(int64_t obj)
     } else {
         race = RACE_HUMAN;
         if (stat_level_get(obj, STAT_GENDER) == GENDER_FEMALE) {
-            while (!stru_5C5170[race].available_for_female) {
+            while (!mainmenu_race_body_options[race].available_for_female) {
                 race++;
             }
 
@@ -4222,7 +4222,7 @@ bool mainmenu_ui_new_char_next_race(int64_t obj)
                 return false;
             }
 
-            if (!stru_5C5170[race].available_for_female) {
+            if (!mainmenu_race_body_options[race].available_for_female) {
                 return false;
             }
         }
@@ -4699,7 +4699,7 @@ void mainmenu_ui_create_window_func(bool should_display)
     int idx;
     int rc;
 
-    if (dword_64C388) {
+    if (mainmenu_initial_start_in_progress) {
         should_display = false;
     }
 
@@ -4844,8 +4844,8 @@ void mainmenu_ui_create_window_func(bool should_display)
         art_blit_info.flags = 0;
 
         for (idx = 0; idx < 2; idx++) {
-            if (window->field_3C[idx].field_0 != -1) {
-                tig_art_interface_id_create(window->field_3C[idx].field_0, 0, 0, 0, &art_id);
+            if (window->art_layers[idx].art_number != -1) {
+                tig_art_interface_id_create(window->art_layers[idx].art_number, 0, 0, 0, &art_id);
                 mainmenu_art_animations[idx].art_id = art_id;
                 if (tig_art_frame_data(art_id, &art_frame_data) != TIG_OK) {
                     tig_debug_printf("mainmenu_ui_create_window_func: ERROR: tig_art_frame_data failed!\n");
@@ -4855,8 +4855,8 @@ void mainmenu_ui_create_window_func(bool should_display)
                 src_rect.width = art_frame_data.width;
                 src_rect.height = art_frame_data.height;
 
-                dst_rect.x = window->field_3C[idx].x;
-                dst_rect.y = window->field_3C[idx].y;
+                dst_rect.x = window->art_layers[idx].x;
+                dst_rect.y = window->art_layers[idx].y;
                 dst_rect.width = art_frame_data.width;
                 dst_rect.height = art_frame_data.height;
 
@@ -4933,8 +4933,8 @@ void mainmenu_ui_create_window_func(bool should_display)
             }
 
             text_rect = button->rect;
-            text_rect.x = button->x - window->field_30;
-            text_rect.y = button->y - window->field_34;
+            text_rect.x = button->x - window->origin_x;
+            text_rect.y = button->y - window->origin_y;
             mainmenu_ui_refresh_text(window_handle,
                 button_label,
                 &text_rect,
@@ -4942,13 +4942,13 @@ void mainmenu_ui_create_window_func(bool should_display)
 
             mes_file_entry.num += 10;
 
-            if (button->field_14 == 0 && (button->flags & 0x08) == 0) {
+            if (button->shortcut_key == 0 && (button->flags & 0x08) == 0) {
                 if (mes_search(mainmenu_ui_mainmenu_mes_file, &mes_file_entry)) {
                     mes_get_msg(mainmenu_ui_mainmenu_mes_file, &mes_file_entry);
-                    button->field_14 = SDL_toupper(mes_file_entry.str[0]);
+                    button->shortcut_key = SDL_toupper(mes_file_entry.str[0]);
                 } else {
                     tig_debug_printf("MainMenu: Error: Can't Find Hotkey!");
-                    button->field_14 = -1;
+                    button->shortcut_key = -1;
                 }
             }
 
@@ -5297,7 +5297,7 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                 break;
             case MM_WINDOW_LOAD_GAME:
                 if (intgame_pc_lens_check_pt_unscale(msg->data.mouse.x, msg->data.mouse.y)) {
-                    if (dword_64C450) {
+                    if (mainmenu_load_returns_to_game) {
                         mainmenu_ui_game_resume();
                     } else {
                         mainmenu_ui_close(true);
@@ -5368,7 +5368,7 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
 
             for (idx = 0; idx < window->num_buttons; idx++) {
                 if (msg->data.button.button_handle == window->buttons[idx].button_handle) {
-                    if (window->buttons[idx].field_10 > 0) {
+                    if (window->buttons[idx].destination_window > 0) {
                         if (window->execute_func != NULL) {
                             mainmenu_execute_result = window->execute_func(idx);
                             if (mainmenu_execute_result == 0) {
@@ -5377,12 +5377,12 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                         }
 
                         mainmenu_ui_close(false);
-                        mainmenu_ui_window_type = window->buttons[idx].field_10;
+                        mainmenu_ui_window_type = window->buttons[idx].destination_window;
                         mainmenu_ui_open();
                         return true;
                     }
 
-                    if (window->buttons[idx].field_10 == 0) {
+                    if (window->buttons[idx].destination_window == 0) {
                         mainmenu_ui_game_resume();
                         if (stru_5C36B0[mainmenu_ui_type][1]
                             || mainmenu_ui_window_type == MM_WINDOW_MAINMENU
@@ -5393,7 +5393,7 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                         return true;
                     }
 
-                    if (window->buttons[idx].field_10 == -2) {
+                    if (window->buttons[idx].destination_window == -2) {
                         mainmenu_ui_close(true);
                         if (mainmenu_ui_window_type == MM_WINDOW_0) {
                             mainmenu_ui_game_resume();
@@ -5420,16 +5420,16 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                     mainmenu_ui_refresh_button_text(idx, 0x2);
                 }
 
-                v2 = window->buttons[idx].field_2C;
+                v2 = window->buttons[idx].description_message_id;
             } else {
                 v2 = -1;
             }
 
             if (v2 == 0) {
                 if (msg->data.button.button_handle == mainmenu_load_preview_button.button_handle) {
-                    v2 = mainmenu_load_preview_button.field_2C;
+                    v2 = mainmenu_load_preview_button.description_message_id;
                 } else if (msg->data.button.button_handle == mainmenu_save_preview_button.button_handle) {
-                    v2 = mainmenu_save_preview_button.field_2C;
+                    v2 = mainmenu_save_preview_button.description_message_id;
                 } else {
                     return false;
                 }
@@ -5472,16 +5472,16 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                     mainmenu_ui_refresh_button_text(idx, 0);
                 }
 
-                v2 = window->buttons[idx].field_2C;
+                v2 = window->buttons[idx].description_message_id;
             } else {
                 v2 = -1;
             }
 
             if (v2 == 0) {
                 if (msg->data.button.button_handle == mainmenu_load_preview_button.button_handle) {
-                    v2 = mainmenu_load_preview_button.field_2C;
+                    v2 = mainmenu_load_preview_button.description_message_id;
                 } else if (msg->data.button.button_handle == mainmenu_save_preview_button.button_handle) {
-                    v2 = mainmenu_save_preview_button.field_2C;
+                    v2 = mainmenu_save_preview_button.description_message_id;
                 } else {
                     return false;
                 }
@@ -5640,7 +5640,7 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
             for (idx = 0; idx < window->num_buttons; idx++) {
                 bool hidden;
                 tig_button_is_hidden(window->buttons[idx].button_handle, &hidden);
-                if (!hidden && SDL_toupper(msg->data.keyboard.key) == window->buttons[idx].field_14) {
+                if (!hidden && SDL_toupper(msg->data.keyboard.key) == window->buttons[idx].shortcut_key) {
                     break;
                 }
             }
@@ -5655,7 +5655,7 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                 gsound_play_sfx(0, 1);
             }
 
-            if (window->buttons[idx].field_10 > 0) {
+            if (window->buttons[idx].destination_window > 0) {
                 if (window->execute_func != NULL) {
                     mainmenu_execute_result = window->execute_func(idx);
                     if (!mainmenu_execute_result) {
@@ -5664,12 +5664,12 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                 }
 
                 mainmenu_ui_close(false);
-                mainmenu_ui_window_type = window->buttons[idx].field_10;
+                mainmenu_ui_window_type = window->buttons[idx].destination_window;
                 mainmenu_ui_open();
                 return true;
             }
 
-            if (window->buttons[idx].field_10 == 0) {
+            if (window->buttons[idx].destination_window == 0) {
                 mainmenu_ui_game_resume();
                 if (stru_5C36B0[mainmenu_ui_type][1]
                     || mainmenu_ui_window_type == MM_WINDOW_MAINMENU
@@ -5680,7 +5680,7 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                 return true;
             }
 
-            if (window->buttons[idx].field_10 == -2) {
+            if (window->buttons[idx].destination_window == -2) {
                 mainmenu_ui_close(true);
                 if (mainmenu_ui_window_type == MM_WINDOW_0) {
                     mainmenu_ui_game_resume();
@@ -5688,7 +5688,7 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                 return true;
             }
 
-            if (window->buttons[idx].field_10 == -1) {
+            if (window->buttons[idx].destination_window == -1) {
                 switch (mainmenu_ui_window_type) {
                 case MM_WINDOW_MAINMENU_IN_PLAY:
                     switch (idx) {
@@ -5778,8 +5778,8 @@ void mainmenu_ui_refresh_button_text(int btn, unsigned int flags)
             mes_get_msg(mainmenu_ui_mainmenu_mes_file, &mes_file_entry);
 
             rect = button->rect;
-            rect.x = button->x - window->field_30;
-            rect.y = button->y - window->field_34;
+            rect.x = button->x - window->origin_x;
+            rect.y = button->y - window->origin_y;
             mainmenu_ui_refresh_text(mainmenu_ui_window_handle,
                 mainmenu_ui_window_type == MM_WINDOW_OPTIONS
                     ? mainmenu_ui_options_label(btn, mes_file_entry.str) : mes_file_entry.str,
@@ -5802,8 +5802,8 @@ void mainmenu_ui_art_animation_schedule(void)
             && art_anim_data.num_frames > 1) {
             mainmenu_art_animations[index].max_frame = art_anim_data.num_frames - 1;
             mainmenu_art_animations[index].fps = 1000 / art_anim_data.fps;
-            mainmenu_art_animations[index].x = main_menu_window_info[mainmenu_ui_window_type]->field_3C[index].x;
-            mainmenu_art_animations[index].y = main_menu_window_info[mainmenu_ui_window_type]->field_3C[index].y;
+            mainmenu_art_animations[index].x = main_menu_window_info[mainmenu_ui_window_type]->art_layers[index].x;
+            mainmenu_art_animations[index].y = main_menu_window_info[mainmenu_ui_window_type]->art_layers[index].y;
 
             timeevent.type = TIMEEVENT_TYPE_MAINMENU;
             timeevent.params[0].integer_value = index;

@@ -6,13 +6,13 @@
 static void iso_loading_font_create(void);
 
 // 0x64C6F8
-static TigRect stru_64C6F8;
+static TigRect iso_draw_rect;
 
 // 0x64C708
 static bool iso_interface_created;
 
 // 0x64C70C
-static tig_font_handle_t dword_64C70C;
+static tig_font_handle_t iso_font;
 
 // 0x64C710
 static int dword_64C710;
@@ -56,7 +56,7 @@ void iso_exit(void)
     if (iso_interface_created) {
         iso_interface_destroy();
     }
-    tig_font_destroy(dword_64C70C);
+    tig_font_destroy(iso_font);
 }
 
 // 0x557EC0
@@ -83,7 +83,7 @@ void iso_loading_font_create(void)
     tig_art_interface_id_create(327, 0, 0, 0, &(font.art_id));
     font.str = NULL;
     font.color = tig_color_make(255, 255, 255);
-    tig_font_create(&font, &dword_64C70C);
+    tig_font_create(&font, &iso_font);
 }
 
 // 0x557FD0
@@ -101,7 +101,7 @@ void iso_loading_message_draw(const char* str)
     tig_window_fill(iso_window_handle, &rect, tig_color_make(0, 0, 0));
 
     if (str != NULL && *str != '\0') {
-        tig_font_push(dword_64C70C);
+        tig_font_push(iso_font);
 
         font.width = 0;
         font.str = str;
@@ -129,9 +129,9 @@ bool iso_redraw(void)
 void iso_draw_rect_set(TigRect* rect)
 {
     if (rect != NULL) {
-        stru_64C6F8 = *rect;
+        iso_draw_rect = *rect;
     } else {
-        stru_64C6F8 = iso_content_rect;
+        iso_draw_rect = iso_content_rect;
         iso_invalidate_rect(&iso_content_rect);
     }
 }

@@ -71,7 +71,7 @@ static bool tig_video_3d_is_hardware;
 static bool tig_video_3d_scene_started;
 
 // 0x610388
-static TigRect stru_610388;
+static TigRect tig_video_screen_bounds;
 
 // 0x61039C
 static bool tig_video_initialized;
@@ -200,7 +200,7 @@ int tig_video_blit(TigVideoBuffer* src_video_buffer, TigRect* src_rect, TigRect*
         return TIG_ERR_NOT_INITIALIZED;
     }
 
-    rc = tig_rect_intersection(dst_rect, &stru_610388, &clamped_dst_rect);
+    rc = tig_rect_intersection(dst_rect, &tig_video_screen_bounds, &clamped_dst_rect);
     if (rc != TIG_OK) {
         return rc;
     }
@@ -255,7 +255,7 @@ int tig_video_blit_near_black_alpha(TigVideoBuffer* src_video_buffer,
     }
 
     TigRect clamped_dst;
-    int rc = tig_rect_intersection(dst_rect, &stru_610388, &clamped_dst);
+    int rc = tig_rect_intersection(dst_rect, &tig_video_screen_bounds, &clamped_dst);
     if (rc != TIG_OK) {
         return rc;
     }
@@ -358,8 +358,8 @@ int tig_video_fill(const TigRect* rect, tig_color_t color)
         return TIG_ERR_NOT_INITIALIZED;
     }
 
-    rc = tig_rect_intersection(rect != NULL ? rect : &stru_610388,
-        &stru_610388,
+    rc = tig_rect_intersection(rect != NULL ? rect : &tig_video_screen_bounds,
+        &tig_video_screen_bounds,
         &clamped_rect);
     if (rc != TIG_OK) {
         return rc;
@@ -789,7 +789,7 @@ int tig_video_buffer_fill(TigVideoBuffer* video_buffer, TigRect* rect, tig_color
 }
 
 // 0x520660
-int tig_video_buffer_line(TigVideoBuffer* video_buffer, TigLine* line, TigRect* a3, tig_color_t color)
+int tig_video_buffer_line(TigVideoBuffer* video_buffer, TigLine* line, TigRect* clip_rect, tig_color_t color)
 {
     int pattern = 0;
     bool reversed;
@@ -809,7 +809,7 @@ int tig_video_buffer_line(TigVideoBuffer* video_buffer, TigLine* line, TigRect* 
     int x;
     int y;
 
-    (void)a3;
+    (void)clip_rect;
 
     if (tig_video_buffer_lock(video_buffer) != TIG_OK) {
         return TIG_ERR_DIRECTX;
@@ -1625,10 +1625,10 @@ bool tig_video_window_create(TigInitInfo* init_info)
     tig_video_state.surface = surface;
     tig_video_upload_reset(&tig_video_upload, surface->w, surface->h);
 
-    stru_610388.x = 0;
-    stru_610388.y = 0;
-    stru_610388.width = init_info->width;
-    stru_610388.height = init_info->height;
+    tig_video_screen_bounds.x = 0;
+    tig_video_screen_bounds.y = 0;
+    tig_video_screen_bounds.width = init_info->width;
+    tig_video_screen_bounds.height = init_info->height;
 
     return true;
 }

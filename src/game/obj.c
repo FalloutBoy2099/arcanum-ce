@@ -25,8 +25,8 @@ typedef struct Object {
     /* 0040 */ int field_40;
     /* 0044 */ int16_t modified;
     /* 0046 */ int16_t num_fields;
-    /* 0048 */ int* field_48;
-    /* 004C */ int* field_4C;
+    /* 0048 */ int* stored_field_bitmap;
+    /* 004C */ int* modified_field_bitmap;
     /* 0050 */ intptr_t* data;
     /* 0054 */ intptr_t transient_properties[19];
 } Object;
@@ -79,7 +79,7 @@ static bool object_field_write_if_dif(Object* object, int idx, ObjectFieldInfo* 
 static bool object_field_read_if_dif(Object* object, int idx, ObjectFieldInfo* info);
 static void obj_field_layouts_init(void);
 static void obj_field_group_prefix_length_get(int fld, int* start_ptr, int* length_ptr);
-static int obj_field_group_index_get(int a1);
+static int obj_field_group_index_get(int field);
 static void object_field_array_counts_init(void);
 static void object_field_types_init(void);
 static void obj_field_group_change_base_init(int fld);
@@ -1071,7 +1071,7 @@ void obj_perm_dup(int64_t* copy_obj_ptr, int64_t existing_obj)
     copy_object->modified = false;
     copy_object->data = (intptr_t*)CALLOC(copy_object->num_fields, sizeof(*copy_object->data));
     object_inst_field_bitmaps_copy(copy_object, existing_object);
-    memset(copy_object->field_4C, 0, 4 * object_field_bitmap_word_count(copy_object->type));
+    memset(copy_object->modified_field_bitmap, 0, 4 * object_field_bitmap_word_count(copy_object->type));
 
     obj_copy_source_object = existing_object;
     object_inst_enumerate_overridden_fields(copy_object, object_inst_field_copy);
@@ -1346,7 +1346,7 @@ bool obj_dif_write(TigFile* stream, int64_t obj)
 
     cnt = object_field_bitmap_word_count(object->type);
     for (index = 0; index < cnt; index++) {
-        if (!objf_write(&(object->field_4C[index]), sizeof(object->field_4C[0]), stream)) {
+        if (!objf_write(&(object->modified_field_bitmap[index]), sizeof(object->modified_field_bitmap[0]), stream)) {
             obj_unlock(obj);
             return false;
         }
@@ -1420,7 +1420,7 @@ bool obj_dif_read(TigFile* stream, int64_t obj)
 
     cnt = object_field_bitmap_word_count(object->type);
     for (idx = 0; idx < cnt; idx++) {
-        if (!objf_read(&(object->field_4C[idx]), 4, stream)) {
+        if (!objf_read(&(object->modified_field_bitmap[idx]), 4, stream)) {
             tig_debug_println("Error in obj_dif_read:\n  Unable to read one of the modified flag vars.");
             obj_unlock(obj);
             return false;
@@ -1464,7 +1464,7 @@ void obj_changes_clear(int64_t obj)
     if (object->modified) {
         cnt = object_field_bitmap_word_count(object->type);
         for (index = 0; index < cnt; index++) {
-            object->field_4C[index] = 0;
+            object->modified_field_bitmap[index] = 0;
         }
         object->modified = false;
     }
@@ -2916,7 +2916,7 @@ bool obj_proto_write_file(TigFile* stream, int64_t obj)
     }
 
     cnt = object_field_bitmap_word_count(object->type);
-    if (!objf_write(object->field_4C, sizeof(object->field_4C[0]) * cnt, stream)) {
+    if (!objf_write(object->modified_field_bitmap, sizeof(object->modified_field_bitmap[0]) * cnt, stream)) {
         obj_unlock(obj);
         return false;
     }
@@ -2956,8 +2956,8 @@ bool obj_proto_read_file(TigFile* stream, int64_t* obj_ptr, ObjectID oid)
     }
 
     size = 4 * object_field_bitmap_word_count(object->type);
-    object->field_4C = MALLOC(size);
-    if (!objf_read(object->field_4C, size, stream)) {
+    object->modified_field_bitmap = MALLOC(size);
+    if (!objf_read(object->modified_field_bitmap, size, stream)) {
         obj_unlock(obj);
         obj_pool_deallocate(obj);
         return false;
@@ -3017,7 +3017,7 @@ bool obj_inst_write_file(TigFile* stream, int64_t obj)
     }
 
     cnt = object_field_bitmap_word_count(object->type);
-    if (!objf_write(object->field_48, sizeof(object->field_48[0]) * cnt, stream)) {
+    if (!objf_write(object->stored_field_bitmap, sizeof(object->stored_field_bitmap[0]) * cnt, stream)) {
         obj_unlock(obj);
         return false;
     }
@@ -3066,7 +3066,7 @@ bool obj_inst_read_file(TigFile* stream, int64_t* obj_ptr, ObjectID oid)
 
     object->data = (intptr_t*)CALLOC(object->num_fields, sizeof(*object->data));
 
-    if (!objf_read(object->field_48, sizeof(*object->field_48) * object_field_bitmap_word_count(object->type), stream)) {
+    if (!objf_read(object->stored_field_bitmap, sizeof(*object->stored_field_bitmap) * object_field_bitmap_word_count(object->type), stream)) {
         obj_unlock(obj);
         obj_pool_deallocate(obj);
         return false;
@@ -3106,7 +3106,7 @@ void obj_proto_write_mem(WriteBuffer* wb, int64_t obj)
     write_buffer_append(&(object->oid), sizeof(object->oid), wb);
     write_buffer_append(&(object->type), sizeof(object->type), wb);
     cnt = object_field_bitmap_word_count(object->type);
-    write_buffer_append(object->field_4C, sizeof(object->field_4C[0]) * cnt, wb);
+    write_buffer_append(object->modified_field_bitmap, sizeof(object->modified_field_bitmap[0]) * cnt, wb);
     obj_current_storage_index = 0;
     obj_current_write_buffer = wb;
     object_proto_enumerate_fields(object, obj_proto_field_write_mem);
@@ -3126,9 +3126,9 @@ bool obj_proto_read_mem(uint8_t* data, int64_t* obj_ptr)
     mem_read_advance(&(object->oid), sizeof(object->oid), &data);
     mem_read_advance(&(object->type), sizeof(object->type), &data);
 
-    size = sizeof(*object->field_4C) * object_field_bitmap_word_count(object->type);
-    object->field_4C = MALLOC(size);
-    mem_read_advance(object->field_4C, size, &data);
+    size = sizeof(*object->modified_field_bitmap) * object_field_bitmap_word_count(object->type);
+    object->modified_field_bitmap = MALLOC(size);
+    mem_read_advance(object->modified_field_bitmap, size, &data);
 
     object->field_40 = 0;
     object->modified = false;
@@ -3167,7 +3167,7 @@ void obj_inst_write_mem(WriteBuffer* wb, int64_t obj)
     write_buffer_append(&(object->type), sizeof(object->type), wb);
     write_buffer_append(&(object->num_fields), sizeof(object->num_fields), wb);
     cnt = object_field_bitmap_word_count(object->type);
-    write_buffer_append(object->field_48, sizeof(object->field_48[0]) * cnt, wb);
+    write_buffer_append(object->stored_field_bitmap, sizeof(object->stored_field_bitmap[0]) * cnt, wb);
     obj_current_write_buffer = wb;
 
     object_inst_enumerate_overridden_fields(object, obj_inst_field_write_mem);
@@ -3192,7 +3192,7 @@ bool obj_inst_read_mem(uint8_t* data, int64_t* obj_ptr)
     object_inst_field_bitmaps_allocate(object);
 
     object->data = (intptr_t*)CALLOC(object->num_fields, sizeof(*object->data));
-    mem_read_advance(object->field_48, 4 * object_field_bitmap_word_count(object->type), &data);
+    mem_read_advance(object->stored_field_bitmap, 4 * object_field_bitmap_word_count(object->type), &data);
 
     obj_current_read_cursor = data;
     if (!object_inst_enumerate_overridden_fields(object, obj_inst_field_read_mem)) {
@@ -3330,7 +3330,7 @@ bool obj_inst_field_read_mem(Object* object, int idx, ObjectFieldInfo* info)
 // 0x40A310
 bool object_field_write_if_dif(Object* object, int idx, ObjectFieldInfo* info)
 {
-    if ((object->field_4C[info->change_array_idx] & info->mask) == 0) {
+    if ((object->modified_field_bitmap[info->change_array_idx] & info->mask) == 0) {
         return true;
     }
 
@@ -3345,11 +3345,11 @@ bool object_field_write_if_dif(Object* object, int idx, ObjectFieldInfo* info)
 // 0x40A370
 bool object_field_read_if_dif(Object* object, int idx, ObjectFieldInfo* info)
 {
-    if ((object->field_4C[info->change_array_idx] & info->mask) == 0) {
+    if ((object->modified_field_bitmap[info->change_array_idx] & info->mask) == 0) {
         return true;
     }
 
-    if ((object->field_48[info->change_array_idx] & info->mask) == 0) {
+    if ((object->stored_field_bitmap[info->change_array_idx] & info->mask) == 0) {
         object_inst_storage_insert_at(object, idx);
         object_inst_field_override_set_info(object, info, true);
     }
@@ -3508,12 +3508,12 @@ void obj_field_group_prefix_length_get(int fld, int* start_ptr, int* length_ptr)
 }
 
 // 0x40A790
-int obj_field_group_index_get(int a1)
+int obj_field_group_index_get(int field)
 {
     int index;
 
     for (index = 0; index < 21; index++) {
-        if (obj_field_group_boundaries[index] == a1) {
+        if (obj_field_group_boundaries[index] == field) {
             return index;
         }
     }
@@ -4350,15 +4350,15 @@ void object_inst_field_bitmaps_allocate(Object* object)
     int cnt;
 
     cnt = object_field_bitmap_word_count(object->type);
-    object->field_48 = (int*)CALLOC(sizeof(int) * 2 * cnt, 1);
-    object->field_4C = &(object->field_48[cnt]);
+    object->stored_field_bitmap = (int*)CALLOC(sizeof(int) * 2 * cnt, 1);
+    object->modified_field_bitmap = &(object->stored_field_bitmap[cnt]);
 }
 
 // Frees the shared instance bitmap allocation.
 // 0x40C5B0
 void object_inst_field_bitmaps_free(Object* object)
 {
-    FREE(object->field_48);
+    FREE(object->stored_field_bitmap);
 }
 
 // Allocates and copies both instance field bitmaps.
@@ -4368,9 +4368,9 @@ void object_inst_field_bitmaps_copy(Object* dst, Object* src)
     int cnt;
 
     cnt = object_field_bitmap_word_count(dst->type);
-    dst->field_48 = (int*)MALLOC(sizeof(int) * 2 * cnt);
-    dst->field_4C = &(dst->field_48[cnt]);
-    memcpy(dst->field_48, src->field_48, sizeof(int) * 2 * cnt);
+    dst->stored_field_bitmap = (int*)MALLOC(sizeof(int) * 2 * cnt);
+    dst->modified_field_bitmap = &(dst->stored_field_bitmap[cnt]);
+    memcpy(dst->stored_field_bitmap, src->stored_field_bitmap, sizeof(int) * 2 * cnt);
 }
 
 // Allocates the standalone prototype change bitmap.
@@ -4380,14 +4380,14 @@ void object_proto_change_bitmap_allocate(Object* object)
     int cnt;
 
     cnt = object_field_bitmap_word_count(object->type);
-    object->field_4C = (int*)CALLOC(sizeof(int) * cnt, 1);
+    object->modified_field_bitmap = (int*)CALLOC(sizeof(int) * cnt, 1);
 }
 
 // Frees the standalone prototype change bitmap.
 // 0x40C640
 void object_proto_change_bitmap_free(Object* object)
 {
-    FREE(object->field_4C);
+    FREE(object->modified_field_bitmap);
 }
 
 // Allocates and copies the standalone prototype change bitmap.
@@ -4397,9 +4397,9 @@ void object_proto_change_bitmap_copy(Object* dst, Object* src)
     int cnt;
 
     cnt = object_field_bitmap_word_count(dst->type);
-    dst->field_4C = (int*)MALLOC(sizeof(int) * cnt);
+    dst->modified_field_bitmap = (int*)MALLOC(sizeof(int) * cnt);
 
-    memcpy(dst->field_4C, src->field_4C, sizeof(int) * cnt);
+    memcpy(dst->modified_field_bitmap, src->modified_field_bitmap, sizeof(int) * cnt);
 }
 
 // Clears field change bits without clearing the object modified flag.
@@ -4409,7 +4409,7 @@ void object_field_changes_clear(Object* object)
     int cnt;
 
     cnt = object_field_bitmap_word_count(object->type);
-    memset(object->field_4C, 0, sizeof(int) * cnt);
+    memset(object->modified_field_bitmap, 0, sizeof(int) * cnt);
 }
 
 // 0x40C6B0
@@ -4802,18 +4802,18 @@ bool object_inst_enumerate_overridden_fields_func(Object* object, int begin, int
     int fld;
 
     for (index = 0; index < object_fields[begin + 1].change_array_idx; index++) {
-        v1 += bitset_count_bits(object->field_48[index], 32);
+        v1 += bitset_count_bits(object->stored_field_bitmap[index], 32);
     }
 
-    v1 += bitset_count_bits(object->field_48[index], object_fields[begin + 1].bit);
+    v1 += bitset_count_bits(object->stored_field_bitmap[index], object_fields[begin + 1].bit);
 
     for (fld = begin + 1; fld < end; fld++) {
-        if ((object->field_48[object_fields[fld].change_array_idx] & object_fields[fld].mask) != 0) {
+        if ((object->stored_field_bitmap[object_fields[fld].change_array_idx] & object_fields[fld].mask) != 0) {
             if (!callback(object, v1, &(object_fields[fld]))) {
                 return false;
             }
 
-            if ((object->field_48[object_fields[fld].change_array_idx] & object_fields[fld].mask) != 0) {
+            if ((object->stored_field_bitmap[object_fields[fld].change_array_idx] & object_fields[fld].mask) != 0) {
                 v1++;
             }
         }
@@ -4969,17 +4969,17 @@ bool object_inst_enumerate_available_fields_func(Object* object, int begin, int 
     int fld;
 
     for (index = 0; index < object_fields[begin + 1].change_array_idx; index++) {
-        v1 += bitset_count_bits(object->field_48[index], 32);
+        v1 += bitset_count_bits(object->stored_field_bitmap[index], 32);
     }
 
-    v1 += bitset_count_bits(object->field_48[index], object_fields[begin + 1].bit);
+    v1 += bitset_count_bits(object->stored_field_bitmap[index], object_fields[begin + 1].bit);
 
     for (fld = begin + 1; fld < end; fld++) {
         if (!callback(object, v1, &(object_fields[fld]))) {
             return false;
         }
 
-        if ((object->field_48[object_fields[fld].change_array_idx] & object_fields[fld].mask) != 0) {
+        if ((object->stored_field_bitmap[object_fields[fld].change_array_idx] & object_fields[fld].mask) != 0) {
             v1++;
         }
     }
@@ -4995,10 +4995,10 @@ int object_inst_field_storage_index(Object* object, int fld)
     int index;
 
     for (index = 0; index < object_fields[fld].change_array_idx; index++) {
-        v1 += bitset_count_bits(object->field_48[index], 32);
+        v1 += bitset_count_bits(object->stored_field_bitmap[index], 32);
     }
 
-    v1 += bitset_count_bits(object->field_48[index], object_fields[fld].bit);
+    v1 += bitset_count_bits(object->stored_field_bitmap[index], object_fields[fld].bit);
 
     return v1;
 }
@@ -5027,7 +5027,7 @@ void object_inst_field_copy_from_prototype(Object* object, int fld)
 // 0x40D320
 bool object_inst_field_is_overridden(Object* object, int fld)
 {
-    return (object->field_48[object_fields[fld].change_array_idx] & object_fields[fld].mask) != 0;
+    return (object->stored_field_bitmap[object_fields[fld].change_array_idx] & object_fields[fld].mask) != 0;
 }
 
 // Delegates the local value check to the override bitmap test.
@@ -5049,9 +5049,9 @@ void object_inst_field_override_set(Object* object, int fld, bool enabled)
 void object_inst_field_override_set_info(Object* object, ObjectFieldInfo* info, int enabled)
 {
     if (enabled) {
-        object->field_48[info->change_array_idx] |= info->mask;
+        object->stored_field_bitmap[info->change_array_idx] |= info->mask;
     } else {
-        object->field_48[info->change_array_idx] &= ~info->mask;
+        object->stored_field_bitmap[info->change_array_idx] &= ~info->mask;
     }
 }
 
@@ -5059,7 +5059,7 @@ void object_inst_field_override_set_info(Object* object, ObjectFieldInfo* info, 
 // 0x40D3D0
 bool object_field_is_changed(Object* object, int fld)
 {
-    return (object->field_4C[object_fields[fld].change_array_idx] & object_fields[fld].mask) != 0;
+    return (object->modified_field_bitmap[object_fields[fld].change_array_idx] & object_fields[fld].mask) != 0;
 }
 
 // Sets or clears a field change bit.
@@ -5067,9 +5067,9 @@ bool object_field_is_changed(Object* object, int fld)
 void object_field_change_set(Object* object, int fld, bool enabled)
 {
     if (enabled) {
-        object->field_4C[object_fields[fld].change_array_idx] |= object_fields[fld].mask;
+        object->modified_field_bitmap[object_fields[fld].change_array_idx] |= object_fields[fld].mask;
     } else {
-        object->field_4C[object_fields[fld].change_array_idx] &= ~object_fields[fld].mask;
+        object->modified_field_bitmap[object_fields[fld].change_array_idx] &= ~object_fields[fld].mask;
     }
 }
 
@@ -5176,7 +5176,7 @@ bool object_changed_field_debug_print(Object* object, int a2, ObjectFieldInfo* f
 {
     (void)a2;
 
-    if ((object->field_4C[field_info->change_array_idx] & field_info->mask) != 0) {
+    if ((object->modified_field_bitmap[field_info->change_array_idx] & field_info->mask) != 0) {
         tig_debug_printf("\t #%d", field_info - object_fields);
     }
     return true;

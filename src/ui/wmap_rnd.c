@@ -134,7 +134,7 @@ static void wmap_rnd_encounter_build_object(int name, int64_t loc, int64_t* obj_
  *
  * 0x5C79A0
  */
-static const char* off_5C79A0[] = {
+static const char* wmap_rnd_power_tier_names[] = {
     "none",
     "easy",
     "average",
@@ -148,7 +148,7 @@ static const char* off_5C79A0[] = {
  *
  * 0x5C79B0
  */
-static const char* off_5C79B0[] = {
+static const char* wmap_rnd_critter_group_labels[] = {
     "First:",
     "Second:",
     "Third:",
@@ -410,7 +410,7 @@ bool wmap_rnd_mod_load(void)
 
     // Parse the power chart (entries 20000+). Power tier names are matched
     // against wmap_rnd_power_level_names to produce integer values 0-3.
-    if (!wmap_rnd_encounter_chart_parse(&wmap_rnd_power_chart, 20000, off_5C79A0)) {
+    if (!wmap_rnd_encounter_chart_parse(&wmap_rnd_power_chart, 20000, wmap_rnd_power_tier_names)) {
         tig_debug_println("Disabling random encounters because of bad message file.");
         wmap_rnd_encounter_chart_exit(&wmap_rnd_frequency_chart);
         mes_unload(wmap_rnd_mes_file);
@@ -957,7 +957,7 @@ bool wmap_rnd_parse_critters(char** str, WmapRndEncounterTableEntry* entry)
     int upper;
 
     for (index = 0; index < 5; index++) {
-        if (!tig_str_parse_named_value(str, off_5C79B0[index], &bp)) {
+        if (!tig_str_parse_named_value(str, wmap_rnd_critter_group_labels[index], &bp)) {
             entry->critter_basic_prototype[index] = 0;
             return index != 0;
         }

@@ -16,7 +16,7 @@ void skill_ui_cancel(void);
 void skill_ui_apply(TargetDescriptor* td);
 void skill_ui_activate(TargetDescriptor* td, int64_t obj, int a3);
 int skill_ui_action_skill_get(int index);
-int skill_ui_target_skill_resolve(int a1, TargetDescriptor* td);
+int skill_ui_target_skill_resolve(int skill, TargetDescriptor* td);
 char* skill_ui_action_name_get(int index);
 void skill_ui_adjust_skill(int64_t obj, int skill, int action);
 void skill_ui_set_training(int64_t obj, int skill, int training);

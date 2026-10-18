@@ -370,7 +370,7 @@ void mp_ui_packet_dispatch(UiRequestPacket* pkt)
                 if (ui_inventory_open_preconditions_check(v1, v2, pkt->d.z.field_38)) {
                     new_pkt = *pkt;
                     new_pkt.d.z.field_3C = 1;
-                    tig_net_send_app(&new_pkt, sizeof(new_pkt), sub_52A530());
+                    tig_net_send_app(&new_pkt, sizeof(new_pkt), tig_net_message_sender_client_id_get());
                 }
             }
             break;
@@ -389,7 +389,7 @@ void mp_ui_packet_dispatch(UiRequestPacket* pkt)
 
                 new_pkt = *pkt;
                 new_pkt.d.z.field_3C = 3;
-                tig_net_send_app(&new_pkt, sizeof(new_pkt), sub_52A530());
+                tig_net_send_app(&new_pkt, sizeof(new_pkt), tig_net_message_sender_client_id_get());
             }
             break;
         case 3:

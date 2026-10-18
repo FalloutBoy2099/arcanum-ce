@@ -45,9 +45,9 @@ static int item_unwield_check_stub(int64_t obj);
 static tig_art_id_t item_equipped_critter_idle_art_id_get(int64_t critter_obj);
 static int64_t item_ammo_obj(int64_t obj, int ammo_type);
 static bool item_critter_armor_art_id_build(int64_t a1, int64_t a2, tig_art_id_t* art_id_ptr);
-static bool item_key_collect_into_existing_ring(int64_t a1, int64_t key_obj);
+static bool item_key_collect_into_existing_ring(int64_t critter_obj, int64_t key_obj);
 static void item_key_ring_add_key(int64_t key_obj, int64_t key_ring_obj);
-static void item_key_ring_collect_inventory(int64_t critter_obj, int64_t a2);
+static void item_key_ring_collect_inventory(int64_t critter_obj, int64_t key_ring_obj);
 static void item_key_ring_update_icon(int64_t key_ring_obj);
 static bool item_junk_pile_insert_or_create(int64_t obj, int64_t loc);
 static char* item_error_str(int reason);
@@ -501,7 +501,7 @@ int item_adjust_magic(int64_t item_obj, int64_t owner_obj, int value)
 }
 
 // 0x461620
-int item_target_aptitude_penalty_get(int64_t item_obj, int64_t owner_obj, int64_t a3)
+int item_target_aptitude_penalty_get(int64_t item_obj, int64_t owner_obj, int64_t target_obj)
 {
     int complexity;
     int aptitude1;
@@ -514,10 +514,10 @@ int item_target_aptitude_penalty_get(int64_t item_obj, int64_t owner_obj, int64_
     }
     aptitude1 = stat_level_get(owner_obj, STAT_MAGICK_TECH_APTITUDE);
 
-    if (!obj_type_is_critter(obj_field_int32_get(a3, OBJ_F_TYPE))) {
+    if (!obj_type_is_critter(obj_field_int32_get(target_obj, OBJ_F_TYPE))) {
         return 0;
     }
-    aptitude2 = stat_level_get(a3, STAT_MAGICK_TECH_APTITUDE);
+    aptitude2 = stat_level_get(target_obj, STAT_MAGICK_TECH_APTITUDE);
 
     if (complexity > 0) {
         if (aptitude2 < 0) {
@@ -3786,11 +3786,11 @@ void item_insert(int64_t item_obj, int64_t parent_obj, int inventory_location)
 
 // Adds a key to an existing inventory key ring and refreshes its icon.
 // 0x466A00
-bool item_key_collect_into_existing_ring(int64_t a1, int64_t key_obj)
+bool item_key_collect_into_existing_ring(int64_t critter_obj, int64_t key_obj)
 {
     int64_t key_ring_obj;
 
-    key_ring_obj = item_find_key_ring(a1);
+    key_ring_obj = item_find_key_ring(critter_obj);
     if (key_ring_obj == OBJ_HANDLE_NULL) {
         return false;
     }

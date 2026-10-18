@@ -20,7 +20,7 @@ static bool reaction_stored_lookup(int64_t a1, int64_t a2, bool a3, int* a4);
 static void reaction_stored_remember(int64_t npc_obj, int64_t pc_obj, int value);
 static void reaction_stored_slot_set(int64_t npc_obj, int64_t pc_obj, int level, int index);
 static int reaction_modifiers_get(int64_t npc_obj, int64_t pc_obj, unsigned int flags);
-static int reaction_distance_from_neutral(int a1);
+static int reaction_distance_from_neutral(int reaction_level);
 
 // 0x5FC88C
 static mes_file_handle_t reaction_mes_file;
@@ -29,7 +29,7 @@ static mes_file_handle_t reaction_mes_file;
 static char* reaction_names[REACTION_COUNT];
 
 // 0x5B684C
-static int dword_5B684C[RACE_COUNT][8] = {
+static int reaction_racial_modifiers[RACE_COUNT][8] = {
     {
         0,
         0,
@@ -571,7 +571,7 @@ int reaction_modifiers_get(int64_t npc_obj, int64_t pc_obj, unsigned int flags)
         npc_race = stat_level_get(npc_obj, STAT_RACE);
         pc_race = stat_level_get(pc_obj, STAT_RACE);
 
-        v1 = dword_5B684C[npc_race][pc_race] + modifier;
+        v1 = reaction_racial_modifiers[npc_race][pc_race] + modifier;
         if ((flags & 0x1) != 0) {
             if (v1 < -49) {
                 v1 = -49;
@@ -586,14 +586,14 @@ int reaction_modifiers_get(int64_t npc_obj, int64_t pc_obj, unsigned int flags)
 
 // Returns the absolute distance from neutral reaction fifty.
 // 0x4C15A0
-int reaction_distance_from_neutral(int a1)
+int reaction_distance_from_neutral(int reaction_level)
 {
     // FIXME: Unused.
     datetime_current_second();
 
-    if (a1 > 50) {
-        return a1 - 50;
+    if (reaction_level > 50) {
+        return reaction_level - 50;
     } else {
-        return 50 - a1;
+        return 50 - reaction_level;
     }
 }

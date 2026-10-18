@@ -475,7 +475,7 @@ tig_art_id_t tig_art_id_anim_set(tig_art_id_t art_id, int value);
 int tig_art_critter_id_body_type_get(tig_art_id_t art_id);
 tig_art_id_t tig_art_critter_id_body_type_set(tig_art_id_t art_id, int value);
 int tig_art_monster_id_specie_get(tig_art_id_t art_id);
-int tig_art_critter_body_type_property_get(int a1);
+int tig_art_critter_body_type_property_get(int body_type);
 int tig_art_critter_id_size_get(tig_art_id_t art_id);
 int tig_art_critter_id_gender_get(tig_art_id_t art_id);
 tig_art_id_t tig_art_critter_id_gender_set(tig_art_id_t art_id, int value);

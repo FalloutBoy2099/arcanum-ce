@@ -90,7 +90,7 @@ static void ai_followers_notify_attack(int64_t a1, int64_t a2, int a3, int a4);
 static void ai_follower_attack_react(int64_t a1, int64_t a2, int64_t a3, int a4, int a5, int a6);
 static void ai_nearby_attack_witnesses_notify(int64_t a1, int64_t a2, int loudness);
 static void ai_attack_witness_process(int64_t a1, int64_t a2, int64_t a3, int loudness);
-static void ai_forget_combat_target(int64_t obj, int64_t a2);
+static void ai_forget_combat_target(int64_t obj, int64_t target_obj);
 static void ai_engage_or_flee_from_target(int64_t a1, int64_t a2);
 static bool ai_npc_wait_here_timeevent_check(TimeEvent* timeevent);
 static void ai_copy_params(int64_t obj, AiParams* params);
@@ -107,7 +107,7 @@ static void ai_combat_spell_action_prepare(Ai* ai);
 static bool ai_combat_spell_select(Ai* ai);
 static int ai_combat_spell_attempt_chance(Ai* ai);
 static bool ai_is_stronger(int64_t attacker_obj, int64_t target_obj);
-static bool ai_magictech_candidate_select(Ai* ai, AiMagicTechCandidates* a2);
+static bool ai_magictech_candidate_select(Ai* ai, AiMagicTechCandidates* candidates);
 static void ai_action_perform(Ai* ai);
 static void ai_action_perform_cast(Ai* ai);
 static void ai_action_perform_item(Ai* ai);
@@ -279,9 +279,9 @@ void ai_mod_unload(void)
 }
 
 // 0x4A84D0
-void ai_set_callbacks(AiEndDialogCallback a1, AiFloatLineFunc float_line_func)
+void ai_set_callbacks(AiEndDialogCallback end_dialog_callback, AiFloatLineFunc float_line_func)
 {
-    ai_end_dialog_callback = a1;
+    ai_end_dialog_callback = end_dialog_callback;
     ai_float_line_func = float_line_func;
 }
 
@@ -1326,15 +1326,15 @@ void ai_hostility_end_against_group(int64_t a1, int64_t a2)
 }
 
 // 0x4AA420
-void ai_forget_combat_target(int64_t obj, int64_t a2)
+void ai_forget_combat_target(int64_t obj, int64_t target_obj)
 {
-    if (obj_field_handle_get(obj, OBJ_F_NPC_COMBAT_FOCUS) == a2) {
+    if (obj_field_handle_get(obj, OBJ_F_NPC_COMBAT_FOCUS) == target_obj) {
         obj_field_handle_set(obj, OBJ_F_NPC_COMBAT_FOCUS, OBJ_HANDLE_NULL);
     }
-    if (obj_field_handle_get(obj, OBJ_F_NPC_WHO_HIT_ME_LAST) == a2) {
+    if (obj_field_handle_get(obj, OBJ_F_NPC_WHO_HIT_ME_LAST) == target_obj) {
         obj_field_handle_set(obj, OBJ_F_NPC_WHO_HIT_ME_LAST, OBJ_HANDLE_NULL);
     }
-    ai_shitlist_remove(obj, a2);
+    ai_shitlist_remove(obj, target_obj);
 }
 
 // 0x4AA4A0
@@ -2264,30 +2264,30 @@ bool ai_is_stronger(int64_t attacker_obj, int64_t target_obj)
 }
 
 // 0x4ABF10
-bool ai_magictech_candidate_select(Ai* ai, AiMagicTechCandidates* a2)
+bool ai_magictech_candidate_select(Ai* ai, AiMagicTechCandidates* candidates)
 {
     int64_t obj;
     int base;
     int idx;
     MagicTechAiActionListEntry* entry;
 
-    if (a2->cnt <= 0) {
+    if (candidates->cnt <= 0) {
         return false;
     }
 
-    if ((a2->flags & 0x1) != 0) {
+    if ((candidates->flags & 0x1) != 0) {
         obj = ai->obj;
-    } else if ((a2->flags & 0x2) != 0) {
+    } else if ((candidates->flags & 0x2) != 0) {
         obj = ai->danger_source;
-    } else if ((a2->flags & 0x8) != 0) {
-        obj = a2->obj;
+    } else if ((candidates->flags & 0x8) != 0) {
+        obj = candidates->obj;
     }
 
-    base = random_between(1, 100) >= 80 ? random_between(0, a2->cnt - 1) : 0;
+    base = random_between(1, 100) >= 80 ? random_between(0, candidates->cnt - 1) : 0;
 
-    for (idx = 0; idx < a2->cnt; idx++) {
-        entry = &(a2->entries[(base + idx) % a2->cnt]);
-        if ((a2->flags & 0x4) != 0) {
+    for (idx = 0; idx < candidates->cnt; idx++) {
+        entry = &(candidates->entries[(base + idx) % candidates->cnt]);
+        if ((candidates->flags & 0x4) != 0) {
             if (mt_ai_secondary_defense_score_get(entry->spell)) {
                 obj = ai->danger_source;
             } else {
@@ -2527,7 +2527,7 @@ void ai_action_perform_baking_off(Ai* ai)
             path_create_info.max_rotations = 100;
             path_create_info.rotations = rotations;
             path_create_info.flags = PATH_FLAG_NEARBY_DESTINATION_SEARCH;
-            path_create_info.field_24 = combat_min_dist;
+            path_create_info.range_or_partial_path_length = combat_min_dist;
             if (path_make(&path_create_info)) {
                 anim_goal_run_to_tile(ai->obj, path_create_info.to);
             } else {

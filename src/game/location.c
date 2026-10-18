@@ -23,7 +23,7 @@ static IsoInvalidateRectFunc* location_iso_invalidate_rect;
 static int64_t location_screen_center_x;
 
 // 0x5FC2A8
-static int8_t byte_5FC2A8[30];
+static int8_t location_distance_probe_rotations[30];
 
 // 0x5FC2C8
 static bool location_editor;
@@ -35,7 +35,7 @@ static int location_iso_window_handle;
 static ViewOptions location_view_options;
 
 // 0x5FC2D8
-static int64_t qword_5FC2D8;
+static int64_t location_limit_y_pixels;
 
 // 0x5FC2E0
 static int64_t location_origin_x;
@@ -267,7 +267,7 @@ void location_origin_scroll(int64_t dx, int64_t dy)
 
     if (!location_editor && location_view_options.type == VIEW_TYPE_ISOMETRIC) {
         if (dx + location_origin_x > location_screen_center_x) {
-            if (dy + location_origin_y + qword_5FC2D8 > location_screen_center_y) {
+            if (dy + location_origin_y + location_limit_y_pixels > location_screen_center_y) {
                 if (!location_at(-dx, -dy, &tmp)) {
                     return;
                 }
@@ -277,7 +277,7 @@ void location_origin_scroll(int64_t dx, int64_t dy)
                 }
             }
         } else {
-            if (dy + location_origin_y + qword_5FC2D8 > location_screen_center_y) {
+            if (dy + location_origin_y + location_limit_y_pixels > location_screen_center_y) {
                 if (!location_at(location_iso_content_rect.width - dx, -dy, &tmp)) {
                     return;
                 }
@@ -590,7 +590,7 @@ bool location_limits_set(int64_t x, int64_t y)
     location_origin_y = 0;
     location_limit_x = x;
     location_limit_y = y;
-    qword_5FC2D8 = 20 * y;
+    location_limit_y_pixels = 20 * y;
 
     return true;
 }
@@ -663,8 +663,8 @@ bool location_find_nearby_empty_tile(int64_t from, int64_t* to)
                 path_create_info.obj = OBJ_HANDLE_NULL;
                 path_create_info.from = from;
                 path_create_info.to = targets.entries[idx].loc;
-                path_create_info.max_rotations = sizeof(byte_5FC2A8);
-                path_create_info.rotations = byte_5FC2A8;
+                path_create_info.max_rotations = sizeof(location_distance_probe_rotations);
+                path_create_info.rotations = location_distance_probe_rotations;
                 path_create_info.flags = PATH_FLAG_IGNORE_CRITTERS | PATH_FLAG_WINDOWS_BLOCK | PATH_FLAG_PORTALS_BLOCK;
                 if (path_make(&path_create_info)) {
                     if (to != NULL) {

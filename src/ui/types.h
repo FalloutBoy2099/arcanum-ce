@@ -18,18 +18,18 @@ typedef struct MainMenuButtonInfo {
     /* 0004 */ int y;
     /* 0008 */ int art_num;
     /* 000C */ tig_button_handle_t button_handle;
-    /* 0010 */ int field_10;
-    /* 0014 */ int field_14;
+    /* 0010 */ int destination_window;
+    /* 0014 */ int shortcut_key;
     /* 0018 */ int flags;
     /* 001C */ TigRect rect;
-    /* 002C */ int field_2C;
+    /* 002C */ int description_message_id;
 } MainMenuButtonInfo;
 
-typedef struct MainMenuWindowInfoF3C {
-    int field_0;
+typedef struct MainMenuArtLayer {
+    int art_number;
     int x;
     int y;
-} MainMenuWindowInfoF3C;
+} MainMenuArtLayer;
 
 typedef struct MainMenuWindowInfo {
     /* 0000 */ int background_art_num;
@@ -44,10 +44,10 @@ typedef struct MainMenuWindowInfo {
     /* 0024 */ int num;
     /* 0028 */ int num_buttons;
     /* 002C */ MainMenuButtonInfo* buttons;
-    /* 0030 */ int field_30;
-    /* 0034 */ int field_34;
+    /* 0030 */ int origin_x;
+    /* 0034 */ int origin_y;
     /* 0038 */ int refresh_text_flags;
-    /* 003C */ MainMenuWindowInfoF3C field_3C[2];
+    /* 003C */ MainMenuArtLayer art_layers[2];
     /* 0054 */ void (*refresh_func)(TigRect* rect);
     /* 0058 */ bool (*execute_func)(int btn);
     /* 005C */ TigRect content_rect;

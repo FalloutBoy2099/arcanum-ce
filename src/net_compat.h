@@ -37,11 +37,11 @@
 #define tig_net_local_server_get_max_players() 8
 #define tig_net_xfer_send_as(a, b, c, d)
 #define tig_net_xfer_send(a, b, c)
-#define sub_529520() 0
+#define tig_net_local_client_id_get() 0
 #define tig_net_reset_connection()
 #define tig_net_local_server_get_options() 0
-#define sub_52A530() 0
-#define sub_52A900() 0
+#define tig_net_message_sender_client_id_get() 0
+#define tig_net_game_time_is_paused() 0
 #define tig_net_client_info_get_name(a) 0
 
 #endif /* ARCANUM_NET_COMPAT_H_ */

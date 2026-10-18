@@ -174,7 +174,7 @@ static AnimID anim_saved_timeevent_id;
 static AnimPath anim_path_probe_buffer;
 
 // 0x5E34F4
-bool dword_5E34F4;
+bool anim_slot_exhaustion_recovery_pending;
 
 // 0x5E34F8
 void (*anim_all_goals_complete_callback)(void);
@@ -183,7 +183,7 @@ void (*anim_all_goals_complete_callback)(void);
 bool in_anim_load;
 
 // 0x5E3500
-int dword_5E3500;
+int anim_allocated_slot_count;
 
 // 0x5E3504
 int anim_active_goal_count;
@@ -273,7 +273,7 @@ bool anim_private_init(GameInitInfo* init_info)
 
     anim_next_unique_id = random_between(0, 10024);
     anim_active_goal_count = 0;
-    dword_5E3500 = 0;
+    anim_allocated_slot_count = 0;
 
     return true;
 }
@@ -303,7 +303,7 @@ void anim_private_reset(void)
     }
 
     anim_active_goal_count = 0;
-    dword_5E3500 = 0;
+    anim_allocated_slot_count = 0;
 }
 
 // 0x44CB60
@@ -373,7 +373,7 @@ bool anim_allocate_new_run_index(AnimID* anim_id)
 
     if (index == 216) {
         tig_debug_printf("Anim: WARNING: Ran out of animation slots!\n");
-        dword_5E34F4 = 1;
+        anim_slot_exhaustion_recovery_pending = 1;
         return false;
     }
 
@@ -399,7 +399,7 @@ bool anim_allocate_new_run_index(AnimID* anim_id)
         run_info->goals[0].object_references[subindex].objid.type = OID_TYPE_NULL;
     }
 
-    dword_5E3500++;
+    anim_allocated_slot_count++;
 
     return true;
 }
@@ -469,7 +469,7 @@ bool anim_allocate_this_run_index(AnimID* anim_id)
         run_info->goals[0].object_references[idx].objid.type = OID_TYPE_NULL;
     }
 
-    dword_5E3500++;
+    anim_allocated_slot_count++;
 
     return true;
 }
@@ -510,7 +510,7 @@ bool mp_deallocate_run_index(AnimID* anim_id)
         run_info->current_goal = -1;
         run_info->path.flags = 1;
 
-        dword_5E3500--;
+        anim_allocated_slot_count--;
         anim_validate_active_goals("Free Run Index");
 
         if (anim_active_goal_count == 0) {

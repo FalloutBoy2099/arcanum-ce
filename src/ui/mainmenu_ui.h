@@ -37,7 +37,7 @@ typedef enum MainMenuType {
     MM_TYPE_IN_PLAY,
     MM_TYPE_IN_PLAY_LOCKED,
     MM_TYPE_OPTIONS,
-    MM_TYPE_5,
+    MM_TYPE_IN_PLAY_WITHOUT_LOAD,
 } MainMenuType;
 
 extern int dword_5C3618;

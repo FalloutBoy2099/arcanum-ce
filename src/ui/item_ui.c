@@ -20,16 +20,16 @@
 static void item_ui_target_flags_pointer_get(int64_t item_obj, uint64_t** tgt_ptr);
 
 // 0x5CAC40
-static uint64_t qword_5CAC40 = TGT_OBJECT;
+static uint64_t item_ui_object_target_flags = TGT_OBJECT;
 
 // 0x5CAC48
-static uint64_t qword_5CAC48 = TGT_OBJECT | TGT_OBJ_INVEN;
+static uint64_t item_ui_inventory_target_flags = TGT_OBJECT | TGT_OBJ_INVEN;
 
 // 0x5CAC50
-static uint64_t qword_5CAC50 = TGT_OBJECT | TGT_TILE;
+static uint64_t item_ui_object_or_tile_target_flags = TGT_OBJECT | TGT_TILE;
 
 // 0x6810D8
-static int64_t qword_6810D8;
+static int64_t item_ui_selected_item_obj;
 
 // 0x5719D0
 bool item_ui_init(GameInitInfo* init_info)
@@ -60,9 +60,9 @@ void item_ui_target_flags_pointer_get(int64_t item_obj, uint64_t** tgt_ptr)
         if (mana_store != 0 || (flags & OIF_IS_MAGICAL) != 0) {
             magictech_target_flags_pointer_get(spl, tgt_ptr);
         } else if (trap_is_trap_device(item_obj)) {
-            *tgt_ptr = &qword_5CAC50;
+            *tgt_ptr = &item_ui_object_or_tile_target_flags;
         } else if (spl == -1) {
-            *tgt_ptr = &qword_5CAC40;
+            *tgt_ptr = &item_ui_object_target_flags;
         } else {
             magictech_target_flags_pointer_get(spl, tgt_ptr);
         }
@@ -89,7 +89,7 @@ void item_ui_activate(int64_t owner_obj, int64_t item_obj)
         item_ui_deactivate();
     }
 
-    qword_6810D8 = item_obj;
+    item_ui_selected_item_obj = item_obj;
 
     item_ui_target_flags_pointer_get(item_obj, &tgt_ptr);
 
@@ -115,7 +115,7 @@ void item_ui_activate(int64_t owner_obj, int64_t item_obj)
         target_flags_set(*tgt_ptr);
         if (intgame_mode_set(INTGAME_MODE_ITEM)) {
             target_flags_set(*tgt_ptr);
-            if (obj_field_int32_get(qword_6810D8, OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY) < 0) {
+            if (obj_field_int32_get(item_ui_selected_item_obj, OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY) < 0) {
                 intgame_item_mode_cursor_set(620);
                 intgame_refresh_cursor();
             }
@@ -133,7 +133,7 @@ void item_ui_activate(int64_t owner_obj, int64_t item_obj)
 void item_ui_deactivate(void)
 {
     intgame_mode_set(INTGAME_MODE_MAIN);
-    qword_6810D8 = OBJ_HANDLE_NULL;
+    item_ui_selected_item_obj = OBJ_HANDLE_NULL;
     intgame_item_mode_cursor_set(21);
 }
 
@@ -158,9 +158,9 @@ void item_ui_apply(TargetDescriptor* td)
         return;
     }
 
-    if (obj_field_int32_get(qword_6810D8, OBJ_F_TYPE) == OBJ_TYPE_GENERIC
+    if (obj_field_int32_get(item_ui_selected_item_obj, OBJ_F_TYPE) == OBJ_TYPE_GENERIC
         && !tig_kb_get_modifier(SDL_KMOD_LCTRL)
-        && (obj_field_int32_get(qword_6810D8, OBJ_F_GENERIC_FLAGS) & OGF_IS_LOCKPICK) != 0) {
+        && (obj_field_int32_get(item_ui_selected_item_obj, OBJ_F_GENERIC_FLAGS) & OGF_IS_LOCKPICK) != 0) {
         skill_invocation_init(&skill_invocation);
         object_handle_reference_init(pc_obj, &(skill_invocation.source));
         if (!td->is_loc) {
@@ -171,7 +171,7 @@ void item_ui_apply(TargetDescriptor* td)
         skill_pick_best_follower(&skill_invocation);
 
         if (pc_obj == skill_invocation.source.obj) {
-            item_obj = qword_6810D8;
+            item_obj = item_ui_selected_item_obj;
         } else {
             item_obj = item_find_first_generic(skill_invocation.source.obj, OGF_IS_LOCKPICK);
             dialog_copy_npc_let_me_handle_msg(skill_invocation.source.obj, pc_obj, str);
@@ -187,7 +187,7 @@ void item_ui_apply(TargetDescriptor* td)
             }
         }
     } else {
-        item_obj = qword_6810D8;
+        item_obj = item_ui_selected_item_obj;
     }
 
     if (item_obj != OBJ_HANDLE_NULL) {

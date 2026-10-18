@@ -10,8 +10,8 @@
 #include "game/target.h"
 #include "game/timeevent.h"
 
-#define MT_80 80
-#define MT_140 140
+#define MAGICTECH_PLAYER_SPELL_COUNT 80
+#define MAGICTECH_FIRST_TECH_ENTRY 140
 #define MT_SPELL_COUNT 223
 
 typedef enum MagicTechAction {
@@ -150,23 +150,23 @@ typedef struct MagicTechComponentInfo {
             /* 0060 */ int palette;
         } summon;
         struct {
-            /* 0040 */ int field_40;
-            /* 0044 */ int field_44;
-            /* 0048 */ int field_48;
-            /* 004C */ int field_4C;
+            /* 0040 */ int object_field;
+            /* 0044 */ int comparison_operator;
+            /* 0048 */ int test_value;
+            /* 004C */ int branch_destination;
         } test_in_branch;
         MagicTechComponentTrait trait;
         struct {
-            /* 0040 */ int field_40;
-            /* 0044 */ int field_44;
+            /* 0040 */ int index;
+            /* 0044 */ int object_field;
             /* 0048 */ int field_48;
-            /* 004C */ int field_4C;
-            /* 0050 */ int field_50;
-            /* 0054 */ int field_54;
+            /* 004C */ int scale_numerator;
+            /* 0050 */ int scale_denominator;
+            /* 0054 */ int addend;
         } trait_idx;
         struct {
-            /* 0040 */ int field_40;
-            /* 0044 */ int field_44;
+            /* 0040 */ int object_field;
+            /* 0044 */ int value_source;
         } trait64;
     } data;
 } MagicTechComponentInfo;
@@ -257,11 +257,11 @@ typedef unsigned int MagicTechRunFlags;
 
 #define MAGICTECH_RUN_ACTIVE 0x0001u
 #define MAGICTECH_RUN_FREE 0x0002u
-#define MAGICTECH_RUN_0x04 0x0004u
+#define MAGICTECH_RUN_PROCESSING_STARTED 0x0004u
 #define MAGICTECH_RUN_REFLECTED 0x0008u
 #define MAGICTECH_RUN_UNRESISTABLE 0x0010u
 #define MAGICTECH_RUN_0x20 0x0020u
-#define MAGICTECH_RUN_0x40 0x0040u
+#define MAGICTECH_RUN_END_IMMEDIATE 0x0040u
 #define MAGICTECH_RUN_DISPELLED 0x80000000u
 
 typedef struct MagicTechRunInfo {
@@ -406,7 +406,7 @@ void magictech_object_callback_stub(int64_t obj);
 void magictech_anim_play_hit_fx(int64_t obj, CombatContext* combat);
 bool magictech_target_resistance_check(int64_t obj, int mt_id);
 void magictech_tempus_fugit_and_familiar_flags_clear(int64_t obj);
-bool magictech_target_flags_pointer_get(int magictech, uint64_t** a2);
+bool magictech_target_flags_pointer_get(int magictech, uint64_t** target_flags_ptr);
 void magictech_ai_reset(void);
 bool magictech_is_enabled(int magictech);
 bool magictech_is_magic(int magictech);

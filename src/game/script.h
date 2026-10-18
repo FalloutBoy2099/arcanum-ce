@@ -350,7 +350,7 @@ typedef struct ScriptInvocation {
     /* 0020 */ int attachment_point;
 } ScriptInvocation;
 
-extern int dword_5A5700[3];
+extern int script_slide_sequence_ids[3];
 
 bool script_init(GameInitInfo* init_info);
 void script_reset(void);

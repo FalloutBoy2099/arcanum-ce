@@ -27,7 +27,7 @@ static tig_font_handle_t broadcast_ui_font;
 // NOTE: Write-only, follows `broadcast_ui_opened`. Probably some leftover.
 //
 // 0x6810CC
-static bool dword_6810CC;
+static bool broadcast_ui_active;
 
 // 0x6810D0
 static bool broadcast_ui_opened;
@@ -73,7 +73,7 @@ void broadcast_ui_open(void)
     broadcast_ui_bcast.loc = 0;
     iso_interface_window_set(ROTWIN_TYPE_BROADCAST);
     textedit_ui_focus(&broadcast_ui_textedit);
-    dword_6810CC = true;
+    broadcast_ui_active = true;
     intgame_text_edit_refresh(broadcast_ui_textedit.buffer, broadcast_ui_font);
     broadcast_ui_opened = true;
 }
@@ -83,7 +83,7 @@ void broadcast_ui_close(void)
 {
     if (broadcast_ui_opened) {
         broadcast_ui_opened = false;
-        dword_6810CC = false;
+        broadcast_ui_active = false;
         textedit_ui_unfocus(&broadcast_ui_textedit);
         *broadcast_ui_textedit.buffer = '\0';
         iso_interface_window_set(ROTWIN_TYPE_MSG);

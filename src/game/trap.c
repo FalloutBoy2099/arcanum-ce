@@ -50,7 +50,7 @@ static int64_t find_trap_source(int64_t obj, uint8_t id);
 static int64_t trap_pc_owner_get(int64_t obj);
 
 // 0x5B5F60
-static int dword_5B5F60[8] = {
+static int trap_item_names_by_script[8] = {
     26000,
     26001,
     26002,
@@ -62,7 +62,7 @@ static int dword_5B5F60[8] = {
 };
 
 // 0x5B5F80
-static int dword_5B5F80[8] = {
+static int trap_description_names_by_script[8] = {
     0,
     6047, // Railroad Spike
     7038, // Arrow
@@ -414,7 +414,7 @@ bool trap_use_at_loc(int64_t pc_obj, int64_t item_obj, int64_t target_loc)
 
     obj_arrayfield_script_get(item_obj, OBJ_F_SCRIPTS_IDX, 1, &scr);
     if (scr.num >= TRAP_SCRIPT_FIRST && scr.num < TRAP_SCRIPT_COUNT) {
-        name = dword_5B5F60[scr.num - TRAP_SCRIPT_FIRST];
+        name = trap_item_names_by_script[scr.num - TRAP_SCRIPT_FIRST];
     } else {
         name = trap_type_from_scr(&scr) == TRAP_TYPE_MAGICAL
             ? BP_MAGICKAL_TRAP
@@ -524,8 +524,8 @@ bool get_disarm_item_name(int64_t trap_obj, int* name_ptr)
         return true;
     }
 
-    if (dword_5B5F80[scr.num - TRAP_SCRIPT_FIRST] != 0) {
-        *name_ptr = dword_5B5F80[scr.num - TRAP_SCRIPT_FIRST];
+    if (trap_description_names_by_script[scr.num - TRAP_SCRIPT_FIRST] != 0) {
+        *name_ptr = trap_description_names_by_script[scr.num - TRAP_SCRIPT_FIRST];
         return true;
     }
 
