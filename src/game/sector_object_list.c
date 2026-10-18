@@ -14,7 +14,7 @@
 #include "game/ui.h"
 #include "game/wallcheck.h"
 
-static void sub_4F20A0(SectorObjectList* list, ObjectNode* node);
+static void sector_object_node_insert_sorted(SectorObjectList* list, ObjectNode* node);
 static bool objlist_insert_internal(SectorObjectList* list, int64_t obj);
 static bool objlist_remove_internal(SectorObjectList* list, int64_t obj, ObjectNode** node_ptr);
 
@@ -36,12 +36,12 @@ bool sector_object_list_reset(SectorObjectList* list)
         node = list->heads[index];
         while (node != NULL) {
             list->heads[index] = node->next;
-            sub_4D9A90(node->obj);
+            light_object_render_lights_clear(node->obj);
 
             if (object_is_static(node->obj)) {
                 object_delete(node->obj);
             } else {
-                sub_443770(node->obj);
+                object_render_resources_clear(node->obj);
             }
 
             object_node_destroy(node);
@@ -102,7 +102,7 @@ bool objlist_move(SectorObjectList* list, int64_t obj, int64_t loc, int offset_x
     obj_field_int64_set(obj, OBJ_F_LOCATION, loc);
     obj_field_int32_set(obj, OBJ_F_OFFSET_X, offset_x);
     obj_field_int32_set(obj, OBJ_F_OFFSET_Y, offset_y);
-    sub_4F20A0(list, node);
+    sector_object_node_insert_sorted(list, node);
 
     if (object_is_static(obj)) {
         list->modified = 1;
@@ -159,7 +159,7 @@ bool objlist_load(SectorObjectList* list, TigFile* stream, int64_t sector_id)
             tile = tile_id_from_loc(obj_field_int64_get(obj, OBJ_F_LOCATION));
             loc = location_make(x + TILE_X(tile), y + TILE_Y(tile));
             obj_field_int64_set(obj, OBJ_F_LOCATION, loc);
-            sub_406B80(obj);
+            obj_changes_clear(obj);
         }
 
         obj_load_postprocess(obj);
@@ -257,7 +257,7 @@ bool objlist_load_with_difs(SectorObjectList* list, TigFile* sec_stream, TigFile
             loc = obj_field_int64_get(obj, OBJ_F_LOCATION);
             tile = tile_id_from_loc(loc);
             obj_field_int64_set(obj, OBJ_F_LOCATION, LOCATION_MAKE(x + (tile & 0x3F), y + ((tile >> 6) & 0x3F)));
-            sub_406B80(obj);
+            obj_changes_clear(obj);
         }
 
         if (dif) {
@@ -318,7 +318,7 @@ bool objlist_save(SectorObjectList* list, TigFile* stream)
                     return false;
                 }
                 obj_load_postprocess(node->obj);
-                sub_406B80(node->obj);
+                obj_changes_clear(node->obj);
                 cnt++;
             }
             node = node->next;
@@ -466,15 +466,15 @@ void objlist_fold(SectorObjectList* list, int64_t location, int a4)
             if ((obj_field_int32_get(obj, OBJ_F_FLAGS) & OF_INVENTORY) == 0
                 && !object_is_static(obj)) {
                 objlist_insert_internal(list, obj);
-                sub_441FC0(obj, a4);
-                sub_438530(obj);
+                object_npc_ai_schedule_immediate(obj, a4);
+                wallcheck_player_location_notify(obj);
             }
         } while (obj_find_walk_next(&obj, &iter));
     }
 }
 
 // 0x4F1D80
-void sub_4F1D80(void)
+void sector_object_list_reserved_hook_stub(void)
 {
     // TODO: Incomplete.
 }
@@ -541,19 +541,19 @@ bool objlist_insert_internal(SectorObjectList* list, int64_t obj)
     node = object_node_create();
     node->obj = obj;
     node->next = NULL;
-    sub_4F20A0(list, node);
+    sector_object_node_insert_sorted(list, node);
 
-    if (sub_43D940(obj)) {
-        sub_43F710(obj);
+    if (object_type_is_sector_static(obj)) {
+        object_scenery_animation_refresh(obj);
     } else {
-        sub_435CE0(obj);
+        anim_object_auto_fidget(obj);
     }
 
     return true;
 }
 
 // 0x4F20A0
-void sub_4F20A0(SectorObjectList* list, ObjectNode* new_node)
+void sector_object_node_insert_sorted(SectorObjectList* list, ObjectNode* new_node)
 {
     int64_t new_obj_loc;
     int new_obj_type;
@@ -570,7 +570,7 @@ void sub_4F20A0(SectorObjectList* list, ObjectNode* new_node)
     new_obj_loc = obj_field_int64_get(new_node->obj, OBJ_F_LOCATION);
     new_obj_type = obj_field_int32_get(new_node->obj, OBJ_F_TYPE);
     new_obj_flags = obj_field_int32_get(new_node->obj, OBJ_F_FLAGS);
-    sub_4F2230(new_node->obj, &v1, &v2);
+    sector_object_sort_offsets_get(new_node->obj, &v1, &v2);
     new_obj_tile = tile_id_from_loc(new_obj_loc);
 
     node_ptr = &(list->heads[new_obj_tile]);
@@ -603,7 +603,7 @@ void sub_4F20A0(SectorObjectList* list, ObjectNode* new_node)
         }
 
         if ((flags & OF_FLAT) == 0) {
-            sub_4F2230((*node_ptr)->obj, &v3, &v4);
+            sector_object_sort_offsets_get((*node_ptr)->obj, &v3, &v4);
             if (v2 < v4) {
                 new_node->next = *node_ptr;
                 *node_ptr = new_node;
@@ -624,7 +624,7 @@ void sub_4F20A0(SectorObjectList* list, ObjectNode* new_node)
 }
 
 // 0x4F2230
-void sub_4F2230(int64_t obj, int* a2, int* a3)
+void sector_object_sort_offsets_get(int64_t obj, int* a2, int* a3)
 {
     int obj_type;
     int offset_x;
@@ -645,7 +645,7 @@ void sub_4F2230(int64_t obj, int* a2, int* a3)
         offset_y = obj_field_int32_get(obj, OBJ_F_OFFSET_Y);
     }
 
-    sub_4B93F0(offset_x, offset_y, a2, a3);
+    location_offsets_to_sort_axes(offset_x, offset_y, a2, a3);
 }
 
 // 0x4F22B0

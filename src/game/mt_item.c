@@ -233,33 +233,33 @@ void handle_item_event_func(int64_t item_obj, int64_t parent_obj, int64_t extra_
 
         if ((trig & MT_ITEM_TRIG_TARGET_ATTACKER_ANY) != 0) {
             if ((trig & MT_ITEM_TRIG_TARGET_ATTACKER) != 0) {
-                sub_4440E0(extra_obj, &(mt_invocation.target_obj));
+                object_handle_reference_init(extra_obj, &(mt_invocation.target_obj));
             } else if ((trig & MT_ITEM_TRIG_TARGET_ATTACKER_WEAPON) != 0) {
                 if (extra_obj != OBJ_HANDLE_NULL) {
-                    sub_4440E0(item_wield_get(extra_obj, ITEM_INV_LOC_WEAPON), &(mt_invocation.target_obj));
+                    object_handle_reference_init(item_wield_get(extra_obj, ITEM_INV_LOC_WEAPON), &(mt_invocation.target_obj));
                 } else {
-                    sub_4440E0(OBJ_HANDLE_NULL, &(mt_invocation.target_obj));
+                    object_handle_reference_init(OBJ_HANDLE_NULL, &(mt_invocation.target_obj));
                 }
             } else if ((trig & MT_ITEM_TRIG_TARGET_ATTACKER_ARMOR) != 0) {
                 if (extra_obj != OBJ_HANDLE_NULL) {
-                    sub_4440E0(item_wield_get(extra_obj, ITEM_INV_LOC_ARMOR), &(mt_invocation.target_obj));
+                    object_handle_reference_init(item_wield_get(extra_obj, ITEM_INV_LOC_ARMOR), &(mt_invocation.target_obj));
                 } else {
-                    sub_4440E0(OBJ_HANDLE_NULL, &(mt_invocation.target_obj));
+                    object_handle_reference_init(OBJ_HANDLE_NULL, &(mt_invocation.target_obj));
                 }
             } else {
-                sub_4440E0(OBJ_HANDLE_NULL, &(mt_invocation.target_obj));
+                object_handle_reference_init(OBJ_HANDLE_NULL, &(mt_invocation.target_obj));
             }
         } else if ((trig & MT_ITEM_TRIG_PARENT_ATKS_LOCATION) != 0) {
             mt_invocation.target_loc = target_loc;
         } else {
-            sub_4440E0(parent_obj, &(mt_invocation.target_obj));
+            object_handle_reference_init(parent_obj, &(mt_invocation.target_obj));
         }
 
         mt_invocation.trigger = flags;
         mt_invocation.flags |= MAGICTECH_INVOCATION_FRIENDLY;
 
         if (store_attacker_obj != OBJ_HANDLE_NULL) {
-            sub_4440E0(store_attacker_obj, &(mt_invocation.attacker_obj));
+            object_handle_reference_init(store_attacker_obj, &(mt_invocation.attacker_obj));
         }
 
         if (mt_invocation.target_obj.obj != OBJ_HANDLE_NULL
@@ -571,12 +571,12 @@ void handle_item_unwear_drop(int64_t item_obj, int64_t parent_obj, unsigned int 
 
         // Remove current effects.
         magictech_invocation_init(&mt_invocation, item_obj, mt_item_spell_to_magictech_spell(spell));
-        sub_4440E0(parent_obj, &(mt_invocation.target_obj));
-        sub_4573D0(&mt_invocation);
+        object_handle_reference_init(parent_obj, &(mt_invocation.target_obj));
+        magictech_matching_invocation_interrupt(&mt_invocation);
 
         // Add new effects.
         magictech_invocation_init(&mt_invocation, item_obj, mt_item_spell_to_magictech_spell(spell));
-        sub_4440E0(parent_obj, &(mt_invocation.target_obj));
+        object_handle_reference_init(parent_obj, &(mt_invocation.target_obj));
         mt_invocation.trigger = flags;
         if (mt_invocation.target_obj.obj != OBJ_HANDLE_NULL) {
             magictech_invocation_run(&mt_invocation);

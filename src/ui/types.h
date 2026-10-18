@@ -78,7 +78,7 @@ typedef struct Hotkey {
     /* 0004 */ HotkeyFlags flags;
     /* 0008 */ HotkeyType type;
     /* 000C */ int data;
-    /* 0010 */ FollowerInfo item_obj;
+    /* 0010 */ ObjectHandleReference item_obj;
     /* 0040 */ int count;
     /* 0044 */ tig_art_id_t art_id;
     /* 0048 */ UiButtonInfo info;

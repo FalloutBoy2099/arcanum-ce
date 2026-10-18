@@ -1,4 +1,5 @@
 #include "game/tech.h"
+#include "game/activity_time.h"
 
 #include "game/effect.h"
 #include "game/gamelib.h"
@@ -385,6 +386,7 @@ void tech_learn_schematic(int64_t pc_obj, int64_t written_obj)
     if (index >= cnt) {
         // Add the schematic to the player's known schematics.
         obj_arrayfield_uint32_set(pc_obj, OBJ_F_PC_SCHEMATICS_FOUND_IDX, index, schematic);
+        activity_time_record(pc_obj, ACTIVITY_TIME_SCHEMATIC, 1);
 
         // Destroy the written object.
         object_destroy(written_obj);
@@ -395,7 +397,7 @@ void tech_learn_schematic(int64_t pc_obj, int64_t written_obj)
 
         ui_message.type = UI_MSG_TYPE_SCHEMATIC;
         ui_message.str = mes_file_entry.str;
-        ui_message.field_8 = schematic;
+        ui_message.primary_value = schematic;
     } else {
         // Set up failure message.
         mes_file_entry.num = 88; // "You already know this schematic."
@@ -403,7 +405,7 @@ void tech_learn_schematic(int64_t pc_obj, int64_t written_obj)
 
         ui_message.type = UI_MSG_TYPE_SCHEMATIC;
         ui_message.str = mes_file_entry.str;
-        ui_message.field_8 = schematic;
+        ui_message.primary_value = schematic;
     }
 
     ui_display_msg(&ui_message);

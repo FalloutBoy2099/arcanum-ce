@@ -56,14 +56,14 @@ typedef struct MagicTechSummonTable {
 
 static bool magictech_run_info_save(MagicTechRunInfo* run_info, TigFile* stream);
 static bool magictech_run_info_load(MagicTechRunInfo* run_info, TigFile* stream);
-static bool sub_44FE30(int a1, const char* path, int a3);
-static bool sub_44FFA0(int a1, const char* a2, int a3);
-static void sub_450090(mes_file_handle_t msg_file, MagicTechInfo* info, int num, int magictech);
-static void sub_4501D0(mes_file_handle_t msg_file, MagicTechInfo* info, int num, int magictech);
-static void sub_450240(void);
-static bool sub_4507D0(int64_t obj, int magictech);
-static int sub_450B90(int64_t obj);
-static void sub_450C10(int64_t obj, unsigned int flags);
+static bool magictech_spell_headers_load(int a1, const char* path, int a3);
+static bool magictech_spell_components_load_all(int a1, const char* a2, int a3);
+static void magictech_spell_header_parse(mes_file_handle_t msg_file, MagicTechInfo* info, int num, int magictech);
+static void magictech_effect_components_load(mes_file_handle_t msg_file, MagicTechInfo* info, int num, int magictech);
+static void magictech_effect_components_free(void);
+static bool magictech_casting_cost_consume(int64_t obj, int magictech);
+static int magictech_maintenance_slots_capacity(int64_t obj);
+static void magictech_spell_flags_set(int64_t obj, unsigned int flags);
 static void magictech_process(void);
 static void MTComponentAGoal_ProcFunc(void);
 static void MTComponentAGoalTerminate_ProcFunc(void);
@@ -87,64 +87,64 @@ static void magictech_pick_proto_from_list(ObjectID* oid, int list);
 static void MTComponentTerminate_ProcFunc(void);
 static void MTComponentTestNBranch_ProcFunc(void);
 static void MTComponentTrait_ProcFunc(void);
-static void sub_452CD0(int64_t obj, tig_art_id_t art_id);
+static void magictech_polymorph_art_apply(int64_t obj, tig_art_id_t art_id);
 static void MTComponentTraitIdx_ProcFunc(void);
 static void MTComponentTrait64_ProcFunc(void);
 static void MTComponentUse_ProcFunc(void);
 static void MTComponentNoop_ProcFunc(void);
 static void MTComponentEnvFlag_ProcFunc(void);
-static bool sub_452F20(void);
-static bool sub_4532F0(int64_t obj, int magictech);
-static bool sub_453370(int64_t obj, int magictech, int a3);
-static bool sub_453410(int mt_id, int spell, int64_t obj, int* other_mt_id_ptr);
-static void sub_4534E0(MagicTechRunInfo* run_info);
-static void sub_453630(void);
-static bool sub_453710(void);
-static bool sub_4537B0(void);
-static void sub_453D40(void);
-static void sub_453EE0(void);
-static void sub_453F20(int64_t a1, int64_t a2);
-static void sub_453FA0(void);
-static bool sub_4545E0(MagicTechRunInfo* run_info);
-static bool sub_454700(int64_t source_loc, int64_t target_loc, int64_t target_obj, int spell);
-static void sub_454790(TimeEvent* timeevent, int a2, int a3, DateTime* datetime);
-static bool sub_4547F0(TimeEvent* timeevent, DateTime* datetime);
-static bool sub_4548D0(TimeEvent* timeevent, DateTime* a2, DateTime* a3);
-static int sub_455100(int64_t obj, int fld, unsigned int a3, bool a4);
-static bool sub_4551C0(int64_t a1, int64_t a2, int64_t a3);
-static void sub_455250(MagicTechRunInfo* run_info, DateTime* datetime);
-static void sub_455350(int64_t obj, int64_t target_loc);
-static void sub_4554B0(MagicTechRunInfo* run_info, int64_t obj);
-static bool sub_455550(TargetContext* target_ctx, MagicTechRunInfo* run_info);
-static void sub_455710(void);
+static bool magictech_current_run_costs_and_stacking_check(void);
+static bool magictech_maintenance_cost_consume(int64_t obj, int magictech);
+static bool magictech_maintenance_cost_consume_with_surcharge(int64_t obj, int magictech, int a3);
+static bool magictech_other_instance_on_target_find(int mt_id, int spell, int64_t obj, int* other_mt_id_ptr);
+static void magictech_conflicting_spell_flags_cancel(MagicTechRunInfo* run_info);
+static void magictech_current_target_context_init(void);
+static bool magictech_source_antimagic_check(void);
+static bool magictech_current_target_resistance_resolve(void);
+static void magictech_component_target_prepare(void);
+static void magictech_aggressive_target_notify(void);
+static void magictech_aggressive_target_notify_once(int64_t a1, int64_t a2);
+static void magictech_current_run_advance_or_finish(void);
+static bool magictech_run_maintenance_capacity_check(MagicTechRunInfo* run_info);
+static bool magictech_target_is_in_range(int64_t source_loc, int64_t target_loc, int64_t target_obj, int spell);
+static void magictech_maintenance_timeevent_prepare(TimeEvent* timeevent, int a2, int a3, DateTime* datetime);
+static bool magictech_maintenance_schedule_and_show(TimeEvent* timeevent, DateTime* datetime);
+static bool magictech_timeevent_add_unless_pending(TimeEvent* timeevent, DateTime* a2, DateTime* a3);
+static int magictech_matching_spell_flag_instances_count(int64_t obj, int fld, unsigned int a3, bool a4);
+static bool magictech_unlock_difficulty_check(int64_t a1, int64_t a2, int64_t a3);
+static void magictech_duration_adjust_for_aptitude_and_mastery(MagicTechRunInfo* run_info, DateTime* datetime);
+static void magictech_move_object_along_path(int64_t obj, int64_t target_loc);
+static void magictech_summoned_object_add(MagicTechRunInfo* run_info, int64_t obj);
+static bool magictech_target_antimagic_and_reflection_resolve(TargetContext* target_ctx, MagicTechRunInfo* run_info);
+static void magictech_run_slots_reset(void);
 static void magictech_id_new_lock(MagicTechRunInfo** lock_ptr);
-static bool sub_455820(MagicTechRunInfo* run_info);
+static bool magictech_run_object_handles_recover(MagicTechRunInfo* run_info);
 static void magictech_id_free_lock(int mt_id);
-static void sub_455960(MagicTechRunInfo* run_info);
-static void sub_4559E0(MagicTechRunInfo* run_info);
-static void sub_455C30(MagicTechInvocation* mt_invocation);
-static bool sub_456430(int64_t a1, int64_t a2, MagicTechInfo* magictech);
+static void magictech_run_object_lists_release(MagicTechRunInfo* run_info);
+static void magictech_run_slot_clear(MagicTechRunInfo* run_info);
+static void magictech_invocation_start(MagicTechInvocation* mt_invocation);
+static bool magictech_disallowed_flags_check(int64_t a1, int64_t a2, MagicTechInfo* magictech);
 static void magictech_preload_art(MagicTechRunInfo* run_info);
-static void sub_457030(int mt_id, int action);
-static bool sub_4570E0(TimeEvent* timeevent);
-static void sub_457270(int mt_id);
-static void sub_457530(int mt_id);
-static void sub_457580(MagicTechInfo* info, int magictech);
+static void magictech_run_callback_action_process(int mt_id, int action);
+static bool magictech_maintenance_timeevent_matches_current(TimeEvent* timeevent);
+static void magictech_run_end_immediate(int mt_id);
+static void magictech_source_detach(int mt_id);
+static void magictech_spell_info_defaults_init(MagicTechInfo* info, int magictech);
 static void magictech_build_aoe_info(MagicTechInfo* info, char* str);
-static void sub_4578F0(MagicTechInfo* info, char* str);
-static void sub_457B20(MagicTechInfo* info, char* str);
-static void sub_457D00(MagicTechInfo* info, char* str);
+static void magictech_spell_costs_and_duration_parse(MagicTechInfo* info, char* str);
+static void magictech_spell_animation_parse(MagicTechInfo* info, char* str);
+static void magictech_spell_flags_parse(MagicTechInfo* info, char* str);
 static void magictech_build_ai_info(MagicTechInfo* info, char* str);
 static void magictech_build_effect_info(MagicTechInfo* info, char* str);
 static bool magictech_find_first(int64_t obj, int* mt_id_ptr);
 static bool magictech_find_next(int64_t obj, int* mt_id_ptr);
-static bool sub_459290(int64_t obj, int spell, int* index_ptr);
-static void sub_459490(int mt_id);
-static bool sub_4594D0(TimeEvent* timeevent);
+static bool magictech_spell_instance_on_target_find(int64_t obj, int spell, int* index_ptr);
+static void magictech_maintenance_action_process(int mt_id);
+static bool magictech_timeevent_matches_selected_action(TimeEvent* timeevent);
 static bool magictech_recharge_timeevent_schedule(int64_t item_obj, int mana_cost, bool add);
 static bool magictech_recharge_timeevent_add(TimeEvent* timeevent);
-static void sub_45A480(MagicTechRunInfo* run_info);
-static void sub_45A760(int64_t obj, const char* msg);
+static void magictech_run_info_free(MagicTechRunInfo* run_info);
+static void magictech_debug_object_print(int64_t obj, const char* msg);
 
 // 0x596140
 static uint64_t qword_596140[] = {
@@ -398,15 +398,15 @@ static const char* off_5B0D14[] = {
 // 0x5B0D3C
 static unsigned int dword_5B0D3C[] = {
     0,
-    CDF_FULL,
-    CDF_RESURRECT,
-    CDF_REANIMATE | CDF_RESURRECT,
-    CDF_DEATH,
-    CDF_STUN,
-    CDF_SCAR,
-    CDF_SCALE,
-    CDF_DROP_WEAPON,
-    CDF_BLIND | CDF_CRIPPLE_ARM | CDF_CRIPPLE_LEG,
+    COMBAT_DAMAGE_FULL,
+    COMBAT_DAMAGE_RESURRECT,
+    COMBAT_DAMAGE_REANIMATE | COMBAT_DAMAGE_RESURRECT,
+    COMBAT_DAMAGE_DEATH,
+    COMBAT_DAMAGE_STUN,
+    COMBAT_DAMAGE_SCAR,
+    COMBAT_DAMAGE_SCALE,
+    COMBAT_DAMAGE_DROP_WEAPON,
+    COMBAT_DAMAGE_BLIND | COMBAT_DAMAGE_CRIPPLE_ARM | COMBAT_DAMAGE_CRIPPLE_LEG,
 };
 
 // 0x5B0D64
@@ -749,7 +749,7 @@ bool magictech_init(GameInitInfo* init_info)
     magictech_editor = init_info->editor;
     magictech_component_names = (const char**)CALLOC(25, sizeof(const char*));
     magictech_run_info = (MagicTechRunInfo*)CALLOC(512, sizeof(MagicTechRunInfo));
-    sub_455710();
+    magictech_run_slots_reset();
 
     if (!mes_load("Rules\\magictech.mes", &magictech_mes_file)) {
         FREE(magictech_component_names);
@@ -797,7 +797,7 @@ bool magictech_init(GameInitInfo* init_info)
 
     magictech_spells = (MagicTechInfo*)MALLOC(sizeof(MagicTechInfo) * MT_SPELL_COUNT);
 
-    if (!sub_44FE30(0, "Rules\\spelllist.mes", 1000)) {
+    if (!magictech_spell_headers_load(0, "Rules\\spelllist.mes", 1000)) {
         FREE(magictech_component_names);
         FREE(magictech_run_info);
         return false;
@@ -820,7 +820,7 @@ bool magictech_post_init(GameInitInfo* init_info)
 {
     (void)init_info;
 
-    if (!sub_44FFA0(0, "Rules\\spelllist.mes", 1000)) {
+    if (!magictech_spell_components_load_all(0, "Rules\\spelllist.mes", 1000)) {
         FREE(magictech_component_names);
         FREE(magictech_run_info);
         magictech_initialized = false;
@@ -840,7 +840,7 @@ void magictech_exit(void)
             }
         }
 
-        sub_450240();
+        magictech_effect_components_free();
 
         mes_unload(magictech_spell_mes_file);
         mes_unload(magictech_mes_file);
@@ -933,12 +933,12 @@ bool magictech_run_info_save(MagicTechRunInfo* run_info, TigFile* stream)
     if (!mt_obj_node_save_detached(&(run_info->attacker_obj), stream)) return false;
     if (!mt_obj_node_save_list(&(run_info->objlist), stream)) return false;
     if (!mt_obj_node_save_list(&(run_info->summoned_obj), stream)) return false;
-    if (tig_file_fwrite(&(run_info->field_138), sizeof(run_info->field_138), 1, stream) != 1) return false;
+    if (tig_file_fwrite(&(run_info->applied_spell_flags), sizeof(run_info->applied_spell_flags), 1, stream) != 1) return false;
     if (tig_file_fwrite(&(run_info->flags), sizeof(run_info->flags), 1, stream) != 1) return false;
     if (tig_file_fwrite(&(run_info->trigger), sizeof(run_info->trigger), 1, stream) != 1) return false;
-    if (tig_file_fwrite(&(run_info->field_144), sizeof(run_info->field_144), 1, stream) != 1) return false;
-    if (tig_file_fwrite(&(run_info->field_148), sizeof(run_info->field_148), 1, stream) != 1) return false;
-    if (tig_file_fwrite(&(run_info->field_150), sizeof(run_info->field_150), 1, stream) != 1) return false;
+    if (tig_file_fwrite(&(run_info->resistance_amount), sizeof(run_info->resistance_amount), 1, stream) != 1) return false;
+    if (tig_file_fwrite(&(run_info->event_time), sizeof(run_info->event_time), 1, stream) != 1) return false;
+    if (tig_file_fwrite(&(run_info->remaining_duration_triggers), sizeof(run_info->remaining_duration_triggers), 1, stream) != 1) return false;
 
     return true;
 }
@@ -998,12 +998,12 @@ bool magictech_run_info_load(MagicTechRunInfo* run_info, TigFile* stream)
     if (!mt_obj_node_load_detached(&(run_info->attacker_obj), stream)) return false;
     if (!mt_obj_node_load_list(&(run_info->objlist), stream)) return false;
     if (!mt_obj_node_load_list(&(run_info->summoned_obj), stream)) return false;
-    if (tig_file_fread(&(run_info->field_138), sizeof(run_info->field_138), 1, stream) != 1) return false;
+    if (tig_file_fread(&(run_info->applied_spell_flags), sizeof(run_info->applied_spell_flags), 1, stream) != 1) return false;
     if (tig_file_fread(&(run_info->flags), sizeof(run_info->flags), 1, stream) != 1) return false;
     if (tig_file_fread(&(run_info->trigger), sizeof(run_info->trigger), 1, stream) != 1) return false;
-    if (tig_file_fread(&(run_info->field_144), sizeof(run_info->field_144), 1, stream) != 1) return false;
-    if (tig_file_fread(&(run_info->field_148), sizeof(run_info->field_148), 1, stream) != 1) return false;
-    if (tig_file_fread(&(run_info->field_150), sizeof(run_info->field_150), 1, stream) != 1) return false;
+    if (tig_file_fread(&(run_info->resistance_amount), sizeof(run_info->resistance_amount), 1, stream) != 1) return false;
+    if (tig_file_fread(&(run_info->event_time), sizeof(run_info->event_time), 1, stream) != 1) return false;
+    if (tig_file_fread(&(run_info->remaining_duration_triggers), sizeof(run_info->remaining_duration_triggers), 1, stream) != 1) return false;
 
     return true;
 }
@@ -1065,20 +1065,20 @@ void magictech_break_nodes_to_map(const char* map)
         if ((magictech_run_info[idx].flags & MAGICTECH_RUN_ACTIVE) != 0) {
             if (magictech_run_info[idx].source_obj.obj != OBJ_HANDLE_NULL
                 && !teleport_is_teleporting_obj(magictech_run_info[idx].source_obj.obj)) {
-                sub_457270(idx);
+                magictech_run_end_immediate(idx);
                 continue;
             }
 
             if (magictech_run_info[idx].parent_obj.obj != magictech_run_info[idx].source_obj.obj
                 && magictech_run_info[idx].parent_obj.obj != OBJ_HANDLE_NULL
                 && !teleport_is_teleporting_obj(magictech_run_info[idx].parent_obj.obj)) {
-                sub_457270(idx);
+                magictech_run_end_immediate(idx);
                 continue;
             }
 
             if (magictech_run_info[idx].target_obj.obj != OBJ_HANDLE_NULL
                 && !teleport_is_teleporting_obj(magictech_run_info[idx].target_obj.obj)) {
-                sub_457270(idx);
+                magictech_run_end_immediate(idx);
                 continue;
             }
 
@@ -1086,7 +1086,7 @@ void magictech_break_nodes_to_map(const char* map)
             while (node != NULL) {
                 if (node->obj != OBJ_HANDLE_NULL
                     && !teleport_is_teleporting_obj(node->obj)) {
-                    sub_457270(idx);
+                    magictech_run_end_immediate(idx);
                     break;
                 }
                 node = node->next;
@@ -1099,7 +1099,7 @@ void magictech_break_nodes_to_map(const char* map)
             while (node != NULL) {
                 if (node->obj != OBJ_HANDLE_NULL
                     && !teleport_is_teleporting_obj(node->obj)) {
-                    sub_457270(idx);
+                    magictech_run_end_immediate(idx);
                     break;
                 }
                 node = node->next;
@@ -1244,7 +1244,7 @@ void magictech_load_nodes_from_map(const char* map)
     tmp_run_info.summoned_obj = NULL;
 
     for (index = 0; index < cnt; index++) {
-        sub_4559E0(&tmp_run_info);
+        magictech_run_slot_clear(&tmp_run_info);
         if (!magictech_run_info_load(&tmp_run_info, stream)) {
             break;
         }
@@ -1259,7 +1259,7 @@ void magictech_load_nodes_from_map(const char* map)
 
         *run_info = tmp_run_info;
         run_info->id = mt_id;
-        sub_459500(run_info->id);
+        magictech_run_timeevent_restart(run_info->id);
     }
 
     tig_file_fclose(stream);
@@ -1298,7 +1298,7 @@ void magictech_cheat_mode_on(void)
 }
 
 // 0x44FE30
-bool sub_44FE30(int a1, const char* path, int a3)
+bool magictech_spell_headers_load(int a1, const char* path, int a3)
 {
     int magictech = 0;
     int action;
@@ -1317,23 +1317,23 @@ bool sub_44FE30(int a1, const char* path, int a3)
     }
 
     for (magictech = 0; magictech < MT_80; magictech++) {
-        sub_450090(dword_5E6D20, &(magictech_spells[magictech]), a3, magictech);
+        magictech_spell_header_parse(dword_5E6D20, &(magictech_spells[magictech]), a3, magictech);
     }
 
     for (; magictech < MT_140; magictech++) {
-        sub_450090(dword_5E6D20, &(magictech_spells[magictech]), a3, magictech);
+        magictech_spell_header_parse(dword_5E6D20, &(magictech_spells[magictech]), a3, magictech);
         magictech_spells[magictech].iq = 0;
     }
 
     for (; magictech < MT_SPELL_COUNT; magictech++) {
-        sub_450090(dword_5E6D20, &(magictech_spells[magictech]), a3 + 2000, magictech);
+        magictech_spell_header_parse(dword_5E6D20, &(magictech_spells[magictech]), a3 + 2000, magictech);
         magictech_spells[magictech].flags |= MAGICTECH_IS_TECH;
         magictech_spells[magictech].iq = 0;
     }
 
     // NOTE: Meaningless, never executed.
     for (; magictech < MT_SPELL_COUNT; magictech++) {
-        sub_450090(dword_5E6D20, &(magictech_spells[magictech]), a3, magictech);
+        magictech_spell_header_parse(dword_5E6D20, &(magictech_spells[magictech]), a3, magictech);
         magictech_spells[magictech].iq = 0;
     }
 
@@ -1341,7 +1341,7 @@ bool sub_44FE30(int a1, const char* path, int a3)
 }
 
 // 0x44FFA0
-bool sub_44FFA0(int a1, const char* a2, int a3)
+bool magictech_spell_components_load_all(int a1, const char* a2, int a3)
 {
     int magictech = 0;
 
@@ -1349,18 +1349,18 @@ bool sub_44FFA0(int a1, const char* a2, int a3)
     (void)a2;
 
     while (magictech < MT_80) {
-        sub_4501D0(dword_5E6D20, &(magictech_spells[magictech]), a3, magictech);
+        magictech_effect_components_load(dword_5E6D20, &(magictech_spells[magictech]), a3, magictech);
         magictech++;
     }
 
     while (magictech < MT_140) {
-        sub_4501D0(dword_5E6D20, &(magictech_spells[magictech]), a3, magictech);
+        magictech_effect_components_load(dword_5E6D20, &(magictech_spells[magictech]), a3, magictech);
         magictech_spells[magictech].iq = 0;
         magictech++;
     }
 
     while (magictech < MT_SPELL_COUNT) {
-        sub_4501D0(dword_5E6D20, &(magictech_spells[magictech]), a3 + 2000, magictech);
+        magictech_effect_components_load(dword_5E6D20, &(magictech_spells[magictech]), a3 + 2000, magictech);
         magictech_spells[magictech].flags |= MAGICTECH_IS_TECH;
         magictech_spells[magictech].iq = 0;
         magictech++;
@@ -1372,13 +1372,13 @@ bool sub_44FFA0(int a1, const char* a2, int a3)
 }
 
 // 0x450090
-void sub_450090(mes_file_handle_t msg_file, MagicTechInfo* info, int num, int magictech)
+void magictech_spell_header_parse(mes_file_handle_t msg_file, MagicTechInfo* info, int num, int magictech)
 {
     MesFileEntry mes_file_entry;
 
     dword_5E7628 = magictech;
 
-    sub_457580(info, magictech);
+    magictech_spell_info_defaults_init(info, magictech);
 
     mes_file_entry.num = magictech;
     mes_get_msg(magictech_spell_mes_file, &mes_file_entry);
@@ -1390,18 +1390,18 @@ void sub_450090(mes_file_handle_t msg_file, MagicTechInfo* info, int num, int ma
 
     mes_file_entry.num++;
     mes_get_msg(msg_file, &mes_file_entry);
-    sub_4578F0(info, mes_file_entry.str);
+    magictech_spell_costs_and_duration_parse(info, mes_file_entry.str);
 
     mes_file_entry.num++;
     if (mes_search(msg_file, &mes_file_entry)) {
         mes_get_msg(msg_file, &mes_file_entry);
-        sub_457B20(info, mes_file_entry.str);
+        magictech_spell_animation_parse(info, mes_file_entry.str);
     }
 
     mes_file_entry.num++;
     if (mes_search(msg_file, &mes_file_entry)) {
         mes_get_msg(msg_file, &mes_file_entry);
-        sub_457D00(info, mes_file_entry.str);
+        magictech_spell_flags_parse(info, mes_file_entry.str);
     }
 
     memset(&(info->ai), 0xFF, sizeof(info->ai));
@@ -1415,7 +1415,7 @@ void sub_450090(mes_file_handle_t msg_file, MagicTechInfo* info, int num, int ma
 }
 
 // 0x4501D0
-void sub_4501D0(mes_file_handle_t msg_file, MagicTechInfo* info, int num, int magictech)
+void magictech_effect_components_load(mes_file_handle_t msg_file, MagicTechInfo* info, int num, int magictech)
 {
     MesFileEntry mes_file_entry;
     int index;
@@ -1434,7 +1434,7 @@ void sub_4501D0(mes_file_handle_t msg_file, MagicTechInfo* info, int num, int ma
 }
 
 // 0x450240
-void sub_450240(void)
+void magictech_effect_components_free(void)
 {
     int index;
     int action;
@@ -1459,7 +1459,7 @@ int magictech_get_range(int magictech)
 }
 
 // 0x4502B0
-int sub_4502B0(int magictech)
+int magictech_target_radius_get(int magictech)
 {
     if (magictech_initialized) {
         return magictech_spells[magictech].target_params[0].radius;
@@ -1511,7 +1511,7 @@ bool magictech_is_aggressive(int magictech)
 }
 
 // 0x4503A0
-bool sub_4503A0(int magictech)
+bool magictech_has_maintenance(int magictech)
 {
     if (magictech_initialized) {
         return magictech_spells[magictech].maintenance.period > 0;
@@ -1533,7 +1533,7 @@ MagicTechDurationInfo* magictech_get_duration(int magictech)
 }
 
 // 0x450420
-bool sub_450420(int64_t obj, int cost, bool a3, int magictech)
+bool magictech_cost_check_or_consume(int64_t obj, int cost, bool a3, int magictech)
 {
     MagicTechInfo* info;
     bool charges_from_cells = false;
@@ -1631,7 +1631,7 @@ bool sub_450420(int64_t obj, int cost, bool a3, int magictech)
                     if (a3) {
                         obj_field_int32_set(item_obj, OBJ_F_ITEM_MANA_STORE, new_mana_store);
                         magictech_recharge_timeevent_schedule(item_obj, item_mana_cost, true);
-                        sub_4605D0();
+                        ui_counters_refresh();
 
                         if (new_mana_store == 0) {
                             mt_ai_notify_item_exhausted(obj, item_obj);
@@ -1678,7 +1678,7 @@ bool sub_450420(int64_t obj, int cost, bool a3, int magictech)
 
             if (a3) {
                 obj_field_int32_set(obj, OBJ_F_ITEM_SPELL_MANA_STORE, mana_store - 1);
-                sub_4605D0();
+                ui_counters_refresh();
             }
         }
 
@@ -1689,13 +1689,13 @@ bool sub_450420(int64_t obj, int cost, bool a3, int magictech)
 }
 
 // 0x4507B0
-void sub_4507B0(int64_t obj, int magictech)
+void magictech_casting_cost_consume_callback(int64_t obj, int magictech)
 {
-    sub_4507D0(obj, magictech);
+    magictech_casting_cost_consume(obj, magictech);
 }
 
 // 0x4507D0
-bool sub_4507D0(int64_t obj, int magictech)
+bool magictech_casting_cost_consume(int64_t obj, int magictech)
 {
     int cost;
 
@@ -1722,7 +1722,7 @@ bool sub_4507D0(int64_t obj, int magictech)
         cost *= 2;
     }
 
-    return sub_450420(obj, cost, true, magictech);
+    return magictech_cost_check_or_consume(obj, cost, true, magictech);
 }
 
 // 0x4508A0
@@ -1747,11 +1747,11 @@ bool magictech_can_charge_spell_fatigue(int64_t obj, int magictech)
         cost *= 2;
     }
 
-    return sub_450420(obj, cost, false, magictech);
+    return magictech_cost_check_or_consume(obj, cost, false, magictech);
 }
 
 // 0x450940
-bool sub_450940(int mt_id)
+bool magictech_run_cost_check(int mt_id)
 {
     MagicTechRunInfo* run_info;
     int cost;
@@ -1782,11 +1782,11 @@ bool sub_450940(int mt_id)
         cost *= 2;
     }
 
-    return sub_450420(run_info->source_obj.obj, cost, 0, run_info->spell);
+    return magictech_cost_check_or_consume(run_info->source_obj.obj, cost, 0, run_info->spell);
 }
 
 // 0x450A50
-int64_t sub_450A50(int64_t obj)
+int64_t magictech_inventory_owner_or_self(int64_t obj)
 {
     int type;
 
@@ -1807,7 +1807,7 @@ int64_t sub_450A50(int64_t obj)
 }
 
 // 0x450AC0
-int sub_450AC0(int64_t obj)
+int magictech_maintained_spell_count_stub(int64_t obj)
 {
     int index;
 
@@ -1827,7 +1827,7 @@ int sub_450AC0(int64_t obj)
 }
 
 // 0x450B40
-int sub_450B40(int64_t obj)
+int magictech_maintenance_slots_available(int64_t obj)
 {
     if (obj == OBJ_HANDLE_NULL) {
         return 0;
@@ -1837,17 +1837,17 @@ int sub_450B40(int64_t obj)
         return 0;
     }
 
-    return sub_450B90(obj) - sub_450AC0(obj);
+    return magictech_maintenance_slots_capacity(obj) - magictech_maintained_spell_count_stub(obj);
 }
 
 // 0x450B90
-int sub_450B90(int64_t obj)
+int magictech_maintenance_slots_capacity(int64_t obj)
 {
     return stat_level_get(obj, STAT_INTELLIGENCE) / 4;
 }
 
 // 0x450C10
-void sub_450C10(int64_t obj, unsigned int flags)
+void magictech_spell_flags_set(int64_t obj, unsigned int flags)
 {
     obj_field_int32_set(obj, OBJ_F_SPELL_FLAGS, obj_field_int32_get(obj, OBJ_F_SPELL_FLAGS) | flags);
 }
@@ -1872,15 +1872,15 @@ void magictech_effect_summon(MagicTechSummonInfo* summon_info)
             pkt.type = 73;
             pkt.summon_info = *summon_info;
             pkt.summon_info.field_88 = obj_get_id(obj);
-            sub_443EB0(pkt.summon_info.field_0.obj, &(pkt.summon_info.field_0.field_8));
-            sub_443EB0(pkt.summon_info.field_30.obj, &(pkt.summon_info.field_30.field_8));
+            object_reference_init(pkt.summon_info.field_0.obj, &(pkt.summon_info.field_0.reference));
+            object_reference_init(pkt.summon_info.field_30.obj, &(pkt.summon_info.field_30.reference));
             summon_info->field_A0 = qword_5E75B8;
-            sub_4F0640(qword_5E75B8, &(pkt.summon_info.field_A8));
+            mp_object_id_get_nullable(qword_5E75B8, &(pkt.summon_info.field_A8));
             tig_net_send_app_all(&pkt, sizeof(pkt));
 
             if (obj_field_int32_get(obj, OBJ_F_TYPE) == OBJ_TYPE_SCENERY) {
-                sub_424070(obj, 5, false, false);
-                sub_43F710(obj);
+                anim_object_interrupt_by_priority(obj, 5, false, false);
+                object_scenery_animation_refresh(obj);
             }
         } else {
             if (!multiplayer_is_locked()) {
@@ -1903,7 +1903,7 @@ void magictech_effect_summon(MagicTechSummonInfo* summon_info)
 
     *summon_info->summoned_obj_ptr = obj;
 
-    sub_450C10(obj, OSF_SUMMONED);
+    magictech_spell_flags_set(obj, OSF_SUMMONED);
 
     if ((obj_field_int32_get(obj, OBJ_F_TYPE) == OBJ_TYPE_NPC)) {
         tig_art_id_t art_id;
@@ -1955,14 +1955,14 @@ void magictech_effect_summon(MagicTechSummonInfo* summon_info)
             }
         }
     } else {
-        sub_4372B0(obj, summon_info->field_0.obj);
+        anim_root_goal_parent_set_legacy(obj, summon_info->field_0.obj);
     }
 
-    sub_463630(obj);
+    item_inventory_mark_summoned(obj);
 }
 
 // 0x451070
-void sub_451070(MagicTechRunInfo* run_info)
+void magictech_run_process(MagicTechRunInfo* run_info)
 {
     if (magictech_cur_id != -1 && magictech_cur_id != run_info->id) {
         tig_debug_printf("\n\nMagicTech: ERROR: Process function is NOT Re-Entrant, Spell: %d (%s)!\n",
@@ -2003,7 +2003,7 @@ void magictech_process(void)
     magictech_cur_id = magictech_cur_run_info->id;
 
     if (magictech_cur_run_info->action == MAGICTECH_ACTION_BEGIN
-        && !sub_456430(magictech_cur_run_info->parent_obj.obj, magictech_cur_run_info->target_obj.obj, magictech_cur_spell_info)) {
+        && !magictech_disallowed_flags_check(magictech_cur_run_info->parent_obj.obj, magictech_cur_run_info->target_obj.obj, magictech_cur_spell_info)) {
         magictech_cur_id = -1;
         if (magictech_cur_run_info->action < MAGICTECH_ACTION_END) {
             magictech_interrupt_delayed(magictech_cur_run_info->id);
@@ -2011,7 +2011,7 @@ void magictech_process(void)
         return;
     }
 
-    if (!sub_452F20()) {
+    if (!magictech_current_run_costs_and_stacking_check()) {
         magictech_cur_id = -1;
         if (magictech_cur_run_info->action < MAGICTECH_ACTION_END) {
             magictech_interrupt_delayed(magictech_cur_run_info->id);
@@ -2019,9 +2019,9 @@ void magictech_process(void)
         return;
     }
 
-    sub_453630();
+    magictech_current_target_context_init();
 
-    if (!sub_453710()) {
+    if (!magictech_source_antimagic_check()) {
         magictech_cur_id = -1;
         if (magictech_cur_run_info->action < MAGICTECH_ACTION_END) {
             magictech_interrupt_delayed(magictech_cur_run_info->id);
@@ -2054,14 +2054,14 @@ void magictech_process(void)
                 magictech_cur_target_obj_type = obj_field_int32_get(stru_5E6D28.target_obj, OBJ_F_TYPE);
             }
 
-            if (sub_455550(&stru_5E6D28, magictech_cur_run_info)) {
-                if (sub_4537B0()) {
+            if (magictech_target_antimagic_and_reflection_resolve(&stru_5E6D28, magictech_cur_run_info)) {
+                if (magictech_current_target_resistance_resolve()) {
                     for (comp = 0; comp < magictech_cur_component_list->cnt; comp++) {
                         magictech_cur_component = &(magictech_cur_component_list->entries[comp]);
                         stru_5E6D28.params = &(magictech_cur_component->aoe);
 
                         if (target_context_evaluate(&stru_5E6D28)) {
-                            sub_453D40();
+                            magictech_component_target_prepare();
 
                             if (magictech_cur_spell_info->item_triggers == 0
                                 || magictech_cur_component->item_triggers == 0
@@ -2069,7 +2069,7 @@ void magictech_process(void)
                                     && ((magictech_cur_component->item_triggers & 0x100) == 0
                                         || (magictech_cur_run_info->trigger & 0x100) != 0))) {
                                 dword_5E75DC = 1;
-                                sub_453EE0();
+                                magictech_aggressive_target_notify();
                                 magictech_procs[magictech_cur_component->type]();
 
                                 if (dword_5E7624) {
@@ -2089,7 +2089,7 @@ void magictech_process(void)
                         }
                     }
                 } else {
-                    sub_45A520(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj);
+                    magictech_resurrection_fx_notify(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj);
                 }
             }
         }
@@ -2098,7 +2098,7 @@ void magictech_process(void)
     }
 
     magictech_cur_id = -1;
-    sub_453FA0();
+    magictech_current_run_advance_or_finish();
 }
 
 // 0x4514E0
@@ -2140,7 +2140,7 @@ void MTComponentAGoal_ProcFunc(void)
         break;
     default:
         if (magictech_cur_run_info->parent_obj.obj != OBJ_HANDLE_NULL
-            && sub_44D500(&goal_data, stru_5E6D28.target_obj, magictech_cur_component->data.agoal.goal)) {
+            && anim_goal_data_init_without_interrupt(&goal_data, stru_5E6D28.target_obj, magictech_cur_component->data.agoal.goal)) {
             goal_data.params[AGDATA_TARGET_OBJ].obj = magictech_cur_run_info->parent_obj.obj;
             if ((magictech_cur_component->data.agoal.subgoal & 1) != 0) {
                 // __FILE__: "C:\Troika\Code\Game\GameLibX\MagicTech.c"
@@ -2179,8 +2179,8 @@ void MTComponentCast_ProcFunc(void)
     MagicTechInvocation mt_invocation;
 
     magictech_invocation_init(&mt_invocation, OBJ_HANDLE_NULL, magictech_cur_component->data.cast.spell);
-    sub_4440E0(stru_5E6D28.target_obj, &(mt_invocation.target_obj));
-    sub_4440E0(magictech_cur_run_info->parent_obj.obj, &(mt_invocation.parent_obj));
+    object_handle_reference_init(stru_5E6D28.target_obj, &(mt_invocation.target_obj));
+    object_handle_reference_init(magictech_cur_run_info->parent_obj.obj, &(mt_invocation.parent_obj));
     mt_invocation.flags |= MAGICTECH_INVOCATION_FRIENDLY;
     mt_invocation.target_loc = stru_5E6D28.target_loc;
 
@@ -2205,7 +2205,7 @@ void MTComponentCast_ProcFunc(void)
 void MTComponentChargeNBranch_ProcFunc(void)
 {
     if (magictech_cur_run_info->source_obj.obj != OBJ_HANDLE_NULL
-        && !sub_450420(magictech_cur_run_info->source_obj.obj, magictech_cur_component->data.charge_branch.cost, true, magictech_cur_run_info->spell)) {
+        && !magictech_cost_check_or_consume(magictech_cur_run_info->source_obj.obj, magictech_cur_component->data.charge_branch.cost, true, magictech_cur_run_info->spell)) {
         if (magictech_cur_component->data.charge_branch.branch != -1) {
             dword_5E7624 = true;
             dword_5E6D90 = SDL_min(magictech_cur_component->data.charge_branch.branch, magictech_cur_component_list->cnt);
@@ -2227,20 +2227,20 @@ void MTComponentDamage_ProcFunc(void)
         return;
     }
 
-    sub_4B2210(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj, &combat);
+    combat_context_init(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj, &combat);
 
     combat.dam_flags |= magictech_cur_component->data.damage.damage_flags;
 
-    sub_453F20(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj);
+    magictech_aggressive_target_notify_once(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj);
 
     if (magictech_cur_run_info->attacker_obj.obj != OBJ_HANDLE_NULL) {
-        combat.field_30 = magictech_cur_run_info->attacker_obj.obj;
+        combat.credited_attacker_obj = magictech_cur_run_info->attacker_obj.obj;
     }
 
     dam_min = magictech_cur_component->data.damage.damage_min;
     dam_max = magictech_cur_component->data.damage.damage_max;
 
-    if ((combat.dam_flags & CDF_SCALE) != 0) {
+    if ((combat.dam_flags & COMBAT_DAMAGE_SCALE) != 0) {
         if (obj_type_is_critter(magictech_cur_run_info->parent_obj.type)) {
             int aptitude = magictech_cur_run_info->parent_obj.aptitude;
             if (aptitude > 0) {
@@ -2251,13 +2251,13 @@ void MTComponentDamage_ProcFunc(void)
             }
         }
 
-        combat.dam_flags &= ~CDF_SCALE;
+        combat.dam_flags &= ~COMBAT_DAMAGE_SCALE;
     }
 
-    if ((combat.dam_flags & CDF_FULL) != 0) {
+    if ((combat.dam_flags & COMBAT_DAMAGE_FULL) != 0) {
         if (magictech_cur_component->data.damage.damage_type == DAMAGE_TYPE_FATIGUE) {
             combat.dam[DAMAGE_TYPE_FATIGUE] = critter_fatigue_current(stru_5E6D28.target_obj) + 10;
-            combat.dam_flags &= ~CDF_FULL;
+            combat.dam_flags &= ~COMBAT_DAMAGE_FULL;
         }
     } else {
         if (magictech_cur_component->data.damage.damage_type < DAMAGE_TYPE_COUNT) {
@@ -2270,9 +2270,9 @@ void MTComponentDamage_ProcFunc(void)
     combat.flags |= 0x200 | 0x80;
 
     if (magictech_cur_component->data.damage.damage_type < DAMAGE_TYPE_COUNT) {
-        if (magictech_cur_run_info->field_144 != 0) {
-            if ((combat.dam_flags & CDF_DEATH) == 0) {
-                int resisted = magictech_cur_run_info->field_144 * combat.dam[magictech_cur_component->data.damage.damage_type] / 100;
+        if (magictech_cur_run_info->resistance_amount != 0) {
+            if ((combat.dam_flags & COMBAT_DAMAGE_DEATH) == 0) {
+                int resisted = magictech_cur_run_info->resistance_amount * combat.dam[magictech_cur_component->data.damage.damage_type] / 100;
                 if (resisted == 0) {
                     resisted = 1;
                 }
@@ -2289,7 +2289,7 @@ void MTComponentDamage_ProcFunc(void)
     dword_5E75D0 = obj_field_int32_get(combat.target_obj, OBJ_F_FLAGS);
 
     if ((dword_5E75D0 & (OF_DESTROYED | OF_OFF)) == 0
-        && (combat.dam_flags & CDF_HAVE_DAMAGE) != 0) {
+        && (combat.dam_flags & COMBAT_DAMAGE_HAVE_DAMAGE) != 0) {
         anim_play_blood_splotch_fx(combat.target_obj, BLOOD_SPLOTCH_TYPE_NORMAL, magictech_cur_component->data.damage.damage_type, &combat);
     }
 }
@@ -2304,7 +2304,7 @@ void MTComponentDestroy_ProcFunc(void)
     }
 
     spell_flags = obj_field_int32_get(stru_5E6D28.target_obj, OBJ_F_SPELL_FLAGS);
-    if (!magictech_cur_run_info->field_144 || (spell_flags & OSF_SUMMONED) != 0) {
+    if (!magictech_cur_run_info->resistance_amount || (spell_flags & OSF_SUMMONED) != 0) {
         object_destroy(stru_5E6D28.target_obj);
 
         if (tig_net_is_active()
@@ -2441,7 +2441,7 @@ void magictech_component_dispel_internal(int mt_id, int64_t obj)
 
         flags = obj_field_int32_get(obj, OBJ_F_CRITTER_FLAGS2);
         if ((flags & OCF2_PERMA_POLYMORPH) != 0) {
-            sub_452CD0(obj, obj_field_int32_get(obj, OBJ_F_CURRENT_AID));
+            magictech_polymorph_art_apply(obj, obj_field_int32_get(obj, OBJ_F_CURRENT_AID));
 
             flags &= ~OCF2_PERMA_POLYMORPH;
             obj_field_int32_set(obj, OBJ_F_CRITTER_FLAGS2, flags);
@@ -2519,7 +2519,7 @@ void MTComponentEyeCandy_ProcFunc(void)
     } else {
         AnimFxNode node;
 
-        sub_4CCD20(&spell_eye_candies,
+        animfx_node_init(&spell_eye_candies,
             &node,
             stru_5E6D28.target_obj,
             magictech_cur_run_info->id,
@@ -2559,12 +2559,12 @@ void MTComponentHeal_ProcFunc(void)
     int heal_max;
 
     if (stru_5E6D28.target_obj != OBJ_HANDLE_NULL) {
-        sub_4B2210(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj, &combat);
+        combat_context_init(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj, &combat);
         combat.dam_flags |= magictech_cur_component->data.heal.damage_flags;
-        if ((combat.dam_flags & CDF_FULL) == 0) {
+        if ((combat.dam_flags & COMBAT_DAMAGE_FULL) == 0) {
             heal_min = magictech_cur_component->data.heal.damage_min;
             heal_max = magictech_cur_component->data.heal.damage_max;
-            if ((combat.dam_flags & CDF_SCALE) != 0
+            if ((combat.dam_flags & COMBAT_DAMAGE_SCALE) != 0
                 && obj_type_is_critter(magictech_cur_run_info->parent_obj.type)) {
                 if (magictech_cur_run_info->parent_obj.aptitude > 0) {
                     heal_max = heal_min + magictech_cur_run_info->parent_obj.aptitude * (heal_max - heal_min) / 100;
@@ -2572,7 +2572,7 @@ void MTComponentHeal_ProcFunc(void)
                 } else {
                     heal_max = heal_min;
                 }
-                combat.dam_flags &= ~CDF_SCALE;
+                combat.dam_flags &= ~COMBAT_DAMAGE_SCALE;
             }
 
             if (magictech_cur_component->data.heal.damage_type == DAMAGE_TYPE_POISON) {
@@ -2593,11 +2593,11 @@ void MTComponentIdentify_ProcFunc(void)
 {
     if (stru_5E6D28.target_obj != OBJ_HANDLE_NULL) {
         if (obj_type_is_critter(magictech_cur_target_obj_type)) {
-            sub_4EE4C0(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj);
+            mp_ui_character_sheet_request(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj);
         } else if (magictech_cur_target_obj_type == OBJ_TYPE_CONTAINER) {
             mp_ui_show_inven_identify(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj);
         } else {
-            sub_4EE3A0(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj);
+            mp_ui_object_examine_request(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj);
         }
     }
 }
@@ -2608,10 +2608,10 @@ void MTComponentInterrupt_ProcFunc(void)
     MagicTechInvocation mt_invocation;
 
     magictech_invocation_init(&mt_invocation, OBJ_HANDLE_NULL, magictech_cur_component->data.interrupt.magictech);
-    sub_4440E0(stru_5E6D28.target_obj, &(mt_invocation.target_obj));
+    object_handle_reference_init(stru_5E6D28.target_obj, &(mt_invocation.target_obj));
     mt_invocation.target_loc = stru_5E6D28.target_loc;
     if (mt_invocation.target_obj.obj != OBJ_HANDLE_NULL || mt_invocation.target_loc != OBJ_HANDLE_NULL) {
-        sub_4573D0(&mt_invocation);
+        magictech_matching_invocation_interrupt(&mt_invocation);
     }
 }
 
@@ -2619,9 +2619,9 @@ void MTComponentInterrupt_ProcFunc(void)
 void MTComponentObjFlag_ProcFunc(void)
 {
     if (magictech_cur_component->data.obj_flag.state == 1) {
-        magictech_cur_run_info->field_138 |= magictech_cur_component->data.obj_flag.value;
+        magictech_cur_run_info->applied_spell_flags |= magictech_cur_component->data.obj_flag.value;
     } else {
-        magictech_cur_run_info->field_138 &= ~magictech_cur_component->data.obj_flag.value;
+        magictech_cur_run_info->applied_spell_flags &= ~magictech_cur_component->data.obj_flag.value;
     }
 
     magictech_component_obj_flag(stru_5E6D28.target_obj,
@@ -2636,13 +2636,13 @@ void MTComponentObjFlag_ProcFunc(void)
         && tig_net_is_host()) {
         PacketMagicTechObjFlag pkt;
 
-        sub_4F0640(stru_5E6D28.target_obj, &(pkt.field_8));
-        sub_4F0640(stru_5E6D28.self_obj, &(pkt.self_oid));
+        mp_object_id_get_nullable(stru_5E6D28.target_obj, &(pkt.field_8));
+        mp_object_id_get_nullable(stru_5E6D28.self_obj, &(pkt.self_oid));
         pkt.fld = magictech_cur_component->data.obj_flag.flags_fld;
         pkt.value = magictech_cur_component->data.obj_flag.value;
         pkt.state = magictech_cur_component->data.obj_flag.state;
-        sub_4F0640(magictech_cur_run_info->parent_obj.obj, &(pkt.parent_oid));
-        sub_4F0640(magictech_cur_run_info->source_obj.obj, &(pkt.source_oid));
+        mp_object_id_get_nullable(magictech_cur_run_info->parent_obj.obj, &(pkt.parent_oid));
+        mp_object_id_get_nullable(magictech_cur_run_info->source_obj.obj, &(pkt.source_oid));
 
         tig_net_send_app_all(&pkt, sizeof(pkt));
     }
@@ -2654,7 +2654,7 @@ void MTComponentMovement_ProcFunc(void)
     int64_t loc = 0;
 
     if (stru_5E6D28.target_obj != OBJ_HANDLE_NULL
-        && !magictech_cur_run_info->field_144) {
+        && !magictech_cur_run_info->resistance_amount) {
         switch (magictech_cur_component->data.movement.move_location) {
         case 0:
             loc = magictech_cur_run_info->target_obj.loc;
@@ -2688,18 +2688,18 @@ void MTComponentMovement_ProcFunc(void)
             }
             break;
         case 3:
-            sub_452650(stru_5E6D28.target_obj);
+            magictech_exit_to_world_area(stru_5E6D28.target_obj);
             break;
         }
 
         if (loc != 0) {
-            sub_455350(stru_5E6D28.target_obj, loc);
+            magictech_move_object_along_path(stru_5E6D28.target_obj, loc);
         }
     }
 }
 
 // 0x452650
-void sub_452650(int64_t obj)
+void magictech_exit_to_world_area(int64_t obj)
 {
     int area = AREA_UNKNOWN;
     int cur_map;
@@ -2777,7 +2777,7 @@ void MTComponentSummon_ProcFunc(void)
     magictech_effect_summon(&summon_info);
 
     stru_5E6D28.summoned_obj = qword_5E75B8;
-    sub_4554B0(magictech_cur_run_info, qword_5E75B8);
+    magictech_summoned_object_add(magictech_cur_run_info, qword_5E75B8);
 }
 
 // 0x452900
@@ -2810,7 +2810,7 @@ void magictech_pick_proto_from_list(ObjectID* oid, int list)
         break;
     }
 
-    *oid = obj_get_id(sub_4685A0(stru_5B0ED8[list].entries[idx].basic_prototype));
+    *oid = obj_get_id(proto_handle_get(stru_5B0ED8[list].entries[idx].basic_prototype));
 }
 
 // 0x4529D0
@@ -2904,8 +2904,8 @@ void magictech_component_trait(int64_t obj, MagicTechComponentTrait* trait, int 
             int rot;
 
             for (inventory_location = FIRST_WEAR_INV_LOC; inventory_location <= LAST_WEAR_INV_LOC; inventory_location++) {
-                sub_464C50(obj, inventory_location);
-                if (!sub_464C50(obj, inventory_location)) {
+                item_unequip_slot(obj, inventory_location);
+                if (!item_unequip_slot(obj, inventory_location)) {
                     int64_t item_obj = item_wield_get(obj, inventory_location);
                     if (item_obj != OBJ_HANDLE_NULL) {
                         if (!item_drop(item_obj)) {
@@ -2932,13 +2932,13 @@ void magictech_component_trait(int64_t obj, MagicTechComponentTrait* trait, int 
                 obj_field_int32_set(obj, OBJ_F_BLIT_FLAGS, TIG_ART_BLT_BLEND_ADD);
             }
         } else {
-            sub_452CD0(obj, art_id);
+            magictech_polymorph_art_apply(obj, art_id);
         }
     }
 }
 
 // 0x452CD0
-void sub_452CD0(int64_t obj, tig_art_id_t art_id)
+void magictech_polymorph_art_apply(int64_t obj, tig_art_id_t art_id)
 {
     int specie;
     unsigned int flags;
@@ -3042,7 +3042,7 @@ void MTComponentEnvFlag_ProcFunc(void)
 }
 
 // 0x452F20
-bool sub_452F20(void)
+bool magictech_current_run_costs_and_stacking_check(void)
 {
     bool v1;
     bool v2;
@@ -3082,7 +3082,7 @@ bool sub_452F20(void)
 
             if (v2) {
                 if ((magictech_cur_spell_info->flags & 0x100) == 0
-                    && !sub_4507D0(magictech_cur_run_info->source_obj.obj, magictech_cur_run_info->spell)) {
+                    && !magictech_casting_cost_consume(magictech_cur_run_info->source_obj.obj, magictech_cur_run_info->spell)) {
                     v1 = true;
                     mes_file_entry.num = 600; // "Not enough Energy."
                 }
@@ -3107,14 +3107,14 @@ bool sub_452F20(void)
         if (qword_5E75B8 != OBJ_HANDLE_NULL) {
             if (magictech_cur_spell_info->no_stack) {
                 int other_mt_id;
-                if (sub_453410(magictech_cur_run_info->id, magictech_cur_run_info->spell, qword_5E75B8, &other_mt_id)
+                if (magictech_other_instance_on_target_find(magictech_cur_run_info->id, magictech_cur_run_info->spell, qword_5E75B8, &other_mt_id)
                     && magictech_cur_run_info->id != other_mt_id) {
                     return false;
                 }
             }
         }
 
-        sub_4534E0(magictech_cur_run_info);
+        magictech_conflicting_spell_flags_cancel(magictech_cur_run_info);
         return true;
     }
 
@@ -3137,14 +3137,14 @@ bool sub_452F20(void)
             }
 
             if (v2) {
-                if (!sub_4532F0(magictech_cur_run_info->source_obj.obj, magictech_cur_run_info->spell)) {
+                if (!magictech_maintenance_cost_consume(magictech_cur_run_info->source_obj.obj, magictech_cur_run_info->spell)) {
                     v1 = true;
                     mes_file_entry.num = 601; // "Maintain terminated."
                 }
             }
 
-            if (magictech_cur_run_info->field_144 != 0) {
-                if (!sub_453370(magictech_cur_run_info->source_obj.obj, magictech_cur_run_info->spell, magictech_cur_run_info->field_144)) {
+            if (magictech_cur_run_info->resistance_amount != 0) {
+                if (!magictech_maintenance_cost_consume_with_surcharge(magictech_cur_run_info->source_obj.obj, magictech_cur_run_info->spell, magictech_cur_run_info->resistance_amount)) {
                     v1 = true;
                     mes_file_entry.num = 601; // "Maintain terminated."
                 }
@@ -3160,7 +3160,7 @@ bool sub_452F20(void)
                 magictech_cur_run_info->action = MAGICTECH_ACTION_END;
 
                 stru_5E3518.cnt = 0;
-                sub_451070(magictech_cur_run_info);
+                magictech_run_process(magictech_cur_run_info);
 
                 return false;
             }
@@ -3173,7 +3173,7 @@ bool sub_452F20(void)
 }
 
 // 0x4532F0
-bool sub_4532F0(int64_t obj, int magictech)
+bool magictech_maintenance_cost_consume(int64_t obj, int magictech)
 {
     int cost;
 
@@ -3187,11 +3187,11 @@ bool sub_4532F0(int64_t obj, int magictech)
         cost *= 2;
     }
 
-    return sub_450420(obj, cost, true, magictech);
+    return magictech_cost_check_or_consume(obj, cost, true, magictech);
 }
 
 // 0x453370
-bool sub_453370(int64_t obj, int magictech, int a3)
+bool magictech_maintenance_cost_consume_with_surcharge(int64_t obj, int magictech, int a3)
 {
     int cost;
     int v1;
@@ -3212,11 +3212,11 @@ bool sub_453370(int64_t obj, int magictech, int a3)
         cost *= 2;
     }
 
-    return sub_450420(obj, cost, true, magictech);
+    return magictech_cost_check_or_consume(obj, cost, true, magictech);
 }
 
 // 0x453410
-bool sub_453410(int mt_id, int spell, int64_t obj, int* other_mt_id_ptr)
+bool magictech_other_instance_on_target_find(int mt_id, int spell, int64_t obj, int* other_mt_id_ptr)
 {
     int idx;
 
@@ -3250,7 +3250,7 @@ bool sub_453410(int mt_id, int spell, int64_t obj, int* other_mt_id_ptr)
 }
 
 // 0x4534E0
-void sub_4534E0(MagicTechRunInfo* run_info)
+void magictech_conflicting_spell_flags_cancel(MagicTechRunInfo* run_info)
 {
     int index;
     MagicTechInfo* info;
@@ -3287,7 +3287,7 @@ void sub_4534E0(MagicTechRunInfo* run_info)
 }
 
 // 0x453630
-void sub_453630(void)
+void magictech_current_target_context_init(void)
 {
     target_context_init(&stru_5E6D28, 0, magictech_cur_run_info->source_obj.obj);
     stru_5E6D28.targets = &stru_5E3518;
@@ -3306,7 +3306,7 @@ void sub_453630(void)
 }
 
 // 0x453710
-bool sub_453710(void)
+bool magictech_source_antimagic_check(void)
 {
     MesFileEntry mes_file_entry;
 
@@ -3320,7 +3320,7 @@ bool sub_453710(void)
 
     stru_5E6D28.source_spell_flags = obj_field_int32_get(magictech_cur_run_info->source_obj.obj, OBJ_F_SPELL_FLAGS);
     if ((stru_5E6D28.source_spell_flags & OSF_ANTI_MAGIC_SHELL) == 0
-        || (magictech_cur_run_info->field_138 & 0x800) != 0) {
+        || (magictech_cur_run_info->applied_spell_flags & 0x800) != 0) {
         return true;
     }
 
@@ -3335,7 +3335,7 @@ bool sub_453710(void)
 }
 
 // 0x4537B0
-bool sub_4537B0(void)
+bool magictech_current_target_resistance_resolve(void)
 {
     int v1 = 0;
 
@@ -3352,7 +3352,7 @@ bool sub_4537B0(void)
     }
 
     dword_5E75A0 = 0;
-    magictech_cur_run_info->field_144 = 0;
+    magictech_cur_run_info->resistance_amount = 0;
 
     if (stru_5E6D28.target_obj == OBJ_HANDLE_NULL) {
         return true;
@@ -3368,7 +3368,7 @@ bool sub_4537B0(void)
         if (obj_field_int32_get(stru_5E6D28.target_obj, OBJ_F_TYPE) == OBJ_TYPE_PC
             && fate_resolve(stru_5E6D28.target_obj, FATE_SAVE_AGAINST_MAGICK)) {
             dword_5E75A0 = 100;
-            magictech_cur_run_info->field_144 = 10;
+            magictech_cur_run_info->resistance_amount = 10;
         } else {
             // CE: The original code does not account for magic resistance
             // adjustments from equipped items.
@@ -3383,14 +3383,14 @@ bool sub_4537B0(void)
             int chance = random_between(1, 100);
             if (chance < resistance) {
                 dword_5E75A0 = resistance - chance;
-                magictech_cur_run_info->field_144 = resistance - chance;
+                magictech_cur_run_info->resistance_amount = resistance - chance;
             }
 
             if (resistance > 0
                 && (magictech_cur_spell_info->flags & MAGICTECH_HAVE_DAMAGE) == 0
                 && magictech_cur_spell_info->maintenance.period <= 0) {
                 if (magictech_cur_resistance->stat != -1) {
-                    v1 = magictech_cur_run_info->field_144 / 10;
+                    v1 = magictech_cur_run_info->resistance_amount / 10;
                 } else {
                     if (chance < resistance) {
                         return false;
@@ -3411,7 +3411,7 @@ bool sub_4537B0(void)
         && stat_is_extraordinary(stru_5E6D28.target_obj, STAT_WILLPOWER)) {
         if ((magictech_cur_spell_info->flags & MAGICTECH_AGGRESSIVE) != 0
             && magictech_cur_run_info->action != MAGICTECH_ACTION_END) {
-            sub_453F20(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj);
+            magictech_aggressive_target_notify_once(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj);
         }
         return false;
     }
@@ -3420,13 +3420,13 @@ bool sub_4537B0(void)
     if (v2 > 0) {
         int v3 = random_between(1, 20);
         if (v3 <= v2) {
-            magictech_cur_run_info->field_144 += v2 - v3;
-            dword_5E75A0 = magictech_cur_run_info->field_144;
+            magictech_cur_run_info->resistance_amount += v2 - v3;
+            dword_5E75A0 = magictech_cur_run_info->resistance_amount;
 
             if ((magictech_cur_spell_info->flags & MAGICTECH_HAVE_DAMAGE) != 0) {
-                if (magictech_cur_run_info->field_144 < 50) {
+                if (magictech_cur_run_info->resistance_amount < 50) {
                     dword_5E75A0 = 50;
-                    magictech_cur_run_info->field_144 = 50;
+                    magictech_cur_run_info->resistance_amount = 50;
                 }
             } else {
                 if (magictech_cur_spell_info->maintenance.period == 0) {
@@ -3571,7 +3571,7 @@ int magictech_use_item_fail_chance(int64_t attacker_obj, int64_t item_obj, int64
 }
 
 // 0x453D40
-void sub_453D40(void)
+void magictech_component_target_prepare(void)
 {
     if (magictech_cur_component->apply_aoe.tgt == TGT_NONE) {
         return;
@@ -3614,17 +3614,17 @@ void sub_453D40(void)
 }
 
 // 0x453EE0
-void sub_453EE0(void)
+void magictech_aggressive_target_notify(void)
 {
     if ((magictech_cur_spell_info->flags & MAGICTECH_AGGRESSIVE) != 0
         && stru_5E6D28.target_obj != OBJ_HANDLE_NULL
         && magictech_cur_run_info->action != MAGICTECH_ACTION_END) {
-        sub_453F20(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj);
+        magictech_aggressive_target_notify_once(magictech_cur_run_info->parent_obj.obj, stru_5E6D28.target_obj);
     }
 }
 
 // 0x453F20
-void sub_453F20(int64_t a1, int64_t a2)
+void magictech_aggressive_target_notify_once(int64_t a1, int64_t a2)
 {
     if (qword_5E75E0 != a2) {
         qword_5E75E0 = a2;
@@ -3640,7 +3640,7 @@ void sub_453F20(int64_t a1, int64_t a2)
 // TODO: Lots of jumps, rewrite without goto.
 //
 // 0x453FA0
-void sub_453FA0(void)
+void magictech_current_run_advance_or_finish(void)
 {
     bool v0;
     bool v1;
@@ -3657,9 +3657,9 @@ void sub_453FA0(void)
         if (!dword_5E7630) {
             dword_5E7630 = true;
             if (dword_5E75D8) {
-                sub_457030(magictech_cur_run_info->id, MAGICTECH_ACTION_END_CALLBACK);
+                magictech_run_callback_action_process(magictech_cur_run_info->id, MAGICTECH_ACTION_END_CALLBACK);
             } else {
-                sub_457030(magictech_cur_run_info->id, MAGICTECH_ACTION_CALLBACK);
+                magictech_run_callback_action_process(magictech_cur_run_info->id, MAGICTECH_ACTION_CALLBACK);
             }
             dword_5E7630 = false;
             return;
@@ -3691,7 +3691,7 @@ void sub_453FA0(void)
                     || !dword_5E75CC)
                 && v0) {
                 magictech_cur_run_info->action = MAGICTECH_ACTION_END;
-                sub_451070(magictech_cur_run_info);
+                magictech_run_process(magictech_cur_run_info);
                 return;
             }
 
@@ -3711,20 +3711,20 @@ void sub_453FA0(void)
         if (maintenance->period > 0) {
             if (dword_5E75DC) {
                 if (magictech_cur_run_info->source_obj.obj != OBJ_HANDLE_NULL) {
-                    if (!sub_4545E0(magictech_cur_run_info)) {
+                    if (!magictech_run_maintenance_capacity_check(magictech_cur_run_info)) {
                         if (player_is_pc_obj(magictech_cur_run_info->parent_obj.obj)) {
                             mes_file_entry.num = 601; // "Maintain terminated."
                             mes_get_msg(magictech_spell_mes_file, &mes_file_entry);
                             ui_display_warning(mes_file_entry.str);
                         }
                         magictech_cur_run_info->action = MAGICTECH_ACTION_END;
-                        sub_451070(magictech_cur_run_info);
+                        magictech_run_process(magictech_cur_run_info);
                         return;
                     }
 
-                    sub_454790(&timeevent, magictech_cur_run_info->id, maintenance->period, &datetime);
+                    magictech_maintenance_timeevent_prepare(&timeevent, magictech_cur_run_info->id, maintenance->period, &datetime);
 
-                    if (sub_4547F0(&timeevent, &datetime)) {
+                    if (magictech_maintenance_schedule_and_show(&timeevent, &datetime)) {
                     LABEL_25:
                         if (magictech_cur_run_info->action != MAGICTECH_ACTION_END) {
                             return;
@@ -3747,17 +3747,17 @@ void sub_453FA0(void)
                     goto LABEL_69;
                 }
 
-                if (magictech_cur_run_info->field_150 == 0) {
-                    sub_454790(&timeevent, magictech_cur_run_info->id, maintenance->period, &datetime);
+                if (magictech_cur_run_info->remaining_duration_triggers == 0) {
+                    magictech_maintenance_timeevent_prepare(&timeevent, magictech_cur_run_info->id, maintenance->period, &datetime);
                     v1 = false;
                     if (magictech_cur_spell_info->duration_trigger_count != 0) {
-                        magictech_cur_run_info->field_150 = magictech_cur_spell_info->duration_trigger_count;
+                        magictech_cur_run_info->remaining_duration_triggers = magictech_cur_spell_info->duration_trigger_count;
                     } else {
-                        magictech_cur_run_info->field_150 = 8;
+                        magictech_cur_run_info->remaining_duration_triggers = 8;
                     }
 
                 LABEL_22:
-                    if (sub_4547F0(&timeevent, &datetime)) {
+                    if (magictech_maintenance_schedule_and_show(&timeevent, &datetime)) {
                         if (!v1) {
                             return;
                         }
@@ -3768,9 +3768,9 @@ void sub_453FA0(void)
                     goto LABEL_69;
                 }
 
-                magictech_cur_run_info->field_150--;
-                if (magictech_cur_run_info->field_150 > 0) {
-                    sub_454790(&timeevent, magictech_cur_run_info->id, maintenance->period, &datetime);
+                magictech_cur_run_info->remaining_duration_triggers--;
+                if (magictech_cur_run_info->remaining_duration_triggers > 0) {
+                    magictech_maintenance_timeevent_prepare(&timeevent, magictech_cur_run_info->id, maintenance->period, &datetime);
                     goto LABEL_22;
                 }
             }
@@ -3782,14 +3782,14 @@ void sub_453FA0(void)
                 timeevent.params[0].integer_value = magictech_cur_run_info->id;
                 timeevent.params[2].integer_value = 1;
 
-                if (magictech_cur_run_info->field_150 > 0) {
-                    magictech_cur_run_info->field_150--;
+                if (magictech_cur_run_info->remaining_duration_triggers > 0) {
+                    magictech_cur_run_info->remaining_duration_triggers--;
                 } else {
                     magictech_cur_run_info->action = MAGICTECH_ACTION_END;
                     magictech_cur_run_info->flags |= MAGICTECH_RUN_UNRESISTABLE;
                 }
 
-                sub_45A950(&datetime, duration->period);
+                datetime_init(&datetime, duration->period);
 
                 if (duration->stat > -1) {
                     if (magictech_cur_run_info->parent_obj.type != -1) {
@@ -3821,10 +3821,10 @@ void sub_453FA0(void)
 
                 datetime.milliseconds *= 1000;
 
-                sub_455250(magictech_cur_run_info, &datetime);
+                magictech_duration_adjust_for_aptitude_and_mastery(magictech_cur_run_info, &datetime);
 
                 datetime.milliseconds *= 8;
-                if (sub_4548D0(&timeevent, &datetime, &magictech_cur_run_info->field_148)) {
+                if (magictech_timeevent_add_unless_pending(&timeevent, &datetime, &magictech_cur_run_info->event_time)) {
                     return;
                 }
 
@@ -3860,12 +3860,12 @@ END:
     magictech_id_free_lock(magictech_cur_run_info->id);
 
     if (player_is_pc_obj(magictech_cur_run_info->target_obj.obj)) {
-        sub_4601C0();
+        ui_character_panels_refresh();
     }
 }
 
 // 0x4545E0
-bool sub_4545E0(MagicTechRunInfo* run_info)
+bool magictech_run_maintenance_capacity_check(MagicTechRunInfo* run_info)
 {
     int idx;
     int cnt = 0;
@@ -3876,7 +3876,7 @@ bool sub_4545E0(MagicTechRunInfo* run_info)
 
     // FIXME: Meaningless.
     if (run_info->parent_obj.obj != OBJ_HANDLE_NULL) {
-        sub_454700(obj_field_int64_get(run_info->parent_obj.obj, OBJ_F_LOCATION),
+        magictech_target_is_in_range(obj_field_int64_get(run_info->parent_obj.obj, OBJ_F_LOCATION),
             run_info->target_obj.loc,
             run_info->target_obj.obj,
             run_info->spell);
@@ -3896,7 +3896,7 @@ bool sub_4545E0(MagicTechRunInfo* run_info)
         }
     }
 
-    if (sub_450B90(run_info->parent_obj.obj) < cnt) {
+    if (magictech_maintenance_slots_capacity(run_info->parent_obj.obj) < cnt) {
         return false;
     }
 
@@ -3904,7 +3904,7 @@ bool sub_4545E0(MagicTechRunInfo* run_info)
 }
 
 // 0x454700
-bool sub_454700(int64_t source_loc, int64_t target_loc, int64_t target_obj, int spell)
+bool magictech_target_is_in_range(int64_t source_loc, int64_t target_loc, int64_t target_obj, int spell)
 {
     if (source_loc == 0) {
         return true;
@@ -3926,23 +3926,23 @@ bool sub_454700(int64_t source_loc, int64_t target_loc, int64_t target_obj, int 
 }
 
 // 0x454790
-void sub_454790(TimeEvent* timeevent, int a2, int a3, DateTime* datetime)
+void magictech_maintenance_timeevent_prepare(TimeEvent* timeevent, int a2, int a3, DateTime* datetime)
 {
     timeevent->type = TIMEEVENT_TYPE_MAGICTECH;
     timeevent->params[0].integer_value = a2;
     timeevent->params[2].integer_value = 1;
     magictech_cur_run_info->action = MAGICTECH_ACTION_MAINTAIN;
-    sub_45A950(datetime, 1000 * a3);
-    sub_455250(magictech_cur_run_info, datetime);
+    datetime_init(datetime, 1000 * a3);
+    magictech_duration_adjust_for_aptitude_and_mastery(magictech_cur_run_info, datetime);
     datetime->milliseconds *= 8;
 }
 
 // 0x4547F0
-bool sub_4547F0(TimeEvent* timeevent, DateTime* datetime)
+bool magictech_maintenance_schedule_and_show(TimeEvent* timeevent, DateTime* datetime)
 {
     int player;
 
-    if (!sub_4548D0(timeevent, datetime, &(magictech_cur_run_info->field_148))) {
+    if (!magictech_timeevent_add_unless_pending(timeevent, datetime, &(magictech_cur_run_info->event_time))) {
         return false;
     }
 
@@ -3968,12 +3968,12 @@ bool sub_4547F0(TimeEvent* timeevent, DateTime* datetime)
 }
 
 // 0x4548D0
-bool sub_4548D0(TimeEvent* timeevent, DateTime* a2, DateTime* a3)
+bool magictech_timeevent_add_unless_pending(TimeEvent* timeevent, DateTime* a2, DateTime* a3)
 {
     bool v1;
 
     dword_5B0BA0 = timeevent->params[0].integer_value;
-    v1 = timeevent_any(TIMEEVENT_TYPE_MAGICTECH, sub_4570E0);
+    v1 = timeevent_any(TIMEEVENT_TYPE_MAGICTECH, magictech_maintenance_timeevent_matches_current);
     dword_5B0BA0 = -1;
 
     if (v1) {
@@ -4019,7 +4019,7 @@ bool magictech_component_recharge(int64_t obj, int num, int max)
             spell_mana_store = max;
         }
         obj_field_int32_set(obj, OBJ_F_ITEM_SPELL_MANA_STORE, spell_mana_store);
-        sub_4605D0();
+        ui_counters_refresh();
     }
 
     return true;
@@ -4042,7 +4042,7 @@ void magictech_component_obj_flag(int64_t obj, int64_t a2, int fld, int a4, int 
     flags = obj_field_int32_get(obj, fld);
 
     if (a5 == 1) {
-        if (sub_455100(obj, fld, a4, true) > 0) {
+        if (magictech_matching_spell_flag_instances_count(obj, fld, a4, true) > 0) {
             return;
         }
 
@@ -4089,7 +4089,7 @@ void magictech_component_obj_flag(int64_t obj, int64_t a2, int fld, int a4, int 
             } else if ((a4 & OSF_CHARMED) != 0) {
                 if (obj_type == OBJ_TYPE_NPC) {
                     if ((obj_field_int32_get(obj, OBJ_F_CRITTER_FLAGS) & OCF_ANIMAL) != 0) {
-                        sub_4AA300(obj, a6);
+                        ai_hostility_end_against_group(obj, a6);
                     } else if (player_is_pc_obj(a6)) {
                         // CE: Bypass effects to make this bonus reversible.
                         reaction_adj_ex(obj, a6, 30, false);
@@ -4132,7 +4132,7 @@ void magictech_component_obj_flag(int64_t obj, int64_t a2, int fld, int a4, int 
             break;
         }
     } else if (a5 == 0) {
-        if (sub_455100(obj, fld, a4, false) > 1) {
+        if (magictech_matching_spell_flag_instances_count(obj, fld, a4, false) > 1) {
             return;
         }
 
@@ -4154,8 +4154,8 @@ void magictech_component_obj_flag(int64_t obj, int64_t a2, int fld, int a4, int 
             } else if ((a4 & OSF_WATER_WALKING) != 0) {
                 object_flags_unset(obj, OF_WATER_WALKING);
                 if (tile_is_blocking(obj_field_int64_get(obj, OBJ_F_LOCATION), false)) {
-                    sub_4B2210(OBJ_HANDLE_NULL, obj, &combat);
-                    combat.dam_flags |= CDF_FULL;
+                    combat_context_init(OBJ_HANDLE_NULL, obj, &combat);
+                    combat.dam_flags |= COMBAT_DAMAGE_FULL;
                     combat_dmg(&combat);
 
                     // FIXME: Meaningless.
@@ -4206,32 +4206,32 @@ void magictech_component_obj_flag(int64_t obj, int64_t a2, int fld, int a4, int 
             break;
         case OBJ_F_PORTAL_FLAGS:
             if ((a4 & OPF_LOCKED) != 0) {
-                if (!sub_4551C0(a6, a7, obj)) {
+                if (!magictech_unlock_difficulty_check(a6, a7, obj)) {
                     v16 = false;
-                    sub_45A520(a6, obj);
+                    magictech_resurrection_fx_notify(a6, obj);
                 }
 
                 ai_notify_portal_container_guards(a6, obj, false, LOUDNESS_LOUD);
                 v17 = true;
 
                 if (!v16) {
-                    sub_460C30(obj);
+                    ui_hovered_object_refresh(obj);
                     return;
                 }
             }
             break;
         case OBJ_F_CONTAINER_FLAGS:
             if ((a4 & OCOF_LOCKED) != 0) {
-                if (!sub_4551C0(a6, a7, obj)) {
+                if (!magictech_unlock_difficulty_check(a6, a7, obj)) {
                     v16 = false;
-                    sub_45A520(a6, obj);
+                    magictech_resurrection_fx_notify(a6, obj);
                 }
 
                 ai_notify_portal_container_guards(a6, obj, false, LOUDNESS_LOUD);
                 v17 = true;
 
                 if (!v16) {
-                    sub_460C30(obj);
+                    ui_hovered_object_refresh(obj);
                     return;
                 }
             }
@@ -4242,12 +4242,12 @@ void magictech_component_obj_flag(int64_t obj, int64_t a2, int fld, int a4, int 
     obj_field_int32_set(obj, fld, flags);
 
     if (v17) {
-        sub_460C30(obj);
+        ui_hovered_object_refresh(obj);
     }
 }
 
 // 0x455100
-int sub_455100(int64_t obj, int fld, unsigned int a3, bool a4)
+int magictech_matching_spell_flag_instances_count(int64_t obj, int fld, unsigned int a3, bool a4)
 {
     unsigned int flags;
     int mt_id;
@@ -4266,7 +4266,7 @@ int sub_455100(int64_t obj, int fld, unsigned int a3, bool a4)
         do {
             if (magictech_id_to_run_info(mt_id, &run_info)
                 && fld == OBJ_F_SPELL_FLAGS
-                && (magictech_spells[run_info->spell].field_114 & a3) != 0) {
+                && (magictech_spells[run_info->spell].applied_spell_flags & a3) != 0) {
                 cnt++;
             }
         } while (magictech_find_next(obj, &mt_id));
@@ -4276,7 +4276,7 @@ int sub_455100(int64_t obj, int fld, unsigned int a3, bool a4)
 }
 
 // 0x4551C0
-bool sub_4551C0(int64_t a1, int64_t a2, int64_t a3)
+bool magictech_unlock_difficulty_check(int64_t a1, int64_t a2, int64_t a3)
 {
     int lock_difficulty;
 
@@ -4303,7 +4303,7 @@ bool sub_4551C0(int64_t a1, int64_t a2, int64_t a3)
 }
 
 // 0x455250
-void sub_455250(MagicTechRunInfo* run_info, DateTime* datetime)
+void magictech_duration_adjust_for_aptitude_and_mastery(MagicTechRunInfo* run_info, DateTime* datetime)
 {
     unsigned int millis;
     int source_aptitude;
@@ -4348,14 +4348,14 @@ void sub_455250(MagicTechRunInfo* run_info, DateTime* datetime)
 }
 
 // 0x455350
-void sub_455350(int64_t obj, int64_t target_loc)
+void magictech_move_object_along_path(int64_t obj, int64_t target_loc)
 {
     int64_t source_loc;
     AnimPath path;
     PathCreateInfo path_create_info;
 
     source_loc = obj_field_int64_get(obj, OBJ_F_LOCATION);
-    path.field_CC = sizeof(path.rotations) / sizeof(path.rotations[0]);
+    path.rotation_capacity = sizeof(path.rotations) / sizeof(path.rotations[0]);
     anim_path_init(&path);
 
     path_create_info.to = target_loc;
@@ -4363,7 +4363,7 @@ void sub_455350(int64_t obj, int64_t target_loc)
     path_create_info.obj = obj;
     path_create_info.max_rotations = sizeof(path.rotations) / sizeof(path.rotations[0]);
     path_create_info.rotations = path.rotations;
-    path_create_info.flags = PATH_FLAG_0x0010;
+    path_create_info.flags = PATH_FLAG_IGNORE_CRITTERS;
     path.max = path_make(&path_create_info);
 
     if (path.max != 0) {
@@ -4375,8 +4375,8 @@ void sub_455350(int64_t obj, int64_t target_loc)
             tile_script_exec(source_loc, obj);
         }
 
-        sub_424070(obj, 5, false, true);
-        sub_43E770(obj, source_loc, 0, 0);
+        anim_object_interrupt_by_priority(obj, 5, false, true);
+        object_move_to_location(obj, source_loc, 0, 0);
 
         if (player_is_local_pc_obj(obj)) {
             location_origin_set(source_loc);
@@ -4387,7 +4387,7 @@ void sub_455350(int64_t obj, int64_t target_loc)
 }
 
 // 0x4554B0
-void sub_4554B0(MagicTechRunInfo* run_info, int64_t obj)
+void magictech_summoned_object_add(MagicTechRunInfo* run_info, int64_t obj)
 {
     MagicTechObjectNode* node;
 
@@ -4405,11 +4405,11 @@ void sub_4554B0(MagicTechRunInfo* run_info, int64_t obj)
         run_info->summoned_obj->aptitude = stat_level_get(obj, STAT_MAGICK_TECH_APTITUDE);
     }
 
-    sub_443EB0(obj, &(run_info->summoned_obj->field_8));
+    object_reference_init(obj, &(run_info->summoned_obj->reference));
 }
 
 // 0x455550
-bool sub_455550(TargetContext* target_ctx, MagicTechRunInfo* run_info)
+bool magictech_target_antimagic_and_reflection_resolve(TargetContext* target_ctx, MagicTechRunInfo* run_info)
 {
     MesFileEntry mes_file_entry;
     int64_t parent_obj;
@@ -4427,7 +4427,7 @@ bool sub_455550(TargetContext* target_ctx, MagicTechRunInfo* run_info)
     target_ctx->target_spell_flags = obj_field_int32_get(target_ctx->target_obj, OBJ_F_SPELL_FLAGS);
 
     if ((target_ctx->target_spell_flags & OSF_ANTI_MAGIC_SHELL) != 0
-        && (run_info->field_138 & 0x800) == 0) {
+        && (run_info->applied_spell_flags & 0x800) == 0) {
         // FIX: Gracefully complete spells when dispelled by the "Dweomer
         // Shield".
         if ((run_info->flags & MAGICTECH_RUN_DISPELLED) != 0
@@ -4463,16 +4463,16 @@ bool sub_455550(TargetContext* target_ctx, MagicTechRunInfo* run_info)
 
     run_info->flags |= MAGICTECH_RUN_REFLECTED;
 
-    if ((run_info->field_138 & 0x2000) == 0
-        && sub_459040(target_ctx->target_obj, OSF_FULL_REFLECTION, &parent_obj)) {
-        sub_450420(parent_obj, dword_5E762C, true, 10000);
+    if ((run_info->applied_spell_flags & 0x2000) == 0
+        && magictech_spell_flag_caster_find(target_ctx->target_obj, OSF_FULL_REFLECTION, &parent_obj)) {
+        magictech_cost_check_or_consume(parent_obj, dword_5E762C, true, 10000);
     }
 
     if (target_ctx->target_obj == run_info->source_obj.obj) {
         return true;
     }
 
-    if ((run_info->field_138 & 0x2000) != 0) {
+    if ((run_info->applied_spell_flags & 0x2000) != 0) {
         return true;
     }
 
@@ -4494,7 +4494,7 @@ bool sub_455550(TargetContext* target_ctx, MagicTechRunInfo* run_info)
 }
 
 // 0x455710
-void sub_455710(void)
+void magictech_run_slots_reset(void)
 {
     int index;
     MagicTechRunInfo* run_info;
@@ -4532,7 +4532,7 @@ bool magictech_id_to_run_info(int mt_id, MagicTechRunInfo** run_info_ptr)
 {
     if (mt_id != -1
         && magictech_run_info[mt_id].id != -1
-        && sub_455820(&(magictech_run_info[mt_id]))) {
+        && magictech_run_object_handles_recover(&(magictech_run_info[mt_id]))) {
         *run_info_ptr = &(magictech_run_info[mt_id]);
         return true;
     }
@@ -4542,22 +4542,22 @@ bool magictech_id_to_run_info(int mt_id, MagicTechRunInfo** run_info_ptr)
 }
 
 // 0x455820
-bool sub_455820(MagicTechRunInfo* run_info)
+bool magictech_run_object_handles_recover(MagicTechRunInfo* run_info)
 {
     bool success = true;
     MagicTechObjectNode* node;
 
-    if (!sub_444020(&(run_info->source_obj.obj), &(run_info->source_obj.field_8))) {
+    if (!object_handle_recover_if_stale(&(run_info->source_obj.obj), &(run_info->source_obj.reference))) {
         success = false;
     }
 
-    if (!sub_444020(&(run_info->parent_obj.obj), &(run_info->parent_obj.field_8))) {
+    if (!object_handle_recover_if_stale(&(run_info->parent_obj.obj), &(run_info->parent_obj.reference))) {
         success = false;
     }
 
     node = run_info->objlist;
     while (node != NULL) {
-        if (!sub_444020(&(node->obj), &(node->field_8))) {
+        if (!object_handle_recover_if_stale(&(node->obj), &(node->reference))) {
             success = false;
         }
         node = node->next;
@@ -4565,7 +4565,7 @@ bool sub_455820(MagicTechRunInfo* run_info)
 
     node = run_info->summoned_obj;
     while (node != NULL) {
-        if (!sub_444020(&(node->obj), &(node->field_8))) {
+        if (!object_handle_recover_if_stale(&(node->obj), &(node->reference))) {
             success = false;
         }
         node = node->next;
@@ -4583,10 +4583,10 @@ void magictech_id_free_lock(int mt_id)
     run_info = &(magictech_run_info[mt_id]);
     if (run_info->id != -1) {
         dword_5B0BA0 = run_info->id;
-        timeevent_clear_one_ex(TIMEEVENT_TYPE_MAGICTECH, sub_4570E0);
+        timeevent_clear_one_ex(TIMEEVENT_TYPE_MAGICTECH, magictech_maintenance_timeevent_matches_current);
         dword_5B0BA0 = -1;
 
-        sub_455960(run_info);
+        magictech_run_object_lists_release(run_info);
         dword_6876DC--;
 
         if (tig_net_is_active()
@@ -4599,7 +4599,7 @@ void magictech_id_free_lock(int mt_id)
 }
 
 // 0x455960
-void sub_455960(MagicTechRunInfo* run_info)
+void magictech_run_object_lists_release(MagicTechRunInfo* run_info)
 {
     MagicTechObjectNode* node;
     MagicTechObjectNode* next;
@@ -4630,7 +4630,7 @@ void sub_455960(MagicTechRunInfo* run_info)
 }
 
 // 0x4559E0
-void sub_4559E0(MagicTechRunInfo* run_info)
+void magictech_run_slot_clear(MagicTechRunInfo* run_info)
 {
     if (run_info->id != -1) {
         run_info->id = -1;
@@ -4646,16 +4646,16 @@ void sub_4559E0(MagicTechRunInfo* run_info)
 void magictech_invocation_init(MagicTechInvocation* mt_invocation, int64_t obj, int spell)
 {
     mt_invocation->spell = spell;
-    sub_4440E0(obj, &(mt_invocation->source_obj));
+    object_handle_reference_init(obj, &(mt_invocation->source_obj));
     if (obj != OBJ_HANDLE_NULL) {
         mt_invocation->loc = obj_field_int64_get(obj, OBJ_F_LOCATION);
     } else {
         mt_invocation->loc = 0;
     }
-    sub_4440E0(OBJ_HANDLE_NULL, &(mt_invocation->target_obj));
+    object_handle_reference_init(OBJ_HANDLE_NULL, &(mt_invocation->target_obj));
     mt_invocation->target_loc = 0;
-    sub_4440E0(sub_450A50(obj), &(mt_invocation->parent_obj));
-    sub_4440E0(OBJ_HANDLE_NULL, &(mt_invocation->attacker_obj));
+    object_handle_reference_init(magictech_inventory_owner_or_self(obj), &(mt_invocation->parent_obj));
+    object_handle_reference_init(OBJ_HANDLE_NULL, &(mt_invocation->attacker_obj));
     mt_invocation->trigger = 0;
     mt_invocation->flags = 0;
 }
@@ -4673,32 +4673,32 @@ void magictech_invocation_run(MagicTechInvocation* mt_invocation)
 
             pkt.type = 58;
             pkt.player = multiplayer_find_slot_from_obj(mt_invocation->source_obj.obj);
-            sub_4440E0(mt_invocation->source_obj.obj, &(mt_invocation->source_obj));
-            sub_4440E0(mt_invocation->parent_obj.obj, &(mt_invocation->parent_obj));
-            sub_4440E0(mt_invocation->target_obj.obj, &(mt_invocation->target_obj));
-            sub_4440E0(mt_invocation->attacker_obj.obj, &(mt_invocation->attacker_obj));
+            object_handle_reference_init(mt_invocation->source_obj.obj, &(mt_invocation->source_obj));
+            object_handle_reference_init(mt_invocation->parent_obj.obj, &(mt_invocation->parent_obj));
+            object_handle_reference_init(mt_invocation->target_obj.obj, &(mt_invocation->target_obj));
+            object_handle_reference_init(mt_invocation->attacker_obj.obj, &(mt_invocation->attacker_obj));
             pkt.invocation = *mt_invocation;
             tig_net_send_app_all(&pkt, sizeof(pkt));
-            sub_455C30(mt_invocation);
+            magictech_invocation_start(mt_invocation);
         } else {
             PacketPlayerRequestCastSpell pkt;
 
             pkt.type = 57;
             pkt.player = multiplayer_find_slot_from_obj(mt_invocation->source_obj.obj);
-            sub_4440E0(mt_invocation->source_obj.obj, &(mt_invocation->source_obj));
-            sub_4440E0(mt_invocation->parent_obj.obj, &(mt_invocation->parent_obj));
-            sub_4440E0(mt_invocation->target_obj.obj, &(mt_invocation->target_obj));
-            sub_4440E0(mt_invocation->attacker_obj.obj, &(mt_invocation->attacker_obj));
+            object_handle_reference_init(mt_invocation->source_obj.obj, &(mt_invocation->source_obj));
+            object_handle_reference_init(mt_invocation->parent_obj.obj, &(mt_invocation->parent_obj));
+            object_handle_reference_init(mt_invocation->target_obj.obj, &(mt_invocation->target_obj));
+            object_handle_reference_init(mt_invocation->attacker_obj.obj, &(mt_invocation->attacker_obj));
             pkt.invocation = *mt_invocation;
             tig_net_send_app_all(&pkt, sizeof(pkt));
         }
     } else {
-        sub_455C30(mt_invocation);
+        magictech_invocation_start(mt_invocation);
     }
 }
 
 // 0x455C30
-void sub_455C30(MagicTechInvocation* mt_invocation)
+void magictech_invocation_start(MagicTechInvocation* mt_invocation)
 {
     MagicTechInfo* info;
     MagicTechRunInfo* run_info;
@@ -4717,7 +4717,7 @@ void sub_455C30(MagicTechInvocation* mt_invocation)
     magictech_id_new_lock(&run_info);
 
     run_info->source_obj.obj = mt_invocation->source_obj.obj;
-    sub_443EB0(run_info->source_obj.obj, &(run_info->source_obj.field_8));
+    object_reference_init(run_info->source_obj.obj, &(run_info->source_obj.reference));
     if (run_info->source_obj.obj != OBJ_HANDLE_NULL) {
         run_info->source_obj.type = obj_field_int32_get(run_info->source_obj.obj, OBJ_F_TYPE);
         if (obj_type_is_critter(run_info->source_obj.type)) {
@@ -4729,7 +4729,7 @@ void sub_455C30(MagicTechInvocation* mt_invocation)
     run_info->source_obj.loc = mt_invocation->loc;
 
     run_info->parent_obj.obj = mt_invocation->parent_obj.obj;
-    sub_443EB0(run_info->parent_obj.obj, &(run_info->parent_obj.field_8));
+    object_reference_init(run_info->parent_obj.obj, &(run_info->parent_obj.reference));
     if (run_info->parent_obj.obj != OBJ_HANDLE_NULL) {
         run_info->parent_obj.type = obj_field_int32_get(run_info->parent_obj.obj, OBJ_F_TYPE);
         if (obj_type_is_critter(run_info->parent_obj.type)) {
@@ -4741,7 +4741,7 @@ void sub_455C30(MagicTechInvocation* mt_invocation)
     run_info->parent_obj.loc = mt_invocation->loc;
 
     run_info->target_obj.obj = mt_invocation->target_obj.obj;
-    sub_443EB0(run_info->target_obj.obj, &(run_info->target_obj.field_8));
+    object_reference_init(run_info->target_obj.obj, &(run_info->target_obj.reference));
     if (run_info->target_obj.obj != OBJ_HANDLE_NULL) {
         run_info->target_obj.type = obj_field_int32_get(run_info->target_obj.obj, OBJ_F_TYPE);
         if (obj_type_is_critter(run_info->target_obj.type)) {
@@ -4753,7 +4753,7 @@ void sub_455C30(MagicTechInvocation* mt_invocation)
     run_info->target_obj.loc = mt_invocation->target_loc;
 
     run_info->attacker_obj.obj = mt_invocation->attacker_obj.obj;
-    sub_443EB0(run_info->attacker_obj.obj, &(run_info->attacker_obj.field_8));
+    object_reference_init(run_info->attacker_obj.obj, &(run_info->attacker_obj.reference));
     if (run_info->attacker_obj.obj != OBJ_HANDLE_NULL) {
         run_info->attacker_obj.type = obj_field_int32_get(run_info->attacker_obj.obj, OBJ_F_TYPE);
         if (obj_type_is_critter(run_info->attacker_obj.type)) {
@@ -4776,10 +4776,10 @@ void sub_455C30(MagicTechInvocation* mt_invocation)
         run_info->flags |= MAGICTECH_RUN_UNRESISTABLE;
     }
 
-    run_info->field_138 = 0;
+    run_info->applied_spell_flags = 0;
     run_info->trigger = mt_invocation->trigger;
-    run_info->field_144 = 0;
-    run_info->field_150 = info->duration_trigger_count;
+    run_info->resistance_amount = 0;
+    run_info->remaining_duration_triggers = info->duration_trigger_count;
 
     if ((info->flags & MAGICTECH_NO_RESIST) != 0) {
         run_info->flags |= MAGICTECH_RUN_UNRESISTABLE;
@@ -4813,7 +4813,7 @@ void sub_455C30(MagicTechInvocation* mt_invocation)
             : AG_THROW_SPELL;
 
         if ((mt_invocation->flags & MAGICTECH_INVOCATION_FRIENDLY) != 0) {
-            if (sub_44D500(&goal_data, run_info->parent_obj.obj, AG_THROW_SPELL_FRIENDLY)) {
+            if (anim_goal_data_init_without_interrupt(&goal_data, run_info->parent_obj.obj, AG_THROW_SPELL_FRIENDLY)) {
                 goal_data.params[AGDATA_SPELL_DATA].data = run_info->id;
                 goal_data.params[AGDATA_TARGET_OBJ].obj = run_info->target_obj.obj;
                 goal_data.params[AGDATA_TARGET_TILE].obj = run_info->target_obj.loc;
@@ -4831,7 +4831,7 @@ void sub_455C30(MagicTechInvocation* mt_invocation)
         } else if (anim_is_current_goal_type(run_info->parent_obj.obj, AG_THROW_SPELL, &anim_id)) {
             if (num_goal_subslots_in_use(&anim_id) < 4
                 && !combat_turn_based_is_active()
-                && sub_44D500(&goal_data, run_info->parent_obj.obj, anim)) {
+                && anim_goal_data_init_without_interrupt(&goal_data, run_info->parent_obj.obj, anim)) {
                 goal_data.params[AGDATA_SPELL_DATA].data = run_info->id;
                 goal_data.params[AGDATA_TARGET_OBJ].obj = run_info->target_obj.obj;
                 goal_data.params[AGDATA_TARGET_TILE].obj = run_info->target_obj.loc;
@@ -4854,7 +4854,7 @@ void sub_455C30(MagicTechInvocation* mt_invocation)
                     return;
                 }
             }
-        } else if (sub_44D4E0(&goal_data, run_info->parent_obj.obj, anim)) {
+        } else if (anim_goal_data_init_with_interrupt(&goal_data, run_info->parent_obj.obj, anim)) {
             goal_data.params[AGDATA_SPELL_DATA].data = run_info->id;
             goal_data.params[AGDATA_TARGET_OBJ].obj = run_info->target_obj.obj;
             goal_data.params[AGDATA_TARGET_TILE].obj = run_info->target_obj.loc;
@@ -4873,7 +4873,7 @@ void sub_455C30(MagicTechInvocation* mt_invocation)
 
             if (anim_goal_add(&goal_data, &anim_id)) {
                 if (info->casting_anim != -1) {
-                    if (sub_44D500(&goal_data, run_info->parent_obj.obj, AG_THROW_SPELL_W_CAST_ANIM_2NDARY)) {
+                    if (anim_goal_data_init_without_interrupt(&goal_data, run_info->parent_obj.obj, AG_THROW_SPELL_W_CAST_ANIM_2NDARY)) {
                         goal_data.params[AGDATA_SPELL_DATA].data = run_info->id;
                         goal_data.params[AGDATA_TARGET_OBJ].obj = run_info->target_obj.obj;
                         goal_data.params[AGDATA_TARGET_TILE].obj = run_info->target_obj.loc;
@@ -4885,20 +4885,20 @@ void sub_455C30(MagicTechInvocation* mt_invocation)
             }
         }
     } else {
-        if (sub_458B70(run_info->id) == -1) {
-            sub_456E00(run_info->id);
+        if (magictech_projectile_art_id_get(run_info->id) == -1) {
+            magictech_secondary_casting_fx_play(run_info->id);
         }
 
         timeevent.type = TIMEEVENT_TYPE_MAGICTECH;
         timeevent.params[0].integer_value = run_info->id;
         timeevent.params[2].integer_value = 3;
         if (combat_turn_based_is_active()) {
-            datetime = sub_45A7C0();
+            datetime = game_time_get();
             if (timeevent_add_base(&timeevent, &datetime)) {
                 return;
             }
         } else {
-            sub_45A950(&datetime, 2);
+            datetime_init(&datetime, 2);
             if (timeevent_add_delay(&timeevent, &datetime)) {
                 return;
             }
@@ -4909,7 +4909,7 @@ void sub_455C30(MagicTechInvocation* mt_invocation)
 }
 
 // 0x456430
-bool sub_456430(int64_t a1, int64_t a2, MagicTechInfo* magictech)
+bool magictech_disallowed_flags_check(int64_t a1, int64_t a2, MagicTechInfo* magictech)
 {
     if (a1 == OBJ_HANDLE_NULL) {
         return true;
@@ -4953,7 +4953,7 @@ bool magictech_invocation_check(MagicTechInvocation* mt_invocation)
 
     if (mt_invocation->parent_obj.obj != OBJ_HANDLE_NULL) {
         int64_t parent_loc = obj_field_int64_get(mt_invocation->parent_obj.obj, OBJ_F_LOCATION);
-        if (!sub_454700(parent_loc, mt_invocation->target_loc, mt_invocation->target_obj.obj, mt_invocation->spell)) {
+        if (!magictech_target_is_in_range(parent_loc, mt_invocation->target_loc, mt_invocation->target_obj.obj, mt_invocation->spell)) {
             return false;
         }
     }
@@ -4962,7 +4962,7 @@ bool magictech_invocation_check(MagicTechInvocation* mt_invocation)
         return false;
     }
 
-    if (!sub_456430(mt_invocation->parent_obj.obj, mt_invocation->target_obj.obj, info)) {
+    if (!magictech_disallowed_flags_check(mt_invocation->parent_obj.obj, mt_invocation->target_obj.obj, info)) {
         return false;
     }
 
@@ -4980,7 +4980,7 @@ bool magictech_invocation_check(MagicTechInvocation* mt_invocation)
         uint64_t* tgt;
 
         target_params_init(&target_params);
-        sub_459F20(mt_invocation->spell, &tgt);
+        magictech_target_flags_pointer_get(mt_invocation->spell, &tgt);
         target_params.tgt = *tgt;
         target_params.radius = 2;
 
@@ -5023,7 +5023,7 @@ bool magictech_invocation_check(MagicTechInvocation* mt_invocation)
 
             mt_invocation->target_loc = target_ctx.target_loc;
             mt_invocation->target_obj.obj = OBJ_HANDLE_NULL;
-            mt_invocation->target_obj.field_8.objid.type = OID_TYPE_NULL;
+            mt_invocation->target_obj.reference.objid.type = OID_TYPE_NULL;
         }
     }
 
@@ -5039,7 +5039,7 @@ bool magictech_invocation_check(MagicTechInvocation* mt_invocation)
             && source_aptitude < 0
             && mt_invocation->parent_obj.obj != mt_invocation->source_obj.obj
             && item_effective_power(mt_invocation->source_obj.obj, mt_invocation->parent_obj.obj) <= 0) {
-            sub_45A520(mt_invocation->parent_obj.obj, mt_invocation->target_obj.obj);
+            magictech_resurrection_fx_notify(mt_invocation->parent_obj.obj, mt_invocation->target_obj.obj);
             return false;
         }
 
@@ -5048,7 +5048,7 @@ bool magictech_invocation_check(MagicTechInvocation* mt_invocation)
                 target_aptitude = target_aptitude * (100 - source_aptitude) / 100;
             }
             if (random_between(1, 100) <= target_aptitude) {
-                sub_45A520(mt_invocation->parent_obj.obj, mt_invocation->target_obj.obj);
+                magictech_resurrection_fx_notify(mt_invocation->parent_obj.obj, mt_invocation->target_obj.obj);
                 return false;
             }
         }
@@ -5076,7 +5076,7 @@ bool magictech_invocation_check(MagicTechInvocation* mt_invocation)
 }
 
 // 0x456A10
-bool sub_456A10(int64_t a1, int64_t a2, int64_t a3)
+bool magictech_item_effective_power_check(int64_t a1, int64_t a2, int64_t a3)
 {
     int aptitude;
 
@@ -5107,13 +5107,13 @@ bool sub_456A10(int64_t a1, int64_t a2, int64_t a3)
 }
 
 // 0x456A90
-bool sub_456A90(int mt_id)
+bool magictech_run_target_revalidate(int mt_id)
 {
     MagicTechRunInfo* run_info;
     uint64_t* tgt_ptr;
     uint64_t prev_tgt;
     TargetDescriptor td;
-    S4F2680 v3;
+    TargetDescriptorEvaluation v3;
     bool rc;
 
     if (tig_net_is_active()
@@ -5125,7 +5125,7 @@ bool sub_456A90(int mt_id)
         return false;
     }
 
-    sub_459F20(run_info->spell, &tgt_ptr);
+    magictech_target_flags_pointer_get(run_info->spell, &tgt_ptr);
 
     if (*tgt_ptr == TGT_NONE
         || ((*tgt_ptr & TGT_SELF) != 0
@@ -5142,10 +5142,10 @@ bool sub_456A90(int mt_id)
         target_descriptor_set_loc(&td, run_info->target_obj.loc);
     }
 
-    v3.field_0 = run_info->source_obj.obj;
-    v3.field_8 = run_info->parent_obj.obj;
+    v3.source_obj = run_info->source_obj.obj;
+    v3.self_obj = run_info->parent_obj.obj;
     v3.td = &td;
-    rc = sub_4F2680(&v3);
+    rc = target_descriptor_evaluate_current(&v3);
     target_flags_set(prev_tgt);
 
     return rc;
@@ -5174,7 +5174,7 @@ bool magictech_check_los(MagicTechInvocation* mt_invocation)
     }
 
     if (loc != 0) {
-        if (sub_4ADE00(mt_invocation->parent_obj.obj, loc, &blocking_obj) >= 100) {
+        if (ai_straight_path_cost_to_location(mt_invocation->parent_obj.obj, loc, &blocking_obj) >= 100) {
             return false;
         }
 
@@ -5195,7 +5195,7 @@ void magictech_preload_art(MagicTechRunInfo* run_info)
     AnimFxNode node;
 
     for (type = 0; type < MAGICTECH_EYE_CANDY_TYPE_COUNT; type++) {
-        sub_4CCD20(&spell_eye_candies,
+        animfx_node_init(&spell_eye_candies,
             &node,
             run_info->parent_obj.obj,
             run_info->id,
@@ -5205,7 +5205,7 @@ void magictech_preload_art(MagicTechRunInfo* run_info)
 }
 
 // 0x456D20
-bool sub_456D20(int mt_id, tig_art_id_t* art_id_ptr, tig_art_id_t* light_art_id_ptr, tig_color_t* light_color_ptr, int* a5, int* a6, int* a7, int* a8)
+bool magictech_projectile_effect_describe(int mt_id, tig_art_id_t* art_id_ptr, tig_art_id_t* light_art_id_ptr, tig_color_t* light_color_ptr, int* a5, int* a6, int* a7, int* a8)
 {
     MagicTechRunInfo* run_info;
     AnimFxNode node;
@@ -5214,7 +5214,7 @@ bool sub_456D20(int mt_id, tig_art_id_t* art_id_ptr, tig_art_id_t* light_art_id_
         return false;
     }
 
-    sub_4CCD20(&spell_eye_candies,
+    animfx_node_init(&spell_eye_candies,
         &node,
         run_info->parent_obj.obj,
         run_info->id,
@@ -5241,13 +5241,13 @@ bool sub_456D20(int mt_id, tig_art_id_t* art_id_ptr, tig_art_id_t* light_art_id_
 }
 
 // 0x456E00
-void sub_456E00(int mt_id)
+void magictech_secondary_casting_fx_play(int mt_id)
 {
     MagicTechRunInfo* run_info;
     AnimFxNode node;
 
     if (magictech_id_to_run_info(mt_id, &run_info)) {
-        sub_4CCD20(&spell_eye_candies,
+        animfx_node_init(&spell_eye_candies,
             &node,
             run_info->parent_obj.obj,
             run_info->id,
@@ -5262,7 +5262,7 @@ void magictech_fx_add(int64_t obj, int fx)
 {
     AnimFxNode node;
 
-    sub_4CCD20(&spell_eye_candies, &node, obj, -1, fx % 10 + 6 * (fx / 10));
+    animfx_node_init(&spell_eye_candies, &node, obj, -1, fx % 10 + 6 * (fx / 10));
     node.animate = true;
     animfx_add(&node);
 }
@@ -5289,24 +5289,24 @@ void magictech_fx_remove(int64_t obj, int fx)
 }
 
 // 0x456F70
-void sub_456F70(int mt_id)
+void magictech_begin_action_process(int mt_id)
 {
     MagicTechRunInfo* run_info;
 
     if (magictech_id_to_run_info(mt_id, &run_info)) {
         run_info->action = MAGICTECH_ACTION_BEGIN;
-        sub_451070(run_info);
+        magictech_run_process(run_info);
     }
 }
 
 // 0x456FA0
-void sub_456FA0(int mt_id, unsigned int flags)
+void magictech_casting_complete_and_release(int mt_id, unsigned int flags)
 {
     if (mt_id != -1
         && (!tig_net_is_active()
             || tig_net_is_host())) {
         if ((flags & 0x1) != 0) {
-            sub_4507D0(magictech_run_info[mt_id].source_obj.obj,
+            magictech_casting_cost_consume(magictech_run_info[mt_id].source_obj.obj,
                 magictech_run_info[mt_id].spell);
         }
         magictech_id_free_lock(mt_id);
@@ -5314,29 +5314,29 @@ void sub_456FA0(int mt_id, unsigned int flags)
 }
 
 // 0x457000
-void sub_457000(int mt_id, int action)
+void magictech_action_process(int mt_id, int action)
 {
     MagicTechRunInfo* run_info;
 
     if (magictech_id_to_run_info(mt_id, &run_info)) {
         run_info->action = action;
-        sub_451070(run_info);
+        magictech_run_process(run_info);
     }
 }
 
 // 0x457030
-void sub_457030(int mt_id, int action)
+void magictech_run_callback_action_process(int mt_id, int action)
 {
     MagicTechRunInfo* run_info;
 
     if (magictech_id_to_run_info(mt_id, &run_info)) {
         run_info->action = action;
-        sub_457060(run_info);
+        magictech_run_callback_process(run_info);
     }
 }
 
 // 0x457060
-void sub_457060(MagicTechRunInfo* run_info)
+void magictech_run_callback_process(MagicTechRunInfo* run_info)
 {
     if (magictech_cur_id != -1 && magictech_cur_id != run_info->id) {
         tig_debug_printf("\n\nMagicTech: ERROR: Process function is NOT Re-Entrant, Spell: %d (%s)!\n",
@@ -5356,16 +5356,16 @@ void sub_457060(MagicTechRunInfo* run_info)
 }
 
 // 0x4570E0
-bool sub_4570E0(TimeEvent* timeevent)
+bool magictech_maintenance_timeevent_matches_current(TimeEvent* timeevent)
 {
     return timeevent->params[0].integer_value == dword_5B0BA0
         && timeevent->params[2].integer_value == 1;
 }
 
 // 0x457100
-void sub_457100(void)
+void magictech_run_slots_reset_callback(void)
 {
-    sub_455710();
+    magictech_run_slots_reset();
 }
 
 // 0x457110
@@ -5402,11 +5402,11 @@ void magictech_interrupt(int mt_id)
     if (!dword_5E7604) {
         dword_5E7604 = true;
         dword_5B0BA0 = mt_id;
-        timeevent_clear_one_ex(TIMEEVENT_TYPE_MAGICTECH, sub_4570E0);
+        timeevent_clear_one_ex(TIMEEVENT_TYPE_MAGICTECH, magictech_maintenance_timeevent_matches_current);
         dword_5E7604 = false;
     }
 
-    sub_451070(run_info);
+    magictech_run_process(run_info);
 }
 
 // 0x4571E0
@@ -5421,14 +5421,14 @@ void magictech_interrupt_delayed(int mt_id)
     if (magictech_id_to_run_info(mt_id, &run_info)
         && run_info->action == MAGICTECH_ACTION_BEGIN
         && (run_info->flags & MAGICTECH_RUN_0x04) == 0) {
-        sub_456FA0(mt_id, 1);
+        magictech_casting_complete_and_release(mt_id, 1);
         return;
     }
 
     timeevent.type = TIMEEVENT_TYPE_MAGICTECH;
     timeevent.params[0].integer_value = mt_id;
     timeevent.params[2].integer_value = 2;
-    sub_45A950(&datetime, 1);
+    datetime_init(&datetime, 1);
 
     if (!timeevent_add_delay(&timeevent, &datetime)) {
         tig_debug_printf("magictech_interrupt_delayed: Error: failed to queue timeevent!\n");
@@ -5436,7 +5436,7 @@ void magictech_interrupt_delayed(int mt_id)
 }
 
 // 0x457270
-void sub_457270(int mt_id)
+void magictech_run_end_immediate(int mt_id)
 {
     MagicTechRunInfo* run_info;
 
@@ -5446,16 +5446,16 @@ void sub_457270(int mt_id)
         if (!dword_5E7604) {
             dword_5E7604 = true;
             dword_5B0BA0 = mt_id;
-            timeevent_clear_one_ex(TIMEEVENT_TYPE_MAGICTECH, sub_4570E0);
+            timeevent_clear_one_ex(TIMEEVENT_TYPE_MAGICTECH, magictech_maintenance_timeevent_matches_current);
             dword_5E7604 = false;
         }
         run_info->flags |= MAGICTECH_RUN_0x40;
-        sub_451070(run_info);
+        magictech_run_process(run_info);
     }
 }
 
 // 0x4573D0
-void sub_4573D0(MagicTechInvocation* mt_invocation)
+void magictech_matching_invocation_interrupt(MagicTechInvocation* mt_invocation)
 {
     int idx;
     MagicTechRunInfo* run_info;
@@ -5495,7 +5495,7 @@ void magictech_demaintain_spells(int64_t obj)
 }
 
 // 0x4574D0
-void sub_4574D0(int64_t obj)
+void magictech_object_sources_detach(int64_t obj)
 {
     int index;
 
@@ -5506,25 +5506,25 @@ void sub_4574D0(int64_t obj)
     for (index = 0; index < 512; index++) {
         if (magictech_run_info[index].parent_obj.obj == obj
             || magictech_run_info[index].source_obj.obj == obj) {
-            sub_457530(magictech_run_info[index].id);
+            magictech_source_detach(magictech_run_info[index].id);
         }
     }
 }
 
 // 0x457530
-void sub_457530(int mt_id)
+void magictech_source_detach(int mt_id)
 {
     MagicTechRunInfo* run_info;
 
     if (magictech_id_to_run_info(mt_id, &run_info)) {
         run_info->source_obj.obj = OBJ_HANDLE_NULL;
-        sub_443EB0(OBJ_HANDLE_NULL, &(run_info->source_obj.field_8));
+        object_reference_init(OBJ_HANDLE_NULL, &(run_info->source_obj.reference));
         run_info->source_obj.type = -1;
     }
 }
 
 // 0x457580
-void sub_457580(MagicTechInfo* info, int magictech)
+void magictech_spell_info_defaults_init(MagicTechInfo* info, int magictech)
 {
     int index;
 
@@ -5550,7 +5550,7 @@ void sub_457580(MagicTechInfo* info, int magictech)
     info->missile = -1;
     info->casting_anim = -1;
     info->no_stack = 0;
-    info->field_114 = 0;
+    info->applied_spell_flags = 0;
     info->cancels_sf = 0;
     info->disallowed_sf = 0;
     info->disallowed_tsf = 0;
@@ -5653,7 +5653,7 @@ void magictech_build_aoe_info(MagicTechInfo* info, char* str)
 }
 
 // 0x4578F0
-void sub_4578F0(MagicTechInfo* info, char* str)
+void magictech_spell_costs_and_duration_parse(MagicTechInfo* info, char* str)
 {
     char* curr = str;
     int value1;
@@ -5721,7 +5721,7 @@ void sub_4578F0(MagicTechInfo* info, char* str)
 }
 
 // 0x457B20
-void sub_457B20(MagicTechInfo* info, char* str)
+void magictech_spell_animation_parse(MagicTechInfo* info, char* str)
 {
     char* curr = str;
     int value;
@@ -5784,7 +5784,7 @@ void sub_457B20(MagicTechInfo* info, char* str)
 }
 
 // 0x457D00
-void sub_457D00(MagicTechInfo* info, char* str)
+void magictech_spell_flags_parse(MagicTechInfo* info, char* str)
 {
     char* curr = str;
     unsigned int flags;
@@ -5950,7 +5950,7 @@ void magictech_build_effect_info(MagicTechInfo* info, char* str)
 
     if (tig_str_match_named_str_to_list(&str, "Type:", magictech_component_names, 25, &(component_info->type))) {
         switch (component_info->type) {
-        case MTC_AGOAL:
+        case MAGICTECH_COMPONENT_ANIMATION_GOAL:
             tig_str_match_str_to_list(&str, off_5B0C40, 6, &value);
             component_info->data.agoal.goal = dword_5B0C58[value];
             if (tig_str_parse_named_value(&str, "SubGoal:", &value)) {
@@ -5959,11 +5959,11 @@ void magictech_build_effect_info(MagicTechInfo* info, char* str)
                 component_info->data.agoal.subgoal = 0;
             }
             break;
-        case MTC_AGOALTERMINATE:
+        case MAGICTECH_COMPONENT_ANIMATION_TERMINATE:
             tig_str_match_str_to_list(&str, off_5B0C40, 6, &value);
             component_info->data.agoal_terminate.goal = dword_5B0C58[value];
             break;
-        case MTC_AIREDIRECT:
+        case MAGICTECH_COMPONENT_AI_REDIRECT:
             tig_str_match_str_to_list(&str, obj_flags_ocf, 32, &value);
             component_info->data.ai_redirect.critter_flags = 1 << value;
             if (tig_str_parse_named_value(&str, "MinIQ:", &value)) {
@@ -5972,7 +5972,7 @@ void magictech_build_effect_info(MagicTechInfo* info, char* str)
                 component_info->data.ai_redirect.min_iq = -1;
             }
             break;
-        case MTC_CAST:
+        case MAGICTECH_COMPONENT_CAST:
             if (tig_str_parse_named_value(&str, "Spell:", &value)) {
                 component_info->data.cast.spell = value;
             } else {
@@ -5980,7 +5980,7 @@ void magictech_build_effect_info(MagicTechInfo* info, char* str)
                 tig_debug_printf("MagicTech: ERROR: Cast Component has no spell!\n");
             }
             break;
-        case MTC_CHARGENBRANCH:
+        case MAGICTECH_COMPONENT_CHARGE_AND_BRANCH:
             component_info->data.charge_branch.branch = -1;
             component_info->data.charge_branch.cost = 0;
             tig_str_parse_named_value(&str, "Cost:", &(component_info->data.charge_branch.cost));
@@ -5988,14 +5988,14 @@ void magictech_build_effect_info(MagicTechInfo* info, char* str)
                 component_info->data.charge_branch.branch = value;
             }
             break;
-        case MTC_DAMAGE:
+        case MAGICTECH_COMPONENT_DAMAGE:
             tig_str_match_named_str_to_list(&str, "DmgType:", off_5B0C70, 6, &(component_info->data.damage.damage_type));
             tig_str_parse_named_range(&str, "Dmg:", &(component_info->data.damage.damage_min), &(component_info->data.damage.damage_max));
             component_info->data.damage.damage_flags = 0;
             tig_str_parse_named_flag_list(&str, "Dmg_Flags:", off_5B0D14, dword_5B0D3C, 10, &(component_info->data.damage.damage_flags));
             info->flags |= MAGICTECH_HAVE_DAMAGE;
             break;
-        case MTC_EFFECT:
+        case MAGICTECH_COMPONENT_EFFECT:
             tig_str_parse_value(&str, &(component_info->data.effect.num));
             tig_str_match_str_to_list(&str, off_5B0C88, 2, &(component_info->data.effect.add_remove));
             if (tig_str_parse_named_value(&str, "Count:", &value)) {
@@ -6016,12 +6016,12 @@ void magictech_build_effect_info(MagicTechInfo* info, char* str)
                 component_info->data.effect.scaled = 0;
             }
             break;
-        case MTC_ENVFLAG:
+        case MAGICTECH_COMPONENT_ENVIRONMENT_FLAG:
             tig_str_match_str_to_list(&str, obj_flags_tbl[OFS_SPELL_FLAGS], obj_flags_size_tbl[OFS_SPELL_FLAGS], &value);
             component_info->data.env_flags.flags = 1 << value;
             tig_str_match_str_to_list(&str, off_5B0C90, 2, &(component_info->data.env_flags.state));
             break;
-        case MTC_EYECANDY:
+        case MAGICTECH_COMPONENT_VISUAL_EFFECT:
             tig_str_parse_value(&str, &(component_info->data.eye_candy.num));
             tig_str_match_str_to_list(&str, off_5B0C88, 2, &(component_info->data.eye_candy.add_remove));
             tig_str_parse_named_flag_list(&str,
@@ -6031,13 +6031,13 @@ void magictech_build_effect_info(MagicTechInfo* info, char* str)
                 ANIMFX_PLAY_COUNT,
                 &(component_info->data.eye_candy.flags));
             break;
-        case MTC_HEAL:
+        case MAGICTECH_COMPONENT_HEAL:
             tig_str_match_named_str_to_list(&str, "DmgType:", off_5B0C70, 6, &(component_info->data.heal.damage_type));
             tig_str_parse_named_range(&str, "Dmg:", &(component_info->data.heal.damage_min), &(component_info->data.heal.damage_max));
             component_info->data.heal.damage_flags = 0;
             tig_str_parse_named_flag_list(&str, "Dmg_Flags:", off_5B0D14, dword_5B0D3C, 10, &(component_info->data.heal.damage_flags));
             break;
-        case MTC_INTERRUPT:
+        case MAGICTECH_COMPONENT_INTERRUPT:
             if (tig_str_parse_named_value(&str, "MagicTech:", &value)) {
                 component_info->data.interrupt.magictech = value;
             } else {
@@ -6045,13 +6045,13 @@ void magictech_build_effect_info(MagicTechInfo* info, char* str)
                 tig_debug_printf("MagicTech: ERROR: Interrupt Component has no spell!\n");
             }
             break;
-        case MTC_MOVEMENT:
+        case MAGICTECH_COMPONENT_MOVEMENT:
             if (tig_str_match_named_str_to_list(&str, "Move_Location:", off_5B0D04, 4, &(component_info->data.movement.move_location))
                 && component_info->data.movement.move_location == 1) {
                 tig_str_parse_named_value(&str, "Tile_Radius:", &(component_info->data.movement.tile_radius));
             }
             break;
-        case MTC_OBJFLAG:
+        case MAGICTECH_COMPONENT_OBJECT_FLAG:
             tig_str_match_str_to_list(&str, obj_flags_fields_lookup_tbl_keys, OFS_COUNT, &value);
             component_info->data.obj_flag.flags_fld = obj_flags_fields_lookup_tbl_values[value];
             tig_str_match_str_to_list(&str, obj_flags_tbl[value], obj_flags_size_tbl[value], &value);
@@ -6059,22 +6059,22 @@ void magictech_build_effect_info(MagicTechInfo* info, char* str)
             tig_str_match_str_to_list(&str, off_5B0C90, 2, &(component_info->data.obj_flag.state));
             if (component_info->data.obj_flag.flags_fld == OBJ_F_SPELL_FLAGS
                 && component_info->data.obj_flag.state) {
-                info->field_114 |= component_info->data.obj_flag.value;
+                info->applied_spell_flags |= component_info->data.obj_flag.value;
             }
             break;
-        case MTC_RECHARGE:
+        case MAGICTECH_COMPONENT_RECHARGE:
             tig_str_parse_value(&str, &(component_info->data.recharge.num));
             if (!tig_str_parse_named_value(&str, "Max:", &(component_info->data.recharge.max))) {
                 component_info->data.recharge.max = 9999;
             }
             break;
-        case MTC_SUMMON:
+        case MAGICTECH_COMPONENT_SUMMON:
             if (!tig_str_parse_named_value(&str, "Proto:", &value)) {
                 tig_debug_printf("magictech_build_effect_info: MTComponentSummon: Error: failed to find proto #!\n");
             }
 
             if (value > 0) {
-                component_info->data.summon.oid = obj_get_id(sub_4685A0(value));
+                component_info->data.summon.oid = obj_get_id(proto_handle_get(value));
             } else {
                 component_info->data.summon.oid.type = OID_TYPE_NULL;
             }
@@ -6097,7 +6097,7 @@ void magictech_build_effect_info(MagicTechInfo* info, char* str)
                 component_info->data.summon.list = -1;
             }
             break;
-        case MTC_TESTNBRANCH:
+        case MAGICTECH_COMPONENT_TEST_AND_BRANCH:
             component_info->data.test_in_branch.field_48 = 0;
             component_info->data.test_in_branch.field_4C = -1;
             tig_str_match_str_to_list(&str, off_5B0CAC, 4, &value);
@@ -6111,7 +6111,7 @@ void magictech_build_effect_info(MagicTechInfo* info, char* str)
                 component_info->data.test_in_branch.field_4C = value;
             }
             break;
-        case MTC_TRAIT:
+        case MAGICTECH_COMPONENT_TRAIT:
             tig_str_match_str_to_list(&str, off_5B0CAC, 4, &value);
             component_info->data.trait.fld = dword_5B0CBC[value];
             component_info->data.trait.field_4 = 0;
@@ -6121,7 +6121,7 @@ void magictech_build_effect_info(MagicTechInfo* info, char* str)
             component_info->data.trait.field_8 = 1;
             tig_str_parse_named_value(&str, "Palette:", &(component_info->data.trait.palette));
             break;
-        case MTC_TRAITIDX:
+        case MAGICTECH_COMPONENT_INDEXED_TRAIT:
             tig_str_match_str_to_list(&str, off_5B0CCC, 2, &value);
             component_info->data.trait_idx.field_44 = dword_5B0CD4[value];
             tig_str_match_str_to_list(&str, off_5B0CDC[value], dword_5B0CE4[value], &value);
@@ -6132,7 +6132,7 @@ void magictech_build_effect_info(MagicTechInfo* info, char* str)
             component_info->data.trait_idx.field_50 = 1;
             component_info->data.trait_idx.field_4C = 1;
             break;
-        case MTC_TRAIT64:
+        case MAGICTECH_COMPONENT_TRAIT_INT64:
             tig_str_match_str_to_list(&str, off_5B0CAC, 4, &value);
             component_info->data.trait64.field_40 = dword_5B0CBC[value];
             tig_str_match_str_to_list(&str, off_5B0CF8, 3, &value);
@@ -6165,7 +6165,7 @@ bool magictech_check_env_sf(unsigned int flags)
 }
 
 // 0x458AE0
-tig_art_id_t sub_458AE0(int mt_id)
+tig_art_id_t magictech_run_spell_icon_get(int mt_id)
 {
     MagicTechRunInfo* run_info;
     tig_art_id_t art_id;
@@ -6188,7 +6188,7 @@ const char* magictech_get_name(int magictech)
 }
 
 // 0x458B70
-tig_art_id_t sub_458B70(int mt_id)
+tig_art_id_t magictech_projectile_art_id_get(int mt_id)
 {
     MagicTechRunInfo* run_info;
     AnimFxListEntry* v2;
@@ -6211,7 +6211,7 @@ tig_art_id_t sub_458B70(int mt_id)
 }
 
 // 0x458C00
-void sub_458C00(int spell, int64_t obj)
+void magictech_projectile_light_and_sound_apply_legacy(int spell, int64_t obj)
 {
     MagicTechRunInfo* run_info;
     AnimFxListEntry* fx_info;
@@ -6230,7 +6230,7 @@ void sub_458C00(int spell, int64_t obj)
 }
 
 // 0x458CA0
-int sub_458CA0(int mt_id)
+int magictech_projectile_speed_get(int mt_id)
 {
     MagicTechRunInfo* run_info;
     AnimFxListEntry* fx_info;
@@ -6336,7 +6336,7 @@ bool magictech_find_next(int64_t obj, int* mt_id_ptr)
 }
 
 // 0x459040
-bool sub_459040(int64_t obj, unsigned int flags, int64_t* parent_obj_ptr)
+bool magictech_spell_flag_caster_find(int64_t obj, unsigned int flags, int64_t* parent_obj_ptr)
 {
     int idx;
     MagicTechObjectNode* node;
@@ -6358,7 +6358,7 @@ bool sub_459040(int64_t obj, unsigned int flags, int64_t* parent_obj_ptr)
     for (idx = 0; idx < 512; idx++) {
         if (magictech_run_info[idx].source_obj.obj != OBJ_HANDLE_NULL) {
             if (magictech_run_info[idx].target_obj.obj == obj
-                && (magictech_run_info[idx].field_138 & flags) == flags) {
+                && (magictech_run_info[idx].applied_spell_flags & flags) == flags) {
                 *parent_obj_ptr = magictech_run_info[idx].parent_obj.obj;
                 return true;
             }
@@ -6366,7 +6366,7 @@ bool sub_459040(int64_t obj, unsigned int flags, int64_t* parent_obj_ptr)
             node = magictech_run_info[idx].summoned_obj;
             while (node != NULL) {
                 if (node->obj == obj
-                    && (magictech_run_info[idx].field_138 & flags) == flags) {
+                    && (magictech_run_info[idx].applied_spell_flags & flags) == flags) {
                     *parent_obj_ptr = magictech_run_info[idx].parent_obj.obj;
                     return true;
                 }
@@ -6376,7 +6376,7 @@ bool sub_459040(int64_t obj, unsigned int flags, int64_t* parent_obj_ptr)
             node = magictech_run_info[idx].objlist;
             while (node != NULL) {
                 if (node->obj == obj
-                    && (magictech_run_info[idx].field_138 & flags) == flags) {
+                    && (magictech_run_info[idx].applied_spell_flags & flags) == flags) {
                     *parent_obj_ptr = magictech_run_info[idx].parent_obj.obj;
                     return true;
                 }
@@ -6390,7 +6390,7 @@ bool sub_459040(int64_t obj, unsigned int flags, int64_t* parent_obj_ptr)
 }
 
 // 0x459170
-bool sub_459170(int64_t obj, unsigned int flags, int* index_ptr)
+bool magictech_spell_flag_instance_find(int64_t obj, unsigned int flags, int* index_ptr)
 {
     int idx;
     MagicTechObjectNode* node;
@@ -6412,7 +6412,7 @@ bool sub_459170(int64_t obj, unsigned int flags, int* index_ptr)
     for (idx = 0; idx < 512; idx++) {
         if ((magictech_run_info[idx].flags & MAGICTECH_RUN_ACTIVE) != 0) {
             if (magictech_run_info[idx].target_obj.obj == obj
-                && (magictech_run_info[idx].field_138 & flags) == flags) {
+                && (magictech_run_info[idx].applied_spell_flags & flags) == flags) {
                 *index_ptr = idx;
                 return true;
             }
@@ -6420,7 +6420,7 @@ bool sub_459170(int64_t obj, unsigned int flags, int* index_ptr)
             node = magictech_run_info[idx].summoned_obj;
             while (node != NULL) {
                 if (node->obj == obj
-                    && (magictech_run_info[idx].field_138 & flags) == flags) {
+                    && (magictech_run_info[idx].applied_spell_flags & flags) == flags) {
                     *index_ptr = idx;
                     return true;
                 }
@@ -6430,7 +6430,7 @@ bool sub_459170(int64_t obj, unsigned int flags, int* index_ptr)
             node = magictech_run_info[idx].objlist;
             while (node != NULL) {
                 if (node->obj == obj
-                    && (magictech_run_info[idx].field_138 & flags) == flags) {
+                    && (magictech_run_info[idx].applied_spell_flags & flags) == flags) {
                     *index_ptr = idx;
                     return true;
                 }
@@ -6444,7 +6444,7 @@ bool sub_459170(int64_t obj, unsigned int flags, int* index_ptr)
 }
 
 // 0x459290
-bool sub_459290(int64_t obj, int spell, int* index_ptr)
+bool magictech_spell_instance_on_target_find(int64_t obj, int spell, int* index_ptr)
 {
     int idx;
     MagicTechObjectNode* node;
@@ -6514,7 +6514,7 @@ bool magictech_stop_spell(int64_t obj, int magictech)
 {
     int mt_id;
 
-    if (!sub_459290(obj, magictech, &mt_id)) {
+    if (!magictech_spell_instance_on_target_find(obj, magictech, &mt_id)) {
         return false;
     }
 
@@ -6530,14 +6530,14 @@ bool magictech_timeevent_process(TimeEvent* timeevent)
 
     switch (timeevent->params[2].integer_value) {
     case 1:
-        sub_459490(timeevent->params[0].integer_value);
+        magictech_maintenance_action_process(timeevent->params[0].integer_value);
         break;
     case 2:
         magictech_interrupt(timeevent->params[0].integer_value);
         break;
     case 3:
         if (magictech_id_to_run_info(timeevent->params[0].integer_value, &run_info)) {
-            sub_451070(run_info);
+            magictech_run_process(run_info);
         }
         break;
     }
@@ -6546,7 +6546,7 @@ bool magictech_timeevent_process(TimeEvent* timeevent)
 }
 
 // 0x459490
-void sub_459490(int mt_id)
+void magictech_maintenance_action_process(int mt_id)
 {
     MagicTechRunInfo* run_info;
 
@@ -6554,19 +6554,19 @@ void sub_459490(int mt_id)
         if (run_info->action == MAGICTECH_ACTION_BEGIN) {
             run_info->action = MAGICTECH_ACTION_MAINTAIN;
         }
-        sub_451070(run_info);
+        magictech_run_process(run_info);
     }
 }
 
 // 0x4594D0
-bool sub_4594D0(TimeEvent* timeevent)
+bool magictech_timeevent_matches_selected_action(TimeEvent* timeevent)
 {
     return timeevent->params[0].integer_value == dword_5B0F20
         && timeevent->params[2].integer_value == dword_5E7634;
 }
 
 // 0x459500
-bool sub_459500(int index)
+bool magictech_run_timeevent_restart(int index)
 {
     MagicTechRunInfo* run_info;
     TimeEvent timeevent;
@@ -6579,12 +6579,12 @@ bool sub_459500(int index)
 
     dword_5B0F20 = index;
     dword_5E7634 = 1;
-    timeevent_clear_one_ex(TIMEEVENT_TYPE_MAGICTECH, sub_4594D0);
+    timeevent_clear_one_ex(TIMEEVENT_TYPE_MAGICTECH, magictech_timeevent_matches_selected_action);
 
     timeevent.type = TIMEEVENT_TYPE_MAGICTECH;
     timeevent.params[0].integer_value = run_info->id;
     timeevent.params[2].integer_value = 1;
-    return timeevent_add_base(&timeevent, &(run_info->field_148));
+    return timeevent_add_base(&timeevent, &(run_info->event_time));
 }
 
 // 0x459590
@@ -6595,7 +6595,7 @@ bool magictech_recharge_timeevent_schedule(int64_t item_obj, int mana_cost, bool
 
     magictech_recharge_timeevent_mana_cost = mana_cost;
     magictech_recharge_timeevent_item_obj = item_obj;
-    dword_5E760C = sub_45A7F0();
+    dword_5E760C = game_time_seconds_get();
 
     if (add) {
         if (timeevent_any(TIMEEVENT_TYPE_RECHARGE_MAGIC_ITEM, magictech_recharge_timeevent_add)) {
@@ -6607,7 +6607,7 @@ bool magictech_recharge_timeevent_schedule(int64_t item_obj, int mana_cost, bool
     timeevent.params[0].object_value = item_obj;
     timeevent.params[1].integer_value = dword_5E760C;
     timeevent.params[2].integer_value = magictech_recharge_timeevent_mana_cost;
-    sub_45A950(&datetime, 60000);
+    datetime_init(&datetime, 60000);
     datetime.milliseconds *= 8;
     return timeevent_add_delay(&timeevent, &datetime);
 }
@@ -6644,7 +6644,7 @@ bool magictech_recharge_timeevent_process(TimeEvent* timeevent)
         return false;
     }
 
-    v3 = sub_45A820(v1) / 120;
+    v3 = game_time_seconds_elapsed_since(v1) / 120;
     if (v3 < 1) {
         v3 = 1;
     }
@@ -6660,7 +6660,7 @@ bool magictech_recharge_timeevent_process(TimeEvent* timeevent)
 
     parent_obj = obj_field_handle_get(obj, OBJ_F_ITEM_PARENT);
     if (parent_obj != OBJ_HANDLE_NULL && player_is_local_pc_obj(parent_obj)) {
-        sub_4605D0();
+        ui_counters_refresh();
     }
 
     if (diff > 0) {
@@ -6671,7 +6671,7 @@ bool magictech_recharge_timeevent_process(TimeEvent* timeevent)
 }
 
 // 0x459740
-void sub_459740(int64_t obj)
+void magictech_object_removal_notify(int64_t obj)
 {
     int idx;
     MagicTechObjectNode* node;
@@ -6690,7 +6690,7 @@ void sub_459740(int64_t obj)
 
     if ((obj_field_int32_get(obj, OBJ_F_SPELL_FLAGS) & OSF_SUMMONED) != 0) {
         if (!map_is_clearing_objects()) {
-            sub_463860(obj, true);
+            item_inventory_drop_or_destroy_summoned(obj, true);
         }
 
         for (idx = 0; idx < 512; idx++) {
@@ -6715,7 +6715,7 @@ void sub_459740(int64_t obj)
                 magictech_interrupt_delayed(magictech_run_info[idx].id);
             } else if (magictech_run_info[idx].source_obj.obj != OBJ_HANDLE_NULL
                 && magictech_run_info[idx].source_obj.obj == obj) {
-                sub_457530(magictech_run_info[idx].id);
+                magictech_source_detach(magictech_run_info[idx].id);
             }
         }
     }
@@ -6730,7 +6730,7 @@ void sub_459740(int64_t obj)
 }
 
 // 0x4598D0
-void sub_4598D0(int64_t obj)
+void magictech_object_spells_end(int64_t obj)
 {
     int idx;
     MagicTechObjectNode* node;
@@ -6744,7 +6744,7 @@ void sub_4598D0(int64_t obj)
     }
 
     if ((obj_field_int32_get(obj, OBJ_F_SPELL_FLAGS) & OSF_SUMMONED) != 0) {
-        sub_463730(obj, true);
+        item_inventory_drop_all(obj, true);
 
         for (idx = 0; idx < 512; idx++) {
             if ((magictech_run_info[idx].flags & MAGICTECH_RUN_ACTIVE) != 0
@@ -6752,7 +6752,7 @@ void sub_4598D0(int64_t obj)
                 node = magictech_run_info[idx].summoned_obj;
                 while (node != NULL) {
                     if (node->obj == obj) {
-                        sub_457270(magictech_run_info[idx].id);
+                        magictech_run_end_immediate(magictech_run_info[idx].id);
                         break;
                     }
                     node = node->next;
@@ -6764,7 +6764,7 @@ void sub_4598D0(int64_t obj)
     for (idx = 0; idx < 512; idx++) {
         if (idx != magictech_cur_id) {
             if (magictech_run_info[idx].parent_obj.obj == obj) {
-                sub_457270(magictech_run_info[idx].id);
+                magictech_run_end_immediate(magictech_run_info[idx].id);
             }
         }
     }
@@ -6773,13 +6773,13 @@ void sub_4598D0(int64_t obj)
         if ((magictech_run_info[idx].flags & MAGICTECH_RUN_ACTIVE) != 0
             && idx != magictech_cur_id
             && magictech_run_info[idx].target_obj.obj == obj) {
-            sub_457270(magictech_run_info[idx].id);
+            magictech_run_end_immediate(magictech_run_info[idx].id);
         }
     }
 }
 
 // 0x459A20
-void sub_459A20(int64_t obj)
+void magictech_object_callback_stub(int64_t obj)
 {
 }
 
@@ -6793,8 +6793,8 @@ void magictech_anim_play_hit_fx(int64_t obj, CombatContext* combat)
     spell_flags = obj_field_int32_get(obj, OBJ_F_SPELL_FLAGS);
 
     if ((spell_flags & OSF_SHIELDED) != 0) {
-        if (sub_459170(obj, OSF_SHIELDED, &magictech)) {
-            sub_4CCD20(&spell_eye_candies,
+        if (magictech_spell_flag_instance_find(obj, OSF_SHIELDED, &magictech)) {
+            animfx_node_init(&spell_eye_candies,
                 &node,
                 obj,
                 magictech_run_info[magictech].id,
@@ -6807,8 +6807,8 @@ void magictech_anim_play_hit_fx(int64_t obj, CombatContext* combat)
     }
 
     if ((spell_flags & OSF_MAGNETIC_INVERSION) != 0) {
-        if (sub_459170(obj, OSF_MAGNETIC_INVERSION, &magictech)) {
-            sub_4CCD20(&spell_eye_candies,
+        if (magictech_spell_flag_instance_find(obj, OSF_MAGNETIC_INVERSION, &magictech)) {
+            animfx_node_init(&spell_eye_candies,
                 &node,
                 obj,
                 magictech_run_info[magictech].id,
@@ -6817,30 +6817,30 @@ void magictech_anim_play_hit_fx(int64_t obj, CombatContext* combat)
             animfx_add(&node);
         } else {
             tig_debug_printf("MagicTech: magictech_anim_play_hit_fx: Failed to match spell from flags!\n");
-            sub_4CCD20(&spell_eye_candies, &node, obj, -1, 1097);
+            animfx_node_init(&spell_eye_candies, &node, obj, -1, 1097);
             node.animate = true;
             animfx_add(&node);
         }
     }
 
     if ((spell_flags & OSF_ENTANGLED) != 0) {
-        if (sub_459170(obj, OSF_ENTANGLED, &magictech)) {
-            if (!sub_459C10(obj, magictech)) {
-                sub_45A520(combat->attacker_obj, obj);
+        if (magictech_spell_flag_instance_find(obj, OSF_ENTANGLED, &magictech)) {
+            if (!magictech_target_resistance_check(obj, magictech)) {
+                magictech_resurrection_fx_notify(combat->attacker_obj, obj);
                 magictech_interrupt_delayed(magictech);
             }
         }
     }
 
-    if (sub_49B290(obj) == BP_KERGHAN_3 && !combat->total_dam) {
-        sub_4CCD20(&spell_eye_candies, &node, obj, -1, 1259);
+    if (proto_number_from_instance(obj) == BP_KERGHAN_3 && !combat->total_dam) {
+        animfx_node_init(&spell_eye_candies, &node, obj, -1, 1259);
         node.animate = true;
         animfx_add(&node);
     }
 }
 
 // 0x459C10
-bool sub_459C10(int64_t obj, int mt_id)
+bool magictech_target_resistance_check(int64_t obj, int mt_id)
 {
     MagicTechRunInfo* run_info;
     MagicTechInfo* info;
@@ -6905,7 +6905,7 @@ bool sub_459C10(int64_t obj, int mt_id)
             && stat_is_extraordinary(obj, STAT_WILLPOWER)) {
             if ((magictech_cur_spell_info->flags & MAGICTECH_AGGRESSIVE) != 0
                 && run_info->action != MAGICTECH_ACTION_END) {
-                sub_453F20(magictech_cur_run_info->parent_obj.obj, obj);
+                magictech_aggressive_target_notify_once(magictech_cur_run_info->parent_obj.obj, obj);
             }
             return false;
         } else {
@@ -6918,7 +6918,7 @@ bool sub_459C10(int64_t obj, int mt_id)
 }
 
 // 0x459EA0
-void sub_459EA0(int64_t obj)
+void magictech_tempus_fugit_and_familiar_flags_clear(int64_t obj)
 {
     unsigned int flags;
     int64_t leader_obj;
@@ -6942,7 +6942,7 @@ void sub_459EA0(int64_t obj)
 }
 
 // 0x459F20
-bool sub_459F20(int magictech, uint64_t** a2)
+bool magictech_target_flags_pointer_get(int magictech, uint64_t** a2)
 {
     // TODO: Unclear.
     *a2 = &(magictech_spells[magictech].target_params[0].tgt);
@@ -6950,7 +6950,7 @@ bool sub_459F20(int magictech, uint64_t** a2)
 }
 
 // 0x459F50
-void sub_459F50(void)
+void magictech_ai_reset(void)
 {
     mt_ai_reset();
 }
@@ -6974,7 +6974,7 @@ bool magictech_is_tech(int magictech)
 }
 
 // 0x459FF0
-bool sub_459FF0(int mt_id)
+bool magictech_run_has_valid_spell(int mt_id)
 {
     MagicTechRunInfo* run_info;
 
@@ -6986,7 +6986,7 @@ bool sub_459FF0(int mt_id)
 }
 
 // 0x45A030
-bool sub_45A030(int magictech)
+bool magictech_has_item_triggers(int magictech)
 {
     return magictech_spells[magictech].item_triggers != 0;
 }
@@ -7007,7 +7007,7 @@ int magictech_get_aptitude_adj(int64_t sector_id)
 }
 
 // 0x45A480
-void sub_45A480(MagicTechRunInfo* run_info)
+void magictech_run_info_free(MagicTechRunInfo* run_info)
 {
     MagicTechObjectNode* node;
 
@@ -7027,13 +7027,13 @@ void sub_45A480(MagicTechRunInfo* run_info)
 }
 
 // 0x45A4F0
-void sub_45A4F0(int64_t obj, int fx_id, int mt_id)
+void magictech_eye_candy_remove(int64_t obj, int fx_id, int mt_id)
 {
     animfx_remove(&spell_eye_candies, obj, fx_id, mt_id);
 }
 
 // 0x45A520
-void sub_45A520(int64_t a1, int64_t a2)
+void magictech_resurrection_fx_notify(int64_t a1, int64_t a2)
 {
     (void)a1;
 
@@ -7053,7 +7053,7 @@ void magictech_error_unressurectable(int64_t obj)
 }
 
 // 0x45A580
-bool sub_45A580(int64_t a1, int64_t a2)
+bool magictech_invisible_target_can_be_seen(int64_t a1, int64_t a2)
 {
     if ((obj_field_int32_get(a2, OBJ_F_SPELL_FLAGS) & OSF_INVISIBLE) == 0
         || (obj_field_int32_get(a1, OBJ_F_SPELL_FLAGS) & OSF_DETECTING_INVISIBLE) != 0) {
@@ -7101,17 +7101,17 @@ void magictech_debug_lists(void)
                 magictech_spell_name(run_info->spell),
                 run_info->spell);
             tig_debug_printf("\tAction: %s\n", off_5B0C0C[run_info->action]);
-            sub_45A760(run_info->parent_obj.obj, "Parent");
-            sub_45A760(run_info->source_obj.obj, "Source");
-            sub_45A760(run_info->target_obj.obj, "Target");
+            magictech_debug_object_print(run_info->parent_obj.obj, "Parent");
+            magictech_debug_object_print(run_info->source_obj.obj, "Source");
+            magictech_debug_object_print(run_info->target_obj.obj, "Target");
             node = run_info->summoned_obj;
             while (node != NULL) {
-                sub_45A760(node->obj, "SummonedObj");
+                magictech_debug_object_print(node->obj, "SummonedObj");
                 node = node->next;
             }
             node = run_info->objlist;
             while (node != NULL) {
-                sub_45A760(node->obj, "ObjList");
+                magictech_debug_object_print(node->obj, "ObjList");
                 node = node->next;
             }
             tig_debug_printf("\n");
@@ -7119,12 +7119,12 @@ void magictech_debug_lists(void)
     }
 
     tig_debug_printf("Local PC Has %d Maintained Spells\n",
-        sub_450AC0(player_get_local_pc_obj()));
+        magictech_maintained_spell_count_stub(player_get_local_pc_obj()));
     tig_debug_printf("\n\n");
 }
 
 // 0x45A760
-void sub_45A760(int64_t obj, const char* msg)
+void magictech_debug_object_print(int64_t obj, const char* msg)
 {
     // 0x5E6D94
     static char buffer[2000];

@@ -106,7 +106,7 @@ typedef struct Packet9 {
     /* 000C */ int field_C;
     /* 0010 */ int field_10;
     /* 0014 */ int field_14;
-    /* 0018 */ FollowerInfo field_18;
+    /* 0018 */ ObjectHandleReference field_18;
     /* 0048 */ int field_48;
     /* 004C */ int field_4C;
     /* 0050 */ int64_t loc;
@@ -262,7 +262,7 @@ static_assert(sizeof(Packet67) == 0x08, "wrong size");
 typedef struct PacketNotifyPlayerLagging {
     /* 0000 */ int type;
     /* 0004 */ int padding_4;
-    /* 0008 */ FollowerInfo field_8;
+    /* 0008 */ ObjectHandleReference field_8;
 } PacketNotifyPlayerLagging;
 
 static_assert(sizeof(PacketNotifyPlayerLagging) == 0x38, "wrong size");
@@ -270,7 +270,7 @@ static_assert(sizeof(PacketNotifyPlayerLagging) == 0x38, "wrong size");
 typedef struct PacketNotifyPlayerRecovered {
     /* 0000 */ int type;
     /* 0004 */ int padding_4;
-    /* 0008 */ FollowerInfo field_8;
+    /* 0008 */ ObjectHandleReference field_8;
 } PacketNotifyPlayerRecovered;
 
 // Serializeable.
@@ -400,7 +400,7 @@ typedef struct Packet80 {
     /* 003C */ int field_3C;
 } Packet80;
 
-typedef struct Packet81 {
+typedef struct InventoryTransactionPacket {
     /* 0000 */ int type;
     /* 0004 */ int field_4;
     /* 0008 */ int field_8;
@@ -417,10 +417,10 @@ typedef struct Packet81 {
     /* 0070 */ ObjectID field_70;
     /* 0088 */ ObjectID field_88;
     /* 00A0 */ ObjectID field_A0;
-} Packet81;
+} InventoryTransactionPacket;
 
 // Serializeable.
-static_assert(sizeof(Packet81) == 0xB8, "wrong size");
+static_assert(sizeof(InventoryTransactionPacket) == 0xB8, "wrong size");
 
 typedef struct Packet82 {
     /* 0000 */ int type;
@@ -506,18 +506,18 @@ typedef struct PacketMultiplayerFlagsChange {
 // Serializeable.
 static_assert(sizeof(PacketMultiplayerFlagsChange) == 0xC, "wrong size");
 
-// typedef struct Packet100 {
+// typedef struct UiRequestPacket {
 //     /* 0000 */ int type;
 //     /* 0004 */ int subtype;
 //     /* 0008 */ ObjectID field_8;
 //     /* 0020 */ ObjectID field_20;
 //     /* 0038 */ int field_38;
 //     /* 003C */ int field_3C;
-// } Packet100;
+// } UiRequestPacket;
 
-// static_assert(sizeof(Packet100) == 0x40, "wrong size");
+// static_assert(sizeof(UiRequestPacket) == 0x40, "wrong size");
 
-typedef struct Packet99 {
+typedef struct ObjectMovePacket {
     /* 0000 */ int type;
     /* 0004 */ int padding_4;
     /* 0008 */ ObjectID oid;
@@ -526,12 +526,12 @@ typedef struct Packet99 {
     /* 002C */ int dy;
     /* 0030 */ int field_30;
     /* 0034 */ int padding_34;
-} Packet99;
+} ObjectMovePacket;
 
 // Serializeable.
-static_assert(sizeof(Packet99) == 0x38, "wrong size");
+static_assert(sizeof(ObjectMovePacket) == 0x38, "wrong size");
 
-typedef struct Packet100 {
+typedef struct UiRequestPacket {
     /* 0000 */ int type;
     /* 0004 */ int subtype;
     union {
@@ -562,10 +562,10 @@ typedef struct Packet100 {
             /* 003C */ int field_3C;
         } z;
     } d;
-} Packet100;
+} UiRequestPacket;
 
 // Serializeable.
-static_assert(sizeof(Packet100) == 0x40, "wrong size");
+static_assert(sizeof(UiRequestPacket) == 0x40, "wrong size");
 
 typedef struct Packet104 {
     /* 0000 */ int type;
@@ -595,46 +595,46 @@ typedef struct PacketPlaySound {
 // Serializeable.
 static_assert(sizeof(PacketPlaySound) == 0x28, "wrong size");
 
-typedef struct Packet118 {
+typedef struct ObjectPullPacket {
     /* 0000 */ int type;
     /* 0004 */ int padding_4;
     /* 0008 */ ObjectID field_8;
     /* 0020 */ ObjectID field_20;
-} Packet118;
+} ObjectPullPacket;
 
 // Serializeable.
-static_assert(sizeof(Packet118) == 0x38, "wrong size");
+static_assert(sizeof(ObjectPullPacket) == 0x38, "wrong size");
 
-typedef struct Packet121 {
+typedef struct InventoryDestroyPacket {
     /* 0000 */ int type;
     /* 0004 */ int field_4;
     /* 0008 */ ObjectID oid;
     /* 0020 */ int field_20;
     /* 0024 */ int padding_24;
-} Packet121;
+} InventoryDestroyPacket;
 
 // Serializeable.
-static_assert(sizeof(Packet121) == 0x28, "wrong size");
+static_assert(sizeof(InventoryDestroyPacket) == 0x28, "wrong size");
 
-typedef struct Packet122 {
+typedef struct InventorySpawnPacket {
     /* 0000 */ int type;
     /* 0004 */ int field_4;
     /* 0008 */ ObjectID oid;
-} Packet122;
+} InventorySpawnPacket;
 
 // Serializeable.
-static_assert(sizeof(Packet122) == 0x20, "wrong size");
+static_assert(sizeof(InventorySpawnPacket) == 0x20, "wrong size");
 
-typedef struct Packet123 {
+typedef struct PlayerRulePacket {
     /* 0000 */ int type;
     /* 0004 */ int total_size;
     /* 0008 */ int player;
     /* 000C */ int rule_length;
     /* 0010 */ int name_length;
-} Packet123;
+} PlayerRulePacket;
 
 // Serializeable.
-static_assert(sizeof(Packet123) == 0x14, "wrong size");
+static_assert(sizeof(PlayerRulePacket) == 0x14, "wrong size");
 
 typedef struct PacketPerformIdentifyService {
     /* 0000 */ int type;
@@ -672,27 +672,27 @@ typedef struct Packet128 {
 // Serializeable.
 static_assert(sizeof(Packet128) == 0x38, "wrong size");
 
-bool sub_4ED6C0(int64_t obj);
+bool mp_junk_pile_cleanup_request(int64_t obj);
 bool mp_object_create(int name, int64_t loc, int64_t* obj_ptr);
-void sub_4EDA60(UiMessage* ui_message, int player, int a3);
-void sub_4EDCE0(int64_t obj, tig_art_id_t art_id);
+void mp_ui_message_send(UiMessage* ui_message, int player, int a3);
+void mp_object_current_art_set(int64_t obj, tig_art_id_t art_id);
 void mp_ui_update_inven(int64_t obj);
-void sub_4EDF20(int64_t obj, int64_t location, int dx, int dy, bool a7);
+void mp_object_move_to_location(int64_t obj, int64_t location, int dx, int dy, bool a7);
 void mp_item_activate(int64_t owner_obj, int64_t item_obj);
 void mp_ui_written_start_type(int64_t obj, WrittenType written_type, int num);
 void mp_ui_show_inven_loot(int64_t obj, int64_t a2);
-void sub_4EE3A0(int64_t obj, int64_t a2);
+void mp_ui_object_examine_request(int64_t obj, int64_t a2);
 void mp_ui_show_inven_identify(int64_t pc_obj, int64_t target_obj);
-void sub_4EE4C0(int64_t obj, int64_t a2);
-void sub_4EF830(int64_t a1, int64_t a2);
-void sub_4EFAE0(int64_t obj, int a2);
-void sub_4EFBA0(int64_t obj);
-void sub_4EFC30(int64_t pc_obj, const char* name, const char* rule);
+void mp_ui_character_sheet_request(int64_t obj, int64_t a2);
+void mp_object_pull_request(int64_t a1, int64_t a2);
+void mp_inventory_destroy_request(int64_t obj, int a2);
+void mp_inventory_source_spawn_request(int64_t obj);
+void mp_player_rule_packet_send(int64_t pc_obj, const char* name, const char* rule);
 void mp_gsound_play_sfx(int sound_id);
-void sub_4EED00(int64_t obj, int sound_id);
+void mp_player_sound_play(int64_t obj, int sound_id);
 void mp_gsound_play_sfx_on_obj(int sound_id, int loops, int64_t obj);
 void mp_gsound_play_scheme(int music_scheme_idx, int ambient_scheme_idx);
-void sub_4F0640(int64_t obj, ObjectID* oid_ptr);
-void sub_4F0690(ObjectID oid, int64_t* obj_ptr);
+void mp_object_id_get_nullable(int64_t obj, ObjectID* oid_ptr);
+void mp_object_id_resolve_nullable(ObjectID oid, int64_t* obj_ptr);
 
 #endif /* ARCANUM_GAME_MP_UTILS_H_ */

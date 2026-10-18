@@ -20,17 +20,17 @@ typedef struct StraightPathState {
     /* 0020 */ int8_t* rotations;
 } StraightPathState;
 
-static int sub_41F6C0(PathCreateInfo* path_create_info);
-static int sub_41F840(PathCreateInfo* path_create_info);
-static int sub_41F9F0(PathCreateInfo* path_create_info);
+static int path_try_nearby_destination(PathCreateInfo* path_create_info);
+static int path_make_direct_local(PathCreateInfo* path_create_info);
+static int path_make_local_astar(PathCreateInfo* path_create_info);
 static int path_dist(int src, int dst, int width);
-static int sub_420110(int a1, int a2, int a3);
-static void sub_420330(int64_t x, int64_t y, StraightPathState* a5);
-static void sub_4203B0(int64_t from_x, int64_t from_y, int64_t to_x, int64_t to_y, StraightPathState* a5, void (*fn)(int64_t, int64_t, StraightPathState*));
-static int sub_420660(int64_t from, int64_t to, int8_t* rotations);
-static int sub_420900(WmapPathInfo* path_info);
-static int sub_4209C0(WmapPathInfo* path_info);
-static int sub_420E30(PathCreateInfo* path_create_info, tig_duration_t ms);
+static int path_grid_direction_between_indices(int a1, int a2, int a3);
+static void path_straight_sample_offset(int64_t x, int64_t y, StraightPathState* a5);
+static void path_line_points_enumerate(int64_t from_x, int64_t from_y, int64_t to_x, int64_t to_y, StraightPathState* a5, void (*fn)(int64_t, int64_t, StraightPathState*));
+static int path_make_straight_offsets(int64_t from, int64_t to, int8_t* rotations);
+static int path_worldmap_destination_adjust(WmapPathInfo* path_info);
+static int path_worldmap_astar(WmapPathInfo* path_info);
+static int path_make_long_range_fallback(PathCreateInfo* path_create_info, tig_duration_t ms);
 
 // 0x5A15C0
 static int path_limit = 10;
@@ -66,6 +66,13 @@ static tig_duration_t dword_5DE600;
 // 0x41F3C0
 static int path_make_impl(PathCreateInfo* path_create_info);
 
+static bool path_destination_blocks(int64_t obj, void* context)
+{
+    (void)context;
+    return (obj_field_int32_get(obj, OBJ_F_FLAGS) & OF_NO_BLOCK) == 0
+        && (!obj_type_is_critter(obj_field_int32_get(obj, OBJ_F_TYPE)) || !critter_is_dead(obj));
+}
+
 int path_make(PathCreateInfo* path_create_info)
 {
     Uint64 start = tig_performance_begin();
@@ -78,8 +85,8 @@ static int path_make_impl(PathCreateInfo* path_create_info)
 {
     bool v1 = false;
 
-    if ((path_create_info->flags & PATH_FLAG_0x0800) != 0) {
-        return sub_41F6C0(path_create_info);
+    if ((path_create_info->flags & PATH_FLAG_NEARBY_DESTINATION_SEARCH) != 0) {
+        return path_try_nearby_destination(path_create_info);
     }
 
     path_create_info->field_24 = 0;
@@ -92,55 +99,40 @@ static int path_make_impl(PathCreateInfo* path_create_info)
         v1 = true;
     }
 
-    if ((path_create_info->flags & PATH_FLAG_0x0080) != 0) {
-        return sub_420660(path_create_info->from, path_create_info->to, path_create_info->rotations);
+    if ((path_create_info->flags & PATH_FLAG_STRAIGHT_PIXEL_OFFSETS) != 0) {
+        return path_make_straight_offsets(path_create_info->from, path_create_info->to, path_create_info->rotations);
     }
 
-    if ((path_create_info->flags & PATH_FLAG_0x0100) != 0) {
+    if ((path_create_info->flags & PATH_FLAG_STRAIGHT_TILE_STEPS) != 0) {
         return path_make_straight(path_create_info->from, path_create_info->to, path_create_info->rotations);
     }
 
-    if ((path_create_info->flags & (PATH_FLAG_0x0040 | PATH_FLAG_0x0001)) == 0) {
-        ObjectList objects;
-        ObjectNode* node;
-
+    if ((path_create_info->flags & (PATH_FLAG_IGNORE_BLOCKERS | PATH_FLAG_STOP_BEFORE_DESTINATION)) == 0) {
         if ((path_create_info->flags & PATH_FLAG_0x0008) == 0
             && tile_is_blocking(path_create_info->to, v1)) {
             return 0;
         }
 
-        object_list_location(path_create_info->to, OBJ_TM_CRITTER | OBJ_TM_SCENERY | OBJ_TM_CONTAINER, &objects);
-        node = objects.head;
-        while (node != NULL) {
-            if ((obj_field_int32_get(node->obj, OBJ_F_FLAGS) & OF_NO_BLOCK) == 0) {
-                if (!obj_type_is_critter(obj_field_int32_get(node->obj, OBJ_F_TYPE))
-                    || !critter_is_dead(node->obj)) {
-                    break;
-                }
-            }
-            node = node->next;
-        }
-        object_list_destroy(&objects);
-
-        if (node != NULL) {
+        if (object_find_first_at_location(path_create_info->to,
+                OBJ_TM_CRITTER | OBJ_TM_SCENERY | OBJ_TM_CONTAINER, path_destination_blocks, NULL) != OBJ_HANDLE_NULL) {
             return false;
         }
     }
 
     int v2 = 0;
-    if ((path_create_info->flags & PATH_FLAG_0x0200) == 0) {
-        v2 = sub_41F840(path_create_info);
+    if ((path_create_info->flags & PATH_FLAG_AVOID_SPOTTED_TRAPS) == 0) {
+        v2 = path_make_direct_local(path_create_info);
     }
 
     if (v2 == 0) {
-        if ((path_create_info->flags & PATH_FLAG_0x1000) != 0) {
-            v2 = sub_420E30(path_create_info, 300);
+        if ((path_create_info->flags & PATH_FLAG_LONG_RANGE_FALLBACK) != 0) {
+            v2 = path_make_long_range_fallback(path_create_info, 300);
         } else {
-            if ((path_create_info->flags & PATH_FLAG_0x0020) != 0) {
+            if ((path_create_info->flags & PATH_FLAG_DIRECT_ONLY) != 0) {
                 return 0;
             }
 
-            v2 = sub_41F9F0(path_create_info);
+            v2 = path_make_local_astar(path_create_info);
         }
     }
 
@@ -156,15 +148,15 @@ unsigned int path_translate_flags(PathFlags flags)
 {
     unsigned int new_flags = 0;
 
-    if ((flags & PATH_FLAG_0x0002) != 0) {
+    if ((flags & PATH_FLAG_PORTALS_BLOCK) != 0) {
         new_flags |= OBJ_TRAVERSAL_PORTAL_BLOCKS;
     }
 
-    if ((flags & PATH_FLAG_0x0004) != 0) {
+    if ((flags & PATH_FLAG_WINDOWS_BLOCK) != 0) {
         new_flags |= OBJ_TRAVERSAL_WINDOW_BLOCKS;
     }
 
-    if ((flags & PATH_FLAG_0x0010) != 0) {
+    if ((flags & PATH_FLAG_IGNORE_CRITTERS) != 0) {
         new_flags |= OBJ_TRAVERSAL_IGNORE_CRITTERS;
     }
 
@@ -172,7 +164,7 @@ unsigned int path_translate_flags(PathFlags flags)
 }
 
 // 0x41F6C0
-int sub_41F6C0(PathCreateInfo* path_create_info)
+int path_try_nearby_destination(PathCreateInfo* path_create_info)
 {
     int64_t dist;
     int rotations[8];
@@ -192,7 +184,7 @@ int sub_41F6C0(PathCreateInfo* path_create_info)
     rotations[6] = 1;
     rotations[7] = 0;
 
-    path_create_info->flags &= ~PATH_FLAG_0x0800;
+    path_create_info->flags &= ~PATH_FLAG_NEARBY_DESTINATION_SEARCH;
 
     dist = location_dist(path_create_info->from, path_create_info->to);
 
@@ -209,7 +201,7 @@ int sub_41F6C0(PathCreateInfo* path_create_info)
             (base_rot + rotations[idx]) % 8,
             range,
             &(path_create_info->to));
-        v1 = sub_41F840(path_create_info);
+        v1 = path_make_direct_local(path_create_info);
         if (v1 != 0) {
             break;
         }
@@ -220,18 +212,18 @@ int sub_41F6C0(PathCreateInfo* path_create_info)
         }
     }
 
-    path_create_info->flags |= PATH_FLAG_0x0800;
+    path_create_info->flags |= PATH_FLAG_NEARBY_DESTINATION_SEARCH;
 
     if (v1 == 0 && v2 > 0) {
         path_create_info->to = loc;
-        v1 = sub_41F840(path_create_info);
+        v1 = path_make_direct_local(path_create_info);
     }
 
     return v1;
 }
 
 // 0x41F840
-int sub_41F840(PathCreateInfo* path_create_info)
+int path_make_direct_local(PathCreateInfo* path_create_info)
 {
     bool v1 = false;
     unsigned int flags;
@@ -262,9 +254,9 @@ int sub_41F840(PathCreateInfo* path_create_info)
         path_create_info->rotations[idx] = (int8_t)rot;
         location_in_dir(loc, rot, &adjacent_loc);
 
-        if ((path_create_info->flags & PATH_FLAG_0x0040) == 0) {
+        if ((path_create_info->flags & PATH_FLAG_IGNORE_BLOCKERS) == 0) {
             if (adjacent_loc != path_create_info->to
-                || (path_create_info->flags & PATH_FLAG_0x0001) == 0) {
+                || (path_create_info->flags & PATH_FLAG_STOP_BEFORE_DESTINATION) == 0) {
                 if ((path_create_info->flags & PATH_FLAG_0x0008) == 0
                     && tile_is_blocking(adjacent_loc, v1)) {
                     break;
@@ -284,7 +276,7 @@ int sub_41F840(PathCreateInfo* path_create_info)
                     break;
                 }
 
-                if ((path_create_info->flags & PATH_FLAG_0x0400) != 0
+                if ((path_create_info->flags & PATH_FLAG_AVOID_FIRE) != 0
                     && get_fire_at_location(adjacent_loc) != OBJ_HANDLE_NULL) {
                     break;
                 }
@@ -299,7 +291,7 @@ int sub_41F840(PathCreateInfo* path_create_info)
         return 0;
     }
 
-    if ((path_create_info->flags & PATH_FLAG_0x0001) != 0) {
+    if ((path_create_info->flags & PATH_FLAG_STOP_BEFORE_DESTINATION) != 0) {
         idx--;
     }
 
@@ -307,7 +299,7 @@ int sub_41F840(PathCreateInfo* path_create_info)
 }
 
 // 0x41F9F0
-int sub_41F9F0(PathCreateInfo* path_create_info)
+int path_make_local_astar(PathCreateInfo* path_create_info)
 {
     tig_timestamp_t timestamp;
     bool v1 = false;
@@ -438,9 +430,9 @@ int sub_41F9F0(PathCreateInfo* path_create_info)
             }
 
             bool is_window = false;
-            if ((path_create_info->flags & PATH_FLAG_0x0040) == 0) {
+            if ((path_create_info->flags & PATH_FLAG_IGNORE_BLOCKERS) == 0) {
                 if (adjacent_loc != path_create_info->to
-                    || (path_create_info->flags & PATH_FLAG_0x0001) == 0) {
+                    || (path_create_info->flags & PATH_FLAG_STOP_BEFORE_DESTINATION) == 0) {
                     if ((path_create_info->flags & PATH_FLAG_0x0008) == 0
                         && tile_is_blocking(adjacent_loc, v1)) {
                         path_cost_tbl[neighbor_index] = -32768;
@@ -480,15 +472,15 @@ int sub_41F9F0(PathCreateInfo* path_create_info)
             }
 
             // Evade fire.
-            if ((path_create_info->flags & PATH_FLAG_0x0400) != 0
+            if ((path_create_info->flags & PATH_FLAG_AVOID_FIRE) != 0
                 && get_fire_at_location(adjacent_loc) != OBJ_HANDLE_NULL) {
                 cost += 80;
             }
 
             // Evade differently lit areas.
-            if ((path_create_info->flags & PATH_FLAG_0x0200) != 0) {
-                uint8_t src_lum = sub_4D9240(loc, 0, 0);
-                uint8_t dst_lum = sub_4D9240(adjacent_loc, 0, 0);
+            if ((path_create_info->flags & PATH_FLAG_AVOID_SPOTTED_TRAPS) != 0) {
+                uint8_t src_lum = light_luminance_at_location(loc, 0, 0);
+                uint8_t dst_lum = light_luminance_at_location(adjacent_loc, 0, 0);
                 if (dst_lum > src_lum) {
                     if (dst_lum - src_lum > 20) {
                         cost += 40;
@@ -505,7 +497,7 @@ int sub_41F9F0(PathCreateInfo* path_create_info)
 
             // Add additional cost in case direction change is needed.
             if (path_backtrack_tbl[current_index] != -1
-                && sub_420110(path_backtrack_tbl[current_index], current_index, 64) != rot) {
+                && path_grid_direction_between_indices(path_backtrack_tbl[current_index], current_index, 64) != rot) {
                 cost++;
             }
 
@@ -550,11 +542,11 @@ int sub_41F9F0(PathCreateInfo* path_create_info)
 
     // Reconstruct the path backwards from dst to src.
     for (int i = step - 1; i >= 0; i--) {
-        path_create_info->rotations[i] = sub_420110(path_backtrack_tbl[target_index], target_index, 64);
+        path_create_info->rotations[i] = path_grid_direction_between_indices(path_backtrack_tbl[target_index], target_index, 64);
         target_index = path_backtrack_tbl[target_index];
     }
 
-    if ((path_create_info->flags & PATH_FLAG_0x0001) != 0) {
+    if ((path_create_info->flags & PATH_FLAG_STOP_BEFORE_DESTINATION) != 0) {
         step--;
     }
 
@@ -570,7 +562,7 @@ int sub_41F9F0(PathCreateInfo* path_create_info)
 #ifdef ARCANUM_PATH_TEST
 int path_test_astar(PathCreateInfo* path_create_info)
 {
-    return sub_41F9F0(path_create_info);
+    return path_make_local_astar(path_create_info);
 }
 #endif
 
@@ -597,7 +589,7 @@ int path_dist(int src, int dst, int width)
 }
 
 // 0x420110
-int sub_420110(int a1, int a2, int a3)
+int path_grid_direction_between_indices(int a1, int a2, int a3)
 {
     int v3;
     int v4;
@@ -657,14 +649,14 @@ int path_make_straight(int64_t from, int64_t to, int8_t* rotations)
     state.last_x = from_x;
     state.last_y = from_y;
 
-    sub_4203B0(from_x, from_y, to_x, to_y, &state, sub_420330);
+    path_line_points_enumerate(from_x, from_y, to_x, to_y, &state, path_straight_sample_offset);
 
     if (state.cnt == -1) {
         return 0;
     }
 
     while (state.sample_counter != 0) {
-        sub_420330(to_x, to_y, &state);
+        path_straight_sample_offset(to_x, to_y, &state);
     }
 
     if (state.cnt == -1) {
@@ -675,7 +667,7 @@ int path_make_straight(int64_t from, int64_t to, int8_t* rotations)
 }
 
 // 0x420330
-void sub_420330(int64_t x, int64_t y, StraightPathState* state)
+void path_straight_sample_offset(int64_t x, int64_t y, StraightPathState* state)
 {
     if (state->cnt == -1 || state->cnt >= 200) {
         state->cnt = -1;
@@ -693,7 +685,7 @@ void sub_420330(int64_t x, int64_t y, StraightPathState* state)
 }
 
 // 0x4203B0
-void sub_4203B0(int64_t from_x, int64_t from_y, int64_t to_x, int64_t to_y, StraightPathState* a5, void (*fn)(int64_t, int64_t, StraightPathState*))
+void path_line_points_enumerate(int64_t from_x, int64_t from_y, int64_t to_x, int64_t to_y, StraightPathState* a5, void (*fn)(int64_t, int64_t, StraightPathState*))
 {
     int64_t dx;
     int64_t dy;
@@ -755,7 +747,7 @@ void sub_4203B0(int64_t from_x, int64_t from_y, int64_t to_x, int64_t to_y, Stra
 }
 
 // 0x420660
-int sub_420660(int64_t from, int64_t to, int8_t* rotations)
+int path_make_straight_offsets(int64_t from, int64_t to, int8_t* rotations)
 {
     StraightPathState state;
     int64_t from_x;
@@ -780,14 +772,14 @@ int sub_420660(int64_t from, int64_t to, int8_t* rotations)
 
     state.last_x = from_x;
     state.last_y = from_y;
-    sub_4203B0(from_x, from_y, to_x, to_y, &state, sub_420330);
+    path_line_points_enumerate(from_x, from_y, to_x, to_y, &state, path_straight_sample_offset);
 
     if (state.cnt == -1) {
         return 0;
     }
 
     while (state.sample_counter != 0) {
-        sub_420330(to_x, to_y, &state);
+        path_straight_sample_offset(to_x, to_y, &state);
     }
 
     if (state.cnt == -1) {
@@ -822,7 +814,7 @@ int wmap_path_make(WmapPathInfo* path_info)
             next_path_info.from = sec;
             next_path_info.max_rotations -= idx;
             next_path_info.rotations += idx;
-            len = sub_420900(&next_path_info);
+            len = path_worldmap_destination_adjust(&next_path_info);
             if (len == 0) {
                 break;
             }
@@ -843,7 +835,7 @@ int wmap_path_make(WmapPathInfo* path_info)
 }
 
 // 0x420900
-int sub_420900(WmapPathInfo* path_info)
+int path_worldmap_destination_adjust(WmapPathInfo* path_info)
 {
     int64_t sec = path_info->from;
     int64_t adjacent_sec;
@@ -856,7 +848,7 @@ int sub_420900(WmapPathInfo* path_info)
         if (!sector_is_blocked(adjacent_sec)
             && (sector_exists(adjacent_sec) || !terrain_is_blocked(adjacent_sec))) {
             path_info->to = adjacent_sec;
-            return sub_4209C0(path_info);
+            return path_worldmap_astar(path_info);
         }
 
         sec = adjacent_sec;
@@ -866,7 +858,7 @@ int sub_420900(WmapPathInfo* path_info)
 }
 
 // 0x4209C0
-int sub_4209C0(WmapPathInfo* path_info)
+int path_worldmap_astar(WmapPathInfo* path_info)
 {
     int64_t from_x = SECTOR_X(path_info->from);
     int64_t from_y = SECTOR_Y(path_info->from);
@@ -982,7 +974,7 @@ int sub_4209C0(WmapPathInfo* path_info)
 
             // Add additional cost in case direction change is needed.
             if (wmap_path_backtrack_tbl[current_index] != -1
-                && sub_420110(wmap_path_backtrack_tbl[current_index], current_index, 16) != rot) {
+                && path_grid_direction_between_indices(wmap_path_backtrack_tbl[current_index], current_index, 16) != rot) {
                 cost++;
             }
 
@@ -1016,7 +1008,7 @@ int sub_4209C0(WmapPathInfo* path_info)
 
     // Reconstruct the path backwards from dst to src.
     for (int i = step - 1; i >= 0; i--) {
-        path_info->rotations[i] = sub_420110(wmap_path_backtrack_tbl[target_index], target_index, 16);
+        path_info->rotations[i] = path_grid_direction_between_indices(wmap_path_backtrack_tbl[target_index], target_index, 16);
         target_index = wmap_path_backtrack_tbl[target_index];
     }
 
@@ -1025,12 +1017,12 @@ int sub_4209C0(WmapPathInfo* path_info)
 }
 
 // 0x420E30
-int sub_420E30(PathCreateInfo* path_create_info, tig_duration_t ms)
+int path_make_long_range_fallback(PathCreateInfo* path_create_info, tig_duration_t ms)
 {
     // The long-range solver has not been reconstructed. Use the bounded local
     // solver rather than returning an indeterminate path length.
     (void)ms;
-    return sub_41F9F0(path_create_info);
+    return path_make_local_astar(path_create_info);
 }
 
 // 0x421AC0

@@ -38,31 +38,31 @@ typedef enum MagicTechEyeCandyType {
 #define MAGICTECH_FX_CHEST_BREAK 1203
 
 typedef enum MagicTechComponent {
-    MTC_NOOP,
-    MTC_AGOAL,
-    MTC_AGOALTERMINATE,
-    MTC_AIREDIRECT,
-    MTC_CAST,
-    MTC_CHARGENBRANCH,
-    MTC_DAMAGE,
-    MTC_DESTROY,
-    MTC_DISPEL,
-    MTC_EFFECT,
-    MTC_ENVFLAG,
-    MTC_EYECANDY,
-    MTC_HEAL,
-    MTC_IDENTIFY,
-    MTC_INTERRUPT,
-    MTC_MOVEMENT,
-    MTC_OBJFLAG,
-    MTC_RECHARGE,
-    MTC_SUMMON,
-    MTC_TERMINATE,
-    MTC_TESTNBRANCH,
-    MTC_TRAIT,
-    MTC_TRAITIDX,
-    MTC_TRAIT64,
-    MTC_USE,
+    MAGICTECH_COMPONENT_NO_OPERATION,
+    MAGICTECH_COMPONENT_ANIMATION_GOAL,
+    MAGICTECH_COMPONENT_ANIMATION_TERMINATE,
+    MAGICTECH_COMPONENT_AI_REDIRECT,
+    MAGICTECH_COMPONENT_CAST,
+    MAGICTECH_COMPONENT_CHARGE_AND_BRANCH,
+    MAGICTECH_COMPONENT_DAMAGE,
+    MAGICTECH_COMPONENT_DESTROY,
+    MAGICTECH_COMPONENT_DISPEL,
+    MAGICTECH_COMPONENT_EFFECT,
+    MAGICTECH_COMPONENT_ENVIRONMENT_FLAG,
+    MAGICTECH_COMPONENT_VISUAL_EFFECT,
+    MAGICTECH_COMPONENT_HEAL,
+    MAGICTECH_COMPONENT_IDENTIFY,
+    MAGICTECH_COMPONENT_INTERRUPT,
+    MAGICTECH_COMPONENT_MOVEMENT,
+    MAGICTECH_COMPONENT_OBJECT_FLAG,
+    MAGICTECH_COMPONENT_RECHARGE,
+    MAGICTECH_COMPONENT_SUMMON,
+    MAGICTECH_COMPONENT_TERMINATE,
+    MAGICTECH_COMPONENT_TEST_AND_BRANCH,
+    MAGICTECH_COMPONENT_TRAIT,
+    MAGICTECH_COMPONENT_INDEXED_TRAIT,
+    MAGICTECH_COMPONENT_TRAIT_INT64,
+    MAGICTECH_COMPONENT_USE,
 } MagicTechComponent;
 
 typedef struct MagicTechComponentTrait {
@@ -243,7 +243,7 @@ typedef struct MagicTechInfo {
     /* 0070 */ TargetParams target_params[MAGICTECH_ACTION_COUNT];
     /* 00E8 */ MagicTechComponentList components[MAGICTECH_ACTION_COUNT];
     /* 0110 */ int no_stack;
-    /* 0114 */ int field_114;
+    /* 0114 */ int applied_spell_flags;
     /* 0118 */ unsigned int cancels_sf;
     /* 011C */ unsigned int disallowed_sf;
     /* 0120 */ unsigned int disallowed_tsf;
@@ -275,12 +275,12 @@ typedef struct MagicTechRunInfo {
     /* 00E8 */ MagicTechObjectNode attacker_obj;
     /* 0130 */ MagicTechObjectNode* objlist;
     /* 0134 */ MagicTechObjectNode* summoned_obj;
-    /* 0138 */ int field_138;
+    /* 0138 */ int applied_spell_flags;
     /* 013C */ MagicTechRunFlags flags;
     /* 0140 */ unsigned int trigger;
-    /* 0144 */ int field_144;
-    /* 0148 */ DateTime field_148;
-    /* 0150 */ int field_150;
+    /* 0144 */ int resistance_amount;
+    /* 0148 */ DateTime event_time;
+    /* 0150 */ int remaining_duration_triggers;
     /* 0154 */ int field_154;
 } MagicTechRunInfo;
 
@@ -293,11 +293,11 @@ typedef unsigned int MagicTechInvocationFlags;
 typedef struct MagicTechInvocation {
     /* 0000 */ int spell;
     /* 0004 */ int padding_4;
-    /* 0008 */ FollowerInfo source_obj;
+    /* 0008 */ ObjectHandleReference source_obj;
     /* 0038 */ int64_t loc;
-    /* 0040 */ FollowerInfo parent_obj;
-    /* 0070 */ FollowerInfo target_obj;
-    /* 00A0 */ FollowerInfo attacker_obj;
+    /* 0040 */ ObjectHandleReference parent_obj;
+    /* 0070 */ ObjectHandleReference target_obj;
+    /* 00A0 */ ObjectHandleReference attacker_obj;
     /* 00D0 */ int64_t target_loc;
     /* 00D8 */ unsigned int trigger;
     /* 00DC */ MagicTechInvocationFlags flags;
@@ -307,8 +307,8 @@ typedef struct MagicTechInvocation {
 static_assert(sizeof(MagicTechInvocation) == 0xE0, "wrong size");
 
 typedef struct MagicTechSummonInfo {
-    /* 0000 */ FollowerInfo field_0;
-    /* 0030 */ FollowerInfo field_30;
+    /* 0000 */ ObjectHandleReference field_0;
+    /* 0030 */ ObjectHandleReference field_30;
     /* 0060 */ ObjectID field_60;
     /* 0078 */ int64_t loc;
     /* 0080 */ int64_t* summoned_obj_ptr;
@@ -344,23 +344,23 @@ void magictech_get_msg(MesFileEntry* mes_file_entry);
 char* magictech_spell_name(int num);
 void magictech_cheat_mode_on(void);
 int magictech_get_range(int magictech);
-int sub_4502B0(int magictech);
+int magictech_target_radius_get(int magictech);
 int magictech_min_intelligence(int magictech);
 int magictech_min_willpower(int magictech);
 int magictech_get_cost(int magictech);
 bool magictech_is_aggressive(int magictech);
-bool sub_4503A0(int magictech);
+bool magictech_has_maintenance(int magictech);
 MagicTechMaintenanceInfo* magictech_get_maintenance(int magictech);
 MagicTechDurationInfo* magictech_get_duration(int magictech);
-bool sub_450420(int64_t obj, int cost, bool a3, int magictech);
-void sub_4507B0(int64_t obj, int magictech);
+bool magictech_cost_check_or_consume(int64_t obj, int cost, bool a3, int magictech);
+void magictech_casting_cost_consume_callback(int64_t obj, int magictech);
 bool magictech_can_charge_spell_fatigue(int64_t obj, int magictech);
-bool sub_450940(int mt_id);
-int sub_450B40(int64_t obj);
+bool magictech_run_cost_check(int mt_id);
+int magictech_maintenance_slots_available(int64_t obj);
 void magictech_effect_summon(MagicTechSummonInfo* summon_info);
-void sub_451070(MagicTechRunInfo* a1);
+void magictech_run_process(MagicTechRunInfo* a1);
 void magictech_component_dispel(int64_t obj, int mt_id);
-void sub_452650(int64_t obj);
+void magictech_exit_to_world_area(int64_t obj);
 void magictech_component_trait(int64_t obj, MagicTechComponentTrait* trait, int obj_type);
 int magictech_cast_spell_fail_chance(int64_t attacker_obj, int64_t target_obj, int spell);
 int magictech_use_item_fail_chance(int64_t attacker_obj, int64_t item_obj, int64_t target_obj);
@@ -370,54 +370,54 @@ bool magictech_id_to_run_info(int mt_id, MagicTechRunInfo** lock_ptr);
 void magictech_invocation_init(MagicTechInvocation* mt_invocation, int64_t obj, int spell);
 void magictech_invocation_run(MagicTechInvocation* mt_invocation);
 bool magictech_invocation_check(MagicTechInvocation* mt_invocation);
-bool sub_456A10(int64_t a1, int64_t a2, int64_t a3);
-bool sub_456A90(int mt_id);
+bool magictech_item_effective_power_check(int64_t a1, int64_t a2, int64_t a3);
+bool magictech_run_target_revalidate(int mt_id);
 bool magictech_check_los(MagicTechInvocation* mt_invocation);
-bool sub_456D20(int mt_id, tig_art_id_t* art_id_ptr, tig_art_id_t* light_art_id_ptr, tig_color_t* light_color_ptr, int* a5, int* a6, int* a7, int* a8);
-void sub_456E00(int mt_id);
+bool magictech_projectile_effect_describe(int mt_id, tig_art_id_t* art_id_ptr, tig_art_id_t* light_art_id_ptr, tig_color_t* light_color_ptr, int* a5, int* a6, int* a7, int* a8);
+void magictech_secondary_casting_fx_play(int mt_id);
 void magictech_fx_add(int64_t obj, int fx);
 void magictech_fx_remove(int64_t obj, int fx);
-void sub_456F70(int mt_id);
-void sub_456FA0(int mt_id, unsigned int flags);
-void sub_457000(int mt_id, int action);
-void sub_457060(MagicTechRunInfo* a1);
-void sub_457100(void);
+void magictech_begin_action_process(int mt_id);
+void magictech_casting_complete_and_release(int mt_id, unsigned int flags);
+void magictech_action_process(int mt_id, int action);
+void magictech_run_callback_process(MagicTechRunInfo* a1);
+void magictech_run_slots_reset_callback(void);
 void magictech_interrupt(int mt_id);
 void magictech_interrupt_delayed(int mt_id);
-void sub_4573D0(MagicTechInvocation* mt_invocation);
+void magictech_matching_invocation_interrupt(MagicTechInvocation* mt_invocation);
 void magictech_demaintain_spells(int64_t obj);
-void sub_4574D0(int64_t obj);
+void magictech_object_sources_detach(int64_t obj);
 bool magictech_check_env_sf(unsigned int flags);
-tig_art_id_t sub_458AE0(int mt_id);
+tig_art_id_t magictech_run_spell_icon_get(int mt_id);
 const char* magictech_get_name(int magictech);
-tig_art_id_t sub_458B70(int mt_id);
-void sub_458C00(int spell, int64_t obj);
-int sub_458CA0(int mt_id);
-bool sub_459040(int64_t obj, unsigned int flags, int64_t* parent_obj_ptr);
-bool sub_459170(int64_t obj, unsigned int flags, int* index_ptr);
+tig_art_id_t magictech_projectile_art_id_get(int mt_id);
+void magictech_projectile_light_and_sound_apply_legacy(int spell, int64_t obj);
+int magictech_projectile_speed_get(int mt_id);
+bool magictech_spell_flag_caster_find(int64_t obj, unsigned int flags, int64_t* parent_obj_ptr);
+bool magictech_spell_flag_instance_find(int64_t obj, unsigned int flags, int* index_ptr);
 bool magictech_is_under_influence_of(int64_t obj, int magictech);
 bool magictech_stop_spell(int64_t obj, int magictech);
 bool magictech_timeevent_process(TimeEvent* timeevent);
-bool sub_459500(int index);
+bool magictech_run_timeevent_restart(int index);
 bool magictech_recharge_timeevent_process(TimeEvent* timeevent);
-void sub_459740(int64_t obj);
-void sub_4598D0(int64_t obj);
-void sub_459A20(int64_t obj);
+void magictech_object_removal_notify(int64_t obj);
+void magictech_object_spells_end(int64_t obj);
+void magictech_object_callback_stub(int64_t obj);
 void magictech_anim_play_hit_fx(int64_t obj, CombatContext* combat);
-bool sub_459C10(int64_t obj, int mt_id);
-void sub_459EA0(int64_t obj);
-bool sub_459F20(int magictech, uint64_t** a2);
-void sub_459F50(void);
+bool magictech_target_resistance_check(int64_t obj, int mt_id);
+void magictech_tempus_fugit_and_familiar_flags_clear(int64_t obj);
+bool magictech_target_flags_pointer_get(int magictech, uint64_t** a2);
+void magictech_ai_reset(void);
 bool magictech_is_enabled(int magictech);
 bool magictech_is_magic(int magictech);
 bool magictech_is_tech(int magictech);
-bool sub_459FF0(int mt_id);
-bool sub_45A030(int magictech);
+bool magictech_run_has_valid_spell(int mt_id);
+bool magictech_has_item_triggers(int magictech);
 int magictech_get_aptitude_adj(int64_t sector_id);
-void sub_45A4F0(int64_t obj, int fx_id, int mt_id);
-void sub_45A520(int64_t a1, int64_t a2);
+void magictech_eye_candy_remove(int64_t obj, int fx_id, int mt_id);
+void magictech_resurrection_fx_notify(int64_t a1, int64_t a2);
 void magictech_error_unressurectable(int64_t obj);
-bool sub_45A580(int64_t a1, int64_t a2);
+bool magictech_invisible_target_can_be_seen(int64_t a1, int64_t a2);
 void magictech_debug_lists(void);
 
 #endif /* ARCANUM_GAME_MAGICTECH_H_ */

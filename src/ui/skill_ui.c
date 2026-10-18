@@ -1,4 +1,5 @@
 #include "ui/skill_ui.h"
+#include "game/activity_time.h"
 
 #include "game/anim.h"
 #include "game/critter.h"
@@ -19,14 +20,14 @@
 
 #define FOUR 4
 
-static bool sub_57A5E0(int64_t obj);
-static void sub_57A620(SkillInvocation* skill_invocation);
-static void sub_57A6B0(SkillInvocation* skill_invocation);
-static bool sub_57A710(int64_t a1, int64_t a2);
-static bool sub_57A770(int64_t source_obj, int64_t target_obj, bool success);
+static bool skill_ui_pickpocket_is_forbidden(int64_t obj);
+static void skill_ui_best_follower_select(SkillInvocation* skill_invocation);
+static void skill_ui_invocation_execute(SkillInvocation* skill_invocation);
+static bool skill_ui_open_steal_or_loot(int64_t a1, int64_t a2);
+static bool skill_ui_result_feedback_primary(int64_t source_obj, int64_t target_obj, bool success);
 static bool skill_ui_steal_item(int64_t source_obj, int64_t target_obj, int64_t item_obj, bool success);
 static bool skill_ui_plant_item(int64_t source_obj, int64_t target_obj, int64_t item_obj, bool success);
-static bool sub_57A990(int64_t source_obj, int64_t target_obj, bool success);
+static bool skill_ui_result_feedback_secondary(int64_t source_obj, int64_t target_obj, bool success);
 static bool skill_ui_disarm_trap(int64_t source_obj, int64_t target_obj, bool success);
 static bool skill_ui_repair(int64_t source_obj, int64_t target_obj, bool success);
 static bool skill_ui_no_repair(int64_t source_obj, int64_t target_obj, bool success);
@@ -34,7 +35,7 @@ static bool skill_ui_lock(int64_t source_obj, int64_t target_obj, bool success);
 static bool skill_ui_no_lock(int64_t source_obj);
 
 // 0x5CB220
-static int dword_5CB220[FOUR] = {
+static int skill_ui_button_art_numbers[FOUR] = {
     279,
     280,
     282,
@@ -42,7 +43,7 @@ static int dword_5CB220[FOUR] = {
 };
 
 // 0x5CB230
-static int dword_5CB230[FOUR] = {
+static int skill_ui_icon_art_numbers[FOUR] = {
     279,
     280,
     282,
@@ -50,7 +51,7 @@ static int dword_5CB230[FOUR] = {
 };
 
 // 0x5CB240
-static int dword_5CB240[FOUR] = {
+static int skill_ui_action_skills[FOUR] = {
     SKILL_PROWLING,
     SKILL_PICK_POCKET,
     SKILL_DISARM_TRAPS,
@@ -58,7 +59,7 @@ static int dword_5CB240[FOUR] = {
 };
 
 // 0x5CB250
-static uint64_t qword_5CB250[FOUR] = {
+static uint64_t skill_ui_action_target_flags[FOUR] = {
     TGT_SELF,
     TGT_OBJ_NO_ST_CRITTER_ANIMAL | TGT_OBJ_T_CRITTER | TGT_OBJECT,
     TGT_TILE | TGT_OBJECT,
@@ -66,16 +67,16 @@ static uint64_t qword_5CB250[FOUR] = {
 };
 
 // 0x5CB270
-static int dword_5CB270 = -1;
+static int skill_ui_selected_action = -1;
 
 // 0x683478
-static char* dword_683478[FOUR];
+static char* skill_ui_action_names[FOUR];
 
 // 0x683488
 static mes_file_handle_t skill_ui_mes_file;
 
 // 0x683490
-static int64_t qword_683490;
+static int64_t skill_ui_source_obj;
 
 // 0x579E80
 bool skill_ui_init(GameInitInfo* init_info)
@@ -86,10 +87,10 @@ bool skill_ui_init(GameInitInfo* init_info)
 
     (void)init_info;
 
-    callbacks.field_0 = sub_57A770;
+    callbacks.field_0 = skill_ui_result_feedback_primary;
     callbacks.steal_item_func = skill_ui_steal_item;
     callbacks.plant_item_output = skill_ui_plant_item;
-    callbacks.field_C = sub_57A990;
+    callbacks.field_C = skill_ui_result_feedback_secondary;
     callbacks.disarm_trap_func = skill_ui_disarm_trap;
     callbacks.repair_func = skill_ui_repair;
     callbacks.no_repair_func = skill_ui_no_repair;
@@ -104,7 +105,7 @@ bool skill_ui_init(GameInitInfo* init_info)
     for (index = 0; index < FOUR; index++) {
         mes_file_entry.num = 100 + index;
         mes_get_msg(skill_ui_mes_file, &mes_file_entry);
-        dword_683478[index] = mes_file_entry.str;
+        skill_ui_action_names[index] = mes_file_entry.str;
     }
 
     return true;
@@ -113,7 +114,7 @@ bool skill_ui_init(GameInitInfo* init_info)
 // 0x579F30
 void skill_ui_reset(void)
 {
-    qword_683490 = OBJ_HANDLE_NULL;
+    skill_ui_source_obj = OBJ_HANDLE_NULL;
 }
 
 // 0x579F40
@@ -123,25 +124,25 @@ void skill_ui_exit(void)
 }
 
 // 0x579F50
-int sub_579F50(int index)
+int skill_ui_action_button_art_num_get(int index)
 {
-    return index >= 0 && index < FOUR ? dword_5CB220[index] : dword_5CB220[0];
+    return index >= 0 && index < FOUR ? skill_ui_button_art_numbers[index] : skill_ui_button_art_numbers[0];
 }
 
 // 0x579F70
-int sub_579F70(int index)
+int skill_ui_action_icon_art_num_get(int index)
 {
-    return index >= 0 && index < FOUR ? dword_5CB230[index] : dword_5CB230[0];
+    return index >= 0 && index < FOUR ? skill_ui_icon_art_numbers[index] : skill_ui_icon_art_numbers[0];
 }
 
 // 0x579F90
-int sub_579F90(void)
+int skill_ui_selected_action_get(void)
 {
-    return dword_5CB270;
+    return skill_ui_selected_action;
 }
 
 // 0x579FA0
-void sub_579FA0(int64_t obj, int type)
+void skill_ui_action_activate(int64_t obj, int type)
 {
     int64_t pc_obj;
 
@@ -162,10 +163,10 @@ void sub_579FA0(int64_t obj, int type)
         skill_ui_cancel();
     }
 
-    qword_683490 = obj;
-    dword_5CB270 = type;
+    skill_ui_source_obj = obj;
+    skill_ui_selected_action = type;
 
-    if ((qword_5CB250[type] & 0x2000000) != 0
+    if ((skill_ui_action_target_flags[type] & 0x2000000) != 0
         || intgame_mode_set(INTGAME_MODE_MAIN)) {
         skill_ui_preprocess(obj, type);
     }
@@ -179,10 +180,10 @@ void skill_ui_preprocess(int64_t obj, int type)
     SkillInvocation skill_invocation;
 
     is_pc = player_is_local_pc_obj(obj);
-    qword_683490 = obj;
-    dword_5CB270 = type;
+    skill_ui_source_obj = obj;
+    skill_ui_selected_action = type;
 
-    tgt = qword_5CB250[type];
+    tgt = skill_ui_action_target_flags[type];
     skill_invocation_init(&skill_invocation);
 
     switch (type) {
@@ -217,7 +218,7 @@ void skill_ui_preprocess(int64_t obj, int type)
 void skill_ui_cancel(void)
 {
     intgame_mode_set(INTGAME_MODE_MAIN);
-    qword_683490 = OBJ_HANDLE_NULL;
+    skill_ui_source_obj = OBJ_HANDLE_NULL;
 }
 
 // 0x57A1F0
@@ -227,9 +228,9 @@ void skill_ui_apply(TargetDescriptor* td)
 
     pc_obj = player_get_local_pc_obj();
 
-    if ((pc_obj == qword_683490 || !critter_is_unconscious(pc_obj))
-        && !critter_is_unconscious(qword_683490)) {
-        skill_ui_activate(td, qword_683490, dword_5CB270);
+    if ((pc_obj == skill_ui_source_obj || !critter_is_unconscious(pc_obj))
+        && !critter_is_unconscious(skill_ui_source_obj)) {
+        skill_ui_activate(td, skill_ui_source_obj, skill_ui_selected_action);
     }
 }
 
@@ -247,7 +248,7 @@ void skill_ui_activate(TargetDescriptor* td, int64_t obj, int a3)
     }
 
     is_pc = player_is_local_pc_obj(obj);
-    skill = sub_57A6C0(a3, td);
+    skill = skill_ui_target_skill_resolve(a3, td);
 
     switch (skill) {
     case SKILL_PICK_POCKET:
@@ -259,7 +260,7 @@ void skill_ui_activate(TargetDescriptor* td, int64_t obj, int a3)
             spell_flags = obj_field_int32_get(obj, OBJ_F_SPELL_FLAGS);
 
             if ((obj_field_int32_get(td->obj, OBJ_F_SPELL_FLAGS) & OSF_STONED) == 0) {
-                if (sub_57A5E0(td->obj)) {
+                if (skill_ui_pickpocket_is_forbidden(td->obj)) {
                     if (player_is_local_pc_obj(obj)) {
                         mes_file_entry.num = 525; // "You cannot pickpocket this creature."
                         mes_get_msg(skill_ui_mes_file, &mes_file_entry);
@@ -268,11 +269,11 @@ void skill_ui_activate(TargetDescriptor* td, int64_t obj, int a3)
                 } else if (critter_is_dead(td->obj)) {
                     if (object_script_execute(obj, td->obj, obj, SAP_USE, 0)
                         && (spell_flags & OSF_POLYMORPHED) == 0
-                        && !sub_423300(td->obj, 0)) {
+                        && !anim_foreground_goal_find(td->obj, 0)) {
                         ui_show_inven_loot(obj, td->obj);
                     }
                 } else {
-                    sub_57A710(obj, td->obj);
+                    skill_ui_open_steal_or_loot(obj, td->obj);
                 }
             }
         }
@@ -280,24 +281,24 @@ void skill_ui_activate(TargetDescriptor* td, int64_t obj, int a3)
     case SKILL_REPAIR:
         if (!td->is_loc) {
             skill_invocation_init(&skill_invocation);
-            sub_4440E0(obj, &(skill_invocation.source));
-            sub_4440E0(td->obj, &(skill_invocation.target));
-            sub_4440E0(OBJ_HANDLE_NULL, &(skill_invocation.item));
+            object_handle_reference_init(obj, &(skill_invocation.source));
+            object_handle_reference_init(td->obj, &(skill_invocation.target));
+            object_handle_reference_init(OBJ_HANDLE_NULL, &(skill_invocation.item));
             skill_invocation.flags = 0;
             skill_invocation.skill = SKILL_REPAIR;
-            sub_57A6B0(&skill_invocation);
+            skill_ui_invocation_execute(&skill_invocation);
         }
         return;
     case SKILL_DISARM_TRAPS:
         if (!td->is_loc && combat_consume_action_points(obj, 4)) {
             skill_invocation_init(&skill_invocation);
-            sub_4440E0(obj, &(skill_invocation.source));
-            sub_4440E0(td->obj, &(skill_invocation.target));
-            sub_4440E0(OBJ_HANDLE_NULL, &(skill_invocation.item));
+            object_handle_reference_init(obj, &(skill_invocation.source));
+            object_handle_reference_init(td->obj, &(skill_invocation.target));
+            object_handle_reference_init(OBJ_HANDLE_NULL, &(skill_invocation.item));
             skill_invocation.flags = SKILL_INVOCATION_0x04;
             skill_invocation.skill = SKILL_DISARM_TRAPS;
-            sub_57A620(&skill_invocation);
-            sub_57A6B0(&skill_invocation);
+            skill_ui_best_follower_select(&skill_invocation);
+            skill_ui_invocation_execute(&skill_invocation);
         }
         return;
     default:
@@ -309,14 +310,14 @@ void skill_ui_activate(TargetDescriptor* td, int64_t obj, int a3)
 }
 
 // 0x57A5E0
-bool sub_57A5E0(int64_t obj)
+bool skill_ui_pickpocket_is_forbidden(int64_t obj)
 {
     return (obj_field_int32_get(obj, OBJ_F_CRITTER_FLAGS2) & OCF2_NO_PICKPOCKET) != 0
         || (obj_field_int32_get(obj, OBJ_F_CRITTER_FLAGS) & OCF_MECHANICAL) != 0;
 }
 
 // 0x57A620
-void sub_57A620(SkillInvocation* skill_invocation)
+void skill_ui_best_follower_select(SkillInvocation* skill_invocation)
 {
     int64_t obj;
     char str[1000];
@@ -332,24 +333,24 @@ void sub_57A620(SkillInvocation* skill_invocation)
 }
 
 // 0x57A6A0
-int sub_57A6A0(int index)
+int skill_ui_action_skill_get(int index)
 {
-    return dword_5CB240[index];
+    return skill_ui_action_skills[index];
 }
 
 // 0x57A6B0
-void sub_57A6B0(SkillInvocation* skill_invocation)
+void skill_ui_invocation_execute(SkillInvocation* skill_invocation)
 {
     skill_invocation_run(skill_invocation);
 }
 
 // 0x57A6C0
-int sub_57A6C0(int a1, TargetDescriptor* td)
+int skill_ui_target_skill_resolve(int a1, TargetDescriptor* td)
 {
     int v1;
     int complexity;
 
-    v1 = dword_5CB240[a1];
+    v1 = skill_ui_action_skills[a1];
     if (v1 == -1) {
         complexity = obj_field_int32_get(td->obj, OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY);
         if (a1 == 3 && complexity >= 20) {
@@ -361,13 +362,13 @@ int sub_57A6C0(int a1, TargetDescriptor* td)
 }
 
 // 0x57A700
-char* sub_57A700(int index)
+char* skill_ui_action_name_get(int index)
 {
-    return dword_683478[index];
+    return skill_ui_action_names[index];
 }
 
 // 0x57A710
-bool sub_57A710(int64_t pc_obj, int64_t target_obj)
+bool skill_ui_open_steal_or_loot(int64_t pc_obj, int64_t target_obj)
 {
     int mode;
 
@@ -382,7 +383,7 @@ bool sub_57A710(int64_t pc_obj, int64_t target_obj)
 }
 
 // 0x57A770
-bool sub_57A770(int64_t source_obj, int64_t target_obj, bool success)
+bool skill_ui_result_feedback_primary(int64_t source_obj, int64_t target_obj, bool success)
 {
     MesFileEntry mes_file_entry;
     UiMessage ui_message;
@@ -476,7 +477,7 @@ bool skill_ui_plant_item(int64_t source_obj, int64_t target_obj, int64_t item_ob
 }
 
 // 0x57A990
-bool sub_57A990(int64_t source_obj, int64_t target_obj, bool success)
+bool skill_ui_result_feedback_secondary(int64_t source_obj, int64_t target_obj, bool success)
 {
     MesFileEntry mes_file_entry;
     UiMessage ui_message;
@@ -686,6 +687,7 @@ void skill_ui_inc_skill(int64_t obj, int skill)
         }
 
         stat_base_set(obj, STAT_UNSPENT_POINTS, points - cost);
+        activity_time_record(obj, ACTIVITY_TIME_SKILL_POINTS, cost);
         if (charedit_is_created()) {
             charedit_refresh();
             intgame_message_window_clear();
@@ -717,6 +719,7 @@ void skill_ui_inc_skill(int64_t obj, int skill)
         }
 
         stat_base_set(obj, STAT_UNSPENT_POINTS, points - cost);
+        activity_time_record(obj, ACTIVITY_TIME_SKILL_POINTS, cost);
         if (charedit_is_created()) {
             charedit_refresh();
             intgame_message_window_clear();
@@ -755,6 +758,7 @@ void skill_ui_dec_skill(int64_t obj, int skill)
         }
 
         stat_base_set(obj, STAT_UNSPENT_POINTS, points + cost);
+        activity_time_record(obj, ACTIVITY_TIME_SKILL_POINTS, -cost);
         if (charedit_is_created()) {
             charedit_refresh();
             intgame_message_window_clear();
@@ -780,6 +784,7 @@ void skill_ui_dec_skill(int64_t obj, int skill)
             }
 
             points = stat_base_set(obj, STAT_UNSPENT_POINTS, points + cost);
+            activity_time_record(obj, ACTIVITY_TIME_SKILL_POINTS, -cost);
             if (charedit_is_created()) {
                 charedit_refresh();
                 intgame_message_window_clear();

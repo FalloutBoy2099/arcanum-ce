@@ -41,6 +41,11 @@ static const char* const arcanum_ini_game_save_order[] = {
     NULL,
 };
 
+static const char* const arcanum_ini_time_save_order[] = {
+    "training_apprentice", "training_expert", "training_master", "educator",
+    "stat_points", "skill_points", "spell_points", "tech_points", "schematic", NULL,
+};
+
 static const char* const arcanum_ini_video_save_order[] = {
     "resolution",
     "camera_follows_player",
@@ -79,6 +84,9 @@ static const char* const arcanum_ini_ui_save_order[] = {
     "schematic_toolbar",
     "logbook_toolbar",
     "worldmap_toolbar",
+    "barter_color_better",
+    "barter_color_worse",
+    "barter_color_equal",
     "schematic_color_available",
     "schematic_color_missing",
     "schematic_opacity_available",
@@ -202,6 +210,7 @@ static const char* const arcanum_ini_controller_save_order[] = {
 static const char* const arcanum_ini_section_names[] = {
     "global",
     "game",
+    "time",
     "video",
     "audio",
     "ui",
@@ -214,6 +223,7 @@ static const char* const arcanum_ini_section_names[] = {
 static const char* const* const arcanum_ini_save_order[] = {
     arcanum_ini_global_save_order,
     arcanum_ini_game_save_order,
+    arcanum_ini_time_save_order,
     arcanum_ini_video_save_order,
     arcanum_ini_audio_save_order,
     arcanum_ini_ui_save_order,

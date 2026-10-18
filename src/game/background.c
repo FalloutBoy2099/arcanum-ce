@@ -1,4 +1,5 @@
 #include "game/background.h"
+#include "game/activity_time.h"
 
 #include <stdio.h>
 
@@ -363,7 +364,7 @@ void background_generate_inventory(int64_t obj)
 
         tok = strtok(str, " \t\n");
         while (tok != NULL) {
-            proto_obj = sub_4685A0(atoi(tok));
+            proto_obj = proto_handle_get(atoi(tok));
             loc = obj_field_int64_get(obj, OBJ_F_LOCATION);
             if (object_create(proto_obj, loc, &item_obj)) {
                 // Mark item as identified.
@@ -393,6 +394,7 @@ void background_educate_followers(int64_t obj)
     int skill;
     int educator_training;
     int follower_training;
+    bool trained = false;
 
     // Validate that the object is a PC with the "Educator" background.
     if (obj_field_int32_get(obj, OBJ_F_TYPE) != OBJ_TYPE_PC
@@ -411,7 +413,7 @@ void background_educate_followers(int64_t obj)
                 // Increment follower training up to the educator's level.
                 follower_training = basic_skill_training_get(node->obj, skill) + 1;
                 while (follower_training < educator_training) {
-                    basic_skill_training_set(node->obj, skill, follower_training);
+                    if (basic_skill_training_set(node->obj, skill, follower_training) == follower_training) trained = true;
                     follower_training++;
                 }
                 node = node->next;
@@ -428,7 +430,7 @@ void background_educate_followers(int64_t obj)
                 // Increment follower training up to the educator's level.
                 follower_training = tech_skill_training_get(node->obj, skill) + 1;
                 while (follower_training < educator_training) {
-                    tech_skill_training_set(node->obj, skill, follower_training);
+                    if (tech_skill_training_set(node->obj, skill, follower_training) == follower_training) trained = true;
                     follower_training++;
                 }
                 node = node->next;
@@ -437,6 +439,7 @@ void background_educate_followers(int64_t obj)
     }
 
     object_list_destroy(&followers);
+    if (trained) activity_time_record(obj, ACTIVITY_TIME_EDUCATOR, 1);
 }
 
 /**

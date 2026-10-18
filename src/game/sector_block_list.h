@@ -20,8 +20,8 @@ bool sector_block_list_load(SectorBlockList* list, TigFile* stream);
 bool sector_block_list_save(SectorBlockList* list, TigFile* stream);
 bool sector_block_list_load_with_dif(SectorBlockList* list, TigFile* stream);
 bool sector_block_list_save_with_dif(SectorBlockList* list, TigFile* stream);
-void sub_4F8330(void);
-void sub_4F8340(void);
+void sector_block_list_setup_hook_stub(void);
+void sector_block_list_pool_release(void);
 SectorBlockListNode* sector_block_list_node_create(void);
 void sector_block_list_node_destroy(SectorBlockListNode* node);
 

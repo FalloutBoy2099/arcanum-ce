@@ -9,6 +9,19 @@
 // Object type masks follow the original 18-entry lookup table exactly.
 static_assert(OBJ_TYPE_WALL == 0 && OBJ_TYPE_TRAP == 17, "object query mask ordering");
 
+bool object_query_load_sector(int64_t loc)
+{
+    int64_t sector_id = sector_id_from_loc(loc);
+    int64_t limit_x, limit_y;
+    sector_limits_get(&limit_x, &limit_y);
+    if (SECTOR_X(sector_id) >= limit_x || SECTOR_Y(sector_id) >= limit_y) return false;
+    Sector* sector;
+    if (!sector_lock(sector_id, &sector)) return false;
+    sector_unlock(sector_id);
+    tig_performance_count(TIG_PERF_OBJECT_SECTOR_LOADS, 1);
+    return true;
+}
+
 static bool matches(int64_t obj, unsigned int types, unsigned int excluded_flags,
     ObjectQueryPredicate predicate, void* context)
 {
@@ -22,6 +35,7 @@ int64_t object_query_first(int64_t loc, unsigned int types, unsigned int exclude
     ObjectQueryPredicate predicate, void* context)
 {
     tig_performance_count(TIG_PERF_OBJECT_QUERIES, 1);
+    Uint64 visits = 0;
     int64_t sector_id = sector_id_from_loc(loc);
     int64_t limit_x, limit_y;
     sector_limits_get(&limit_x, &limit_y);
@@ -33,13 +47,14 @@ int64_t object_query_first(int64_t loc, unsigned int types, unsigned int exclude
         if (!sector_lock(sector_id, &sector)) return OBJ_HANDLE_NULL;
         int64_t result = OBJ_HANDLE_NULL;
         for (ObjectNode* node = sector->objects.heads[tile_id_from_loc(loc)]; node != NULL; node = node->next) {
-            tig_performance_count(TIG_PERF_OBJECT_QUERY_VISITS, 1);
+            visits++;
             if (matches(node->obj, types, excluded_flags, predicate, context)) {
                 result = node->obj;
                 break;
             }
         }
         sector_unlock(sector_id);
+        tig_performance_count(TIG_PERF_OBJECT_QUERY_VISITS, visits);
         return result;
     }
 
@@ -47,12 +62,16 @@ int64_t object_query_first(int64_t loc, unsigned int types, unsigned int exclude
     FindNode* iter;
     if (obj_find_walk_first(sector_id, &obj, &iter)) {
         do {
-            tig_performance_count(TIG_PERF_OBJECT_QUERY_VISITS, 1);
-            if (!sub_43D940(obj)
+            visits++;
+            if (!object_type_is_sector_static(obj)
                 && (obj_field_int32_get(obj, OBJ_F_FLAGS) & OF_INVENTORY) == 0
                 && obj_field_int64_get(obj, OBJ_F_LOCATION) == loc
-                && matches(obj, types, excluded_flags, predicate, context)) return obj;
+                && matches(obj, types, excluded_flags, predicate, context)) {
+                tig_performance_count(TIG_PERF_OBJECT_QUERY_VISITS, visits);
+                return obj;
+            }
         } while (obj_find_walk_next(&obj, &iter));
     }
+    tig_performance_count(TIG_PERF_OBJECT_QUERY_VISITS, visits);
     return OBJ_HANDLE_NULL;
 }

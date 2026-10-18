@@ -73,6 +73,36 @@ Spell fatigue includes race and college mastery modifiers; item casting is
 identified separately because it uses item resources. Maintenance costs are
 not included in the initial casting cost.
 
+## [time]
+
+All values are durations in **game hours**, from `0` to `720`. Fractions use a
+dot: `0.5` means 30 minutes. Defaults are `0`, which disables both the added
+duration and its transition. Invalid/negative values disable that category.
+
+| Setting | Default | Values and purpose |
+| --- | --- | --- |
+| `training_apprentice` | `0` | Duration per successful apprentice training, including dialogue training actions. |
+| `training_expert` | `0` | Duration per successful expert training granted by a dialogue. |
+| `training_master` | `0` | Duration per successful master training granted by a dialogue. |
+| `educator` | `0` | Duration per Educator propagation that actually improves at least one follower's training. One charge for the propagation, regardless of follower/skill count. Added to any duration of the player's own training. |
+| `stat_points` | `0` | Duration per character point spent on attributes, health or fatigue points. |
+| `skill_points` | `0` | Duration per character point spent on basic or technical skills. |
+| `spell_points` | `0` | Duration per character point spent on spells. |
+| `tech_points` | `0` | Duration per character point spent on technological disciplines. |
+| `schematic` | `0` | Duration per newly learned schematic from a written item. Already-known schematics consume no added time. |
+
+Durations accumulate until the player returns to the main game view, after
+closing dialogue/character/inventory interfaces and outside combat. A single
+short black fade surrounds the clock advance and lighting refresh. Refunding
+points before leaving the character sheet removes their pending duration.
+Character creation and failed/no-op learning do not incur a duration. Pending
+durations are included in saves as an optional `activity_time.bin` sidecar;
+older saves need no migration. A transition is capped at 720 hours.
+
+This uses the same clock-advance mechanism as the script actions `SAT_FADE`
+and `SAT_FADE_AND_TELEPORT`. It does not initiate the sleep procedure. Any
+time explicitly added by a scenario script remains additional to these settings.
+
 ## [video]
 
 | Setting | Default | Values and purpose |

@@ -103,12 +103,12 @@ typedef struct TargetContext {
     /* 0064 */ int padding_64;
 } TargetContext;
 
-typedef struct S4F2680 {
-    /* 0000 */ int64_t field_0;
-    /* 0008 */ int64_t field_8;
+typedef struct TargetDescriptorEvaluation {
+    /* 0000 */ int64_t source_obj;
+    /* 0008 */ int64_t self_obj;
     /* 0010 */ TargetDescriptor* td;
     /* 0014 */ int field_14;
-} S4F2680;
+} TargetDescriptorEvaluation;
 
 // clang-format off
 
@@ -188,8 +188,8 @@ void target_flags_set(uint64_t flags);
 uint64_t target_flags_get(void);
 void target_params_init(TargetParams* params);
 void target_context_init(TargetContext* ctx, TargetParams* params, int64_t source_obj);
-bool sub_4F2680(S4F2680* a1);
-int sub_4F2C60(int64_t* obj_ptr);
+bool target_descriptor_evaluate_current(TargetDescriptorEvaluation* evaluation);
+int target_resolve_scenery_occupant(int64_t* obj_ptr);
 void target_descriptor_set_loc(TargetDescriptor* td, int64_t loc);
 void target_descriptor_set_obj(TargetDescriptor* td, int64_t obj);
 bool target_pick_at_screen_xy(int x, int y, TargetDescriptor* td, bool fullscreen);

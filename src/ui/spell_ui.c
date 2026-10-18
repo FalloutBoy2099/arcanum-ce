@@ -1,4 +1,5 @@
 #include "ui/spell_ui.h"
+#include "game/activity_time.h"
 
 #include "game/critter.h"
 #include "game/item.h"
@@ -17,18 +18,18 @@
 
 #define FIVE 5
 
-typedef struct S5CB3A8 {
+typedef struct MaintainedSpellButton {
     int mt_id;
-    int field_4;
-} S5CB3A8;
+    int state;
+} MaintainedSpellButton;
 
-static void sub_57C470(void);
+static void spell_ui_maintenance_bar_reset(void);
 
 // 0x5CB3A0
-static int dword_5CB3A0 = 10000;
+static int spell_ui_selected_spell = 10000;
 
 // 0x5CB3A8
-static S5CB3A8 stru_5CB3A8[FIVE] = {
+static MaintainedSpellButton spell_ui_maintained_spell_buttons[FIVE] = {
     { -1, 0 },
     { -1, 0 },
     { -1, 0 },
@@ -40,13 +41,13 @@ static S5CB3A8 stru_5CB3A8[FIVE] = {
 static int spell_ui_maintain_bar_num_slots = -1;
 
 // 0x6834F8
-static int64_t qword_6834F8;
+static int64_t spell_ui_source_obj;
 
 // 0x683500
-static int64_t qword_683500;
+static int64_t spell_ui_caster_obj;
 
 // 0x683508
-static bool dword_683508;
+static bool spell_ui_activation_in_progress;
 
 // 0x57BB30
 bool spell_ui_init(GameInitInfo* init_info)
@@ -59,7 +60,7 @@ bool spell_ui_init(GameInitInfo* init_info)
 // 0x57BB40
 void spell_ui_reset(void)
 {
-    sub_57C470();
+    spell_ui_maintenance_bar_reset();
 }
 
 // 0x57BB50
@@ -73,8 +74,8 @@ bool spell_ui_save(TigFile* stream)
     int index;
 
     for (index = 0; index < FIVE; index++) {
-        if (tig_file_fwrite(&(stru_5CB3A8[index].mt_id), sizeof(stru_5CB3A8[index].mt_id), 1, stream) != 1) return false;
-        if (tig_file_fwrite(&(stru_5CB3A8[index].field_4), sizeof(stru_5CB3A8[index].field_4), 1, stream) != 1) return false;
+        if (tig_file_fwrite(&(spell_ui_maintained_spell_buttons[index].mt_id), sizeof(spell_ui_maintained_spell_buttons[index].mt_id), 1, stream) != 1) return false;
+        if (tig_file_fwrite(&(spell_ui_maintained_spell_buttons[index].state), sizeof(spell_ui_maintained_spell_buttons[index].state), 1, stream) != 1) return false;
     }
 
     return true;
@@ -86,11 +87,11 @@ bool spell_ui_load(GameLoadInfo* load_info)
     int index;
 
     for (index = 0; index < FIVE; index++) {
-        if (tig_file_fread(&(stru_5CB3A8[index].mt_id), sizeof(stru_5CB3A8[index].mt_id), 1, load_info->stream) != 1) return false;
-        if (tig_file_fread(&(stru_5CB3A8[index].field_4), sizeof(stru_5CB3A8[index].field_4), 1, load_info->stream) != 1) return false;
+        if (tig_file_fread(&(spell_ui_maintained_spell_buttons[index].mt_id), sizeof(spell_ui_maintained_spell_buttons[index].mt_id), 1, load_info->stream) != 1) return false;
+        if (tig_file_fread(&(spell_ui_maintained_spell_buttons[index].state), sizeof(spell_ui_maintained_spell_buttons[index].state), 1, load_info->stream) != 1) return false;
 
-        if (stru_5CB3A8[index].field_4) {
-            intgame_spell_maintain_art_set(index, sub_458AE0(stru_5CB3A8[index].mt_id));
+        if (spell_ui_maintained_spell_buttons[index].state) {
+            intgame_spell_maintain_art_set(index, magictech_run_spell_icon_get(spell_ui_maintained_spell_buttons[index].mt_id));
         }
     }
 
@@ -123,33 +124,33 @@ SpellUiActivate spell_ui_activate(int64_t obj, int spl)
         return SPELL_UI_ACTIVATE_ERR;
     }
 
-    dword_683508 = true;
+    spell_ui_activation_in_progress = true;
 
     if (obj_type_is_item(obj_field_int32_get(obj, OBJ_F_TYPE))) {
-        if (!item_parent(obj, &qword_683500)) {
+        if (!item_parent(obj, &spell_ui_caster_obj)) {
             return SPELL_UI_ACTIVATE_ERR;
         }
     } else {
-        qword_683500 = obj;
+        spell_ui_caster_obj = obj;
     }
 
-    if (qword_683500 == OBJ_HANDLE_NULL) {
+    if (spell_ui_caster_obj == OBJ_HANDLE_NULL) {
         return SPELL_UI_ACTIVATE_ERR;
     }
 
-    if (!player_is_pc_obj(qword_683500)) {
+    if (!player_is_pc_obj(spell_ui_caster_obj)) {
         return SPELL_UI_ACTIVATE_ERR;
     }
 
-    if ((obj_field_int32_get(qword_683500, OBJ_F_FLAGS) & OF_OFF) != 0) {
+    if ((obj_field_int32_get(spell_ui_caster_obj, OBJ_F_FLAGS) & OF_OFF) != 0) {
         return SPELL_UI_ACTIVATE_ERR;
     }
 
-    if (critter_is_dead(qword_683500)) {
+    if (critter_is_dead(spell_ui_caster_obj)) {
         return SPELL_UI_ACTIVATE_ERR;
     }
 
-    if (critter_is_unconscious(qword_683500)) {
+    if (critter_is_unconscious(spell_ui_caster_obj)) {
         return SPELL_UI_ACTIVATE_ERR;
     }
 
@@ -158,17 +159,17 @@ SpellUiActivate spell_ui_activate(int64_t obj, int spl)
     }
 
     if (!magictech_is_enabled(spl)) {
-        dword_683508 = false;
+        spell_ui_activation_in_progress = false;
         return SPELL_UI_ACTIVATE_ERR;
     }
 
-    dword_5CB3A0 = spl;
-    qword_6834F8 = obj;
+    spell_ui_selected_spell = spl;
+    spell_ui_source_obj = obj;
 
-    sub_459F20(spl, &tgt_ptr);
+    magictech_target_flags_pointer_get(spl, &tgt_ptr);
     tgt = *tgt_ptr;
 
-    if (magictech_is_aggressive(dword_5CB3A0)
+    if (magictech_is_aggressive(spell_ui_selected_spell)
         && !tig_kb_get_modifier(SDL_KMOD_ALT)) {
         tgt |= TGT_NON_PARTY_CRITTERS;
     }
@@ -182,11 +183,11 @@ SpellUiActivate spell_ui_activate(int64_t obj, int spl)
         if (inven_ui_is_created()) {
             v1 = true;
         } else {
-            inven_ui_open(qword_6834F8, OBJ_HANDLE_NULL, INVEN_UI_MODE_INVENTORY);
+            inven_ui_open(spell_ui_source_obj, OBJ_HANDLE_NULL, INVEN_UI_MODE_INVENTORY);
         }
     } else {
         if (!intgame_mode_set(INTGAME_MODE_MAIN)) {
-            dword_683508 = false;
+            spell_ui_activation_in_progress = false;
             return SPELL_UI_ACTIVATE_ERR;
         }
     }
@@ -196,14 +197,14 @@ SpellUiActivate spell_ui_activate(int64_t obj, int spl)
         || ((*tgt_ptr & TGT_SELF) != 0
             && (*tgt_ptr & TGT_TILE) == 0)
         || *tgt_ptr == TGT_OBJ_RADIUS) {
-        target_descriptor_set_loc(&td, obj_field_int64_get(qword_683500, OBJ_F_LOCATION));
+        target_descriptor_set_loc(&td, obj_field_int64_get(spell_ui_caster_obj, OBJ_F_LOCATION));
         spell_ui_apply(&td);
-        dword_683508 = false;
+        spell_ui_activation_in_progress = false;
         return SPELL_UI_ACTIVATE_ERR;
     }
 
-    if (!combat_check_cast_spell(qword_683500)) {
-        dword_683508 = false;
+    if (!combat_check_cast_spell(spell_ui_caster_obj)) {
+        spell_ui_activation_in_progress = false;
         return false;
     }
 
@@ -216,7 +217,7 @@ SpellUiActivate spell_ui_activate(int64_t obj, int spl)
             target_descriptor_set_obj(&td, player_get_local_pc_obj());
             if ((*tgt_ptr & TGT_OBJ_NO_SELF) == 0) {
                 spell_ui_apply(&td);
-                dword_683508 = false;
+                spell_ui_activation_in_progress = false;
                 return SPELL_UI_ACTIVATE_ERR;
             }
         }
@@ -224,11 +225,11 @@ SpellUiActivate spell_ui_activate(int64_t obj, int spl)
 
     if (v1) {
         if (!inven_ui_is_created()) {
-            inven_ui_open(qword_6834F8, OBJ_HANDLE_NULL, INVEN_UI_MODE_INVENTORY);
+            inven_ui_open(spell_ui_source_obj, OBJ_HANDLE_NULL, INVEN_UI_MODE_INVENTORY);
         }
     }
 
-    dword_683508 = false;
+    spell_ui_activation_in_progress = false;
     return SPELL_UI_ACTIVATE_OK;
 }
 
@@ -237,28 +238,28 @@ void spell_ui_cancel(void)
 {
     intgame_mode_set(INTGAME_MODE_MAIN);
 
-    if (!dword_683508) {
-        dword_5CB3A0 = 10000;
-        qword_6834F8 = OBJ_HANDLE_NULL;
-        qword_683500 = OBJ_HANDLE_NULL;
+    if (!spell_ui_activation_in_progress) {
+        spell_ui_selected_spell = 10000;
+        spell_ui_source_obj = OBJ_HANDLE_NULL;
+        spell_ui_caster_obj = OBJ_HANDLE_NULL;
     }
 }
 
 // 0x57C040
-void sub_57C040(int64_t obj, int index)
+void spell_ui_item_spell_activate(int64_t obj, int index)
 {
     int spl;
 
     spl = mt_item_spell(obj, index);
-    if (!sub_45A030(spl) && spl != -1) {
+    if (!magictech_has_item_triggers(spl) && spl != -1) {
         spell_ui_activate(obj, spl);
     }
 }
 
 // 0x57C080
-void sub_57C080(int64_t obj, int spl)
+void spell_ui_manual_spell_activate(int64_t obj, int spl)
 {
-    if (!sub_45A030(spl) && spl != -1) {
+    if (!magictech_has_item_triggers(spl) && spl != -1) {
         spell_ui_activate(obj, spl);
     }
 }
@@ -268,7 +269,7 @@ void spell_ui_aggressive_mode_off(void)
 {
     uint64_t tgt;
 
-    if (magictech_is_aggressive(dword_5CB3A0)) {
+    if (magictech_is_aggressive(spell_ui_selected_spell)) {
         tgt = target_flags_get();
         tgt &= ~TGT_NON_PARTY_CRITTERS;
         target_flags_set(tgt);
@@ -280,7 +281,7 @@ void spell_ui_aggressive_mode_on(void)
 {
     uint64_t tgt;
 
-    if (magictech_is_aggressive(dword_5CB3A0)) {
+    if (magictech_is_aggressive(spell_ui_selected_spell)) {
         tgt = target_flags_get();
         tgt |= TGT_NON_PARTY_CRITTERS;
         target_flags_set(tgt);
@@ -291,14 +292,14 @@ void spell_ui_aggressive_mode_on(void)
 bool spell_ui_cast_preview(int* fatigue, int* range)
 {
     if (intgame_mode_get() != INTGAME_MODE_SPELL
-        || dword_5CB3A0 < 0 || dword_5CB3A0 >= SPELL_COUNT
-        || qword_6834F8 == OBJ_HANDLE_NULL || qword_683500 == OBJ_HANDLE_NULL) {
+        || spell_ui_selected_spell < 0 || spell_ui_selected_spell >= SPELL_COUNT
+        || spell_ui_source_obj == OBJ_HANDLE_NULL || spell_ui_caster_obj == OBJ_HANDLE_NULL) {
         return false;
     }
     // Item casting spends item charges/mana rather than the caster's fatigue.
-    *fatigue = obj_type_is_critter(obj_field_int32_get(qword_6834F8, OBJ_F_TYPE))
-        ? spell_cast_cost(dword_5CB3A0, qword_683500) : -1;
-    *range = magictech_get_range(dword_5CB3A0);
+    *fatigue = obj_type_is_critter(obj_field_int32_get(spell_ui_source_obj, OBJ_F_TYPE))
+        ? spell_cast_cost(spell_ui_selected_spell, spell_ui_caster_obj) : -1;
+    *range = magictech_get_range(spell_ui_selected_spell);
     return true;
 }
 
@@ -308,13 +309,13 @@ void spell_ui_apply(TargetDescriptor* td)
     UiMessage ui_message;
     MagicTechInvocation mt_invocation;
 
-    if (critter_is_dead(qword_683500)
-        || critter_is_unconscious(qword_683500)) {
+    if (critter_is_dead(spell_ui_caster_obj)
+        || critter_is_unconscious(spell_ui_caster_obj)) {
         return;
     }
 
-    if (obj_type_is_critter(obj_field_int32_get(qword_6834F8, OBJ_F_TYPE))
-        && !magictech_can_charge_spell_fatigue(qword_683500, dword_5CB3A0)) {
+    if (obj_type_is_critter(obj_field_int32_get(spell_ui_source_obj, OBJ_F_TYPE))
+        && !magictech_can_charge_spell_fatigue(spell_ui_caster_obj, spell_ui_selected_spell)) {
         mes_file_entry.num = 600; // "Not enough Energy."
         magictech_get_msg(&mes_file_entry);
 
@@ -322,11 +323,11 @@ void spell_ui_apply(TargetDescriptor* td)
         return;
     }
 
-    magictech_invocation_init(&mt_invocation, qword_6834F8, dword_5CB3A0);
+    magictech_invocation_init(&mt_invocation, spell_ui_source_obj, spell_ui_selected_spell);
     if (td->is_loc) {
         mt_invocation.target_loc = td->loc;
     } else {
-        sub_4440E0(td->obj, &(mt_invocation.target_obj));
+        object_handle_reference_init(td->obj, &(mt_invocation.target_obj));
     }
 
     if (!magictech_check_los(&mt_invocation)) {
@@ -350,7 +351,7 @@ bool spell_ui_maintain_add(int mt_id)
     int cnt;
     int index;
 
-    if (!sub_459FF0(mt_id)) {
+    if (!magictech_run_has_valid_spell(mt_id)) {
         return false;
     }
 
@@ -358,11 +359,11 @@ bool spell_ui_maintain_add(int mt_id)
     cnt = stat_level_get(pc_obj, STAT_INTELLIGENCE) / 4;
 
     for (index = 0; index < cnt; index++) {
-        if (stru_5CB3A8[index].field_4 == 1 && stru_5CB3A8[index].mt_id == mt_id) {
+        if (spell_ui_maintained_spell_buttons[index].state == 1 && spell_ui_maintained_spell_buttons[index].mt_id == mt_id) {
             return true;
         }
 
-        if (stru_5CB3A8[index].mt_id == -1 && candidate == -1) {
+        if (spell_ui_maintained_spell_buttons[index].mt_id == -1 && candidate == -1) {
             candidate = index;
         }
     }
@@ -371,9 +372,9 @@ bool spell_ui_maintain_add(int mt_id)
         return false;
     }
 
-    stru_5CB3A8[candidate].mt_id = mt_id;
-    stru_5CB3A8[candidate].field_4 = 1;
-    intgame_spell_maintain_art_set(candidate, sub_458AE0(mt_id));
+    spell_ui_maintained_spell_buttons[candidate].mt_id = mt_id;
+    spell_ui_maintained_spell_buttons[candidate].state = 1;
+    intgame_spell_maintain_art_set(candidate, magictech_run_spell_icon_get(mt_id));
 
     return true;
 }
@@ -388,15 +389,15 @@ void spell_ui_maintain_end(int mt_id)
     }
 
     for (index = 0; index < FIVE; index++) {
-        if (stru_5CB3A8[index].mt_id == mt_id
-            && stru_5CB3A8[index].field_4 >= 1) {
+        if (spell_ui_maintained_spell_buttons[index].mt_id == mt_id
+            && spell_ui_maintained_spell_buttons[index].state >= 1) {
             break;
         }
     }
 
     if (index < FIVE) {
-        stru_5CB3A8[index].mt_id = -1;
-        stru_5CB3A8[index].field_4 = 0;
+        spell_ui_maintained_spell_buttons[index].mt_id = -1;
+        spell_ui_maintained_spell_buttons[index].state = 0;
         intgame_spell_maintain_art_set(index, TIG_ART_ID_INVALID);
     }
 }
@@ -405,17 +406,17 @@ void spell_ui_maintain_end(int mt_id)
 void spell_ui_maintain_click(int slot)
 {
 
-    if (stru_5CB3A8[slot].mt_id == -1) {
+    if (spell_ui_maintained_spell_buttons[slot].mt_id == -1) {
         return;
     }
 
-    if (stru_5CB3A8[slot].field_4 != 1) {
+    if (spell_ui_maintained_spell_buttons[slot].state != 1) {
         return;
     }
 
-    stru_5CB3A8[slot].field_4 = 2;
+    spell_ui_maintained_spell_buttons[slot].state = 2;
 
-    magictech_interrupt(stru_5CB3A8[slot].mt_id);
+    magictech_interrupt(spell_ui_maintained_spell_buttons[slot].mt_id);
 }
 
 // 0x57C3F0
@@ -427,11 +428,11 @@ void spell_ui_maintain_hover(int slot)
     // FIXME: Unused.
     player_get_local_pc_obj();
 
-    if (stru_5CB3A8[slot].field_4 != 1) {
+    if (spell_ui_maintained_spell_buttons[slot].state != 1) {
         return;
     }
 
-    if (!magictech_id_to_run_info(stru_5CB3A8[slot].mt_id, &run_info)) {
+    if (!magictech_id_to_run_info(spell_ui_maintained_spell_buttons[slot].mt_id, &run_info)) {
         return;
     }
 
@@ -453,13 +454,13 @@ void spell_ui_maintain_hover(int slot)
 }
 
 // 0x57C470
-void sub_57C470(void)
+void spell_ui_maintenance_bar_reset(void)
 {
     int index;
 
     for (index = 0; index < FIVE; index++) {
-        stru_5CB3A8[index].mt_id = -1;
-        stru_5CB3A8[index].field_4 = 0;
+        spell_ui_maintained_spell_buttons[index].mt_id = -1;
+        spell_ui_maintained_spell_buttons[index].state = 0;
         intgame_spell_maintain_art_set(index, TIG_ART_ID_INVALID);
     }
 
@@ -497,7 +498,7 @@ void spell_ui_maintain_refresh(void)
 // 0x57C520
 bool spell_ui_maintain_has(int slot)
 {
-    return stru_5CB3A8[slot].field_4 != 0;
+    return spell_ui_maintained_spell_buttons[slot].state != 0;
 }
 
 // 0x57C540
@@ -530,6 +531,7 @@ void spell_ui_add(int64_t obj, int spell)
     }
 
     stat_base_set(obj, STAT_UNSPENT_POINTS, unspent_points - cost);
+    activity_time_record(obj, ACTIVITY_TIME_SPELL_POINTS, cost);
     if (charedit_is_created()) {
         charedit_refresh();
         intgame_message_window_clear();
@@ -547,6 +549,7 @@ void spell_ui_remove(int64_t obj, int spell)
     if (spell_remove(obj, spell)) {
         hotkey_ui_notify_spell_removed(spell);
         stat_base_set(obj, STAT_UNSPENT_POINTS, unspent_points + cost);
+        activity_time_record(obj, ACTIVITY_TIME_SPELL_POINTS, -cost);
 
         if (charedit_is_created()) {
             charedit_refresh();

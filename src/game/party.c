@@ -9,9 +9,9 @@
 
 #define PARTY_TABLE_SIZE 8
 
-static int sub_4BA260(void);
+static int party_unused_id_find(void);
 static bool party_update(void);
-static void sub_4BA320(int64_t a1, int64_t a2, int a3);
+static void party_join_feedback_schedule(int64_t a1, int64_t a2, int a3);
 
 // 0x5FC32C
 static int dword_5FC32C[PARTY_TABLE_SIZE];
@@ -108,7 +108,7 @@ int64_t party_find_first(int64_t obj, int* index_ptr)
 
     for (*index_ptr = 0; *index_ptr < PARTY_TABLE_SIZE; (*index_ptr)++) {
         if (dword_5FC32C[*index_ptr] == dword_5FC32C[index]) {
-            return sub_4A2B60(*index_ptr);
+            return multiplayer_active_player_object_get(*index_ptr);
         }
     }
 
@@ -136,7 +136,7 @@ int64_t party_find_next(int* index_ptr)
 
     while (*index_ptr < PARTY_TABLE_SIZE) {
         if (dword_5FC32C[*index_ptr] == dword_5FC32C[index]) {
-            return sub_4A2B60(*index_ptr);
+            return multiplayer_active_player_object_get(*index_ptr);
         }
         (*index_ptr)++;
     }
@@ -176,23 +176,23 @@ bool party_add(int64_t leader_obj, int64_t target_obj, int* id_ptr)
     if (tig_net_is_active()) {
         player1 = multiplayer_find_slot_from_obj(leader_obj);
         if (player1 == -1) {
-            sub_4BA320(leader_obj, target_obj, 1);
+            party_join_feedback_schedule(leader_obj, target_obj, 1);
             return false;
         }
 
         player2 = multiplayer_find_slot_from_obj(target_obj);
         if (player2 == -1) {
-            sub_4BA320(leader_obj, target_obj, 1);
+            party_join_feedback_schedule(leader_obj, target_obj, 1);
             return false;
         }
 
         if (dword_5FC32C[player2] != -1) {
-            sub_4BA320(leader_obj, target_obj, 3);
+            party_join_feedback_schedule(leader_obj, target_obj, 3);
             return false;
         }
 
         if (dword_5FC32C[player1] == -1) {
-            dword_5FC32C[player1] = sub_4BA260();
+            dword_5FC32C[player1] = party_unused_id_find();
         }
 
         dword_5FC32C[player2] = dword_5FC32C[player1];
@@ -201,8 +201,8 @@ bool party_add(int64_t leader_obj, int64_t target_obj, int* id_ptr)
             *id_ptr = dword_5FC32C[player2];
         }
 
-        sub_4BA320(leader_obj, target_obj, 0);
-        sub_460AB0(115, 0, NULL);
+        party_join_feedback_schedule(leader_obj, target_obj, 0);
+        ui_optional_event_dispatch(115, 0, NULL);
         party_update();
 
         party_member_obj = party_find_first(leader_obj, &iter);
@@ -228,18 +228,18 @@ bool party_remove(int64_t obj)
     if (tig_net_is_active()) {
         index = multiplayer_find_slot_from_obj(obj);
         if (index == -1) {
-            sub_4BA320(obj, obj, 5);
+            party_join_feedback_schedule(obj, obj, 5);
             return false;
         }
 
         if (dword_5FC32C[index] == -1) {
-            sub_4BA320(obj, obj, 6);
+            party_join_feedback_schedule(obj, obj, 6);
             return false;
         }
 
         dword_5FC32C[index] = -1;
-        sub_4BA320(obj, obj, 6);
-        sub_460AB0(115, 0, NULL);
+        party_join_feedback_schedule(obj, obj, 6);
+        ui_optional_event_dispatch(115, 0, NULL);
         party_update();
     }
 
@@ -247,7 +247,7 @@ bool party_remove(int64_t obj)
 }
 
 // 0x4BA260
-int sub_4BA260(void)
+int party_unused_id_find(void)
 {
     int index;
 
@@ -277,7 +277,7 @@ bool party_update(void)
 }
 
 // 0x4BA2E0
-bool sub_4BA2E0(int* party, int cnt)
+bool party_membership_table_apply(int* party, int cnt)
 {
     if (!tig_net_is_active()
         || tig_net_is_host()) {
@@ -285,13 +285,13 @@ bool sub_4BA2E0(int* party, int cnt)
     }
 
     memcpy(dword_5FC32C, party, sizeof(*party) * cnt);
-    sub_460AB0(115, 0, NULL);
+    ui_optional_event_dispatch(115, 0, NULL);
 
     return true;
 }
 
 // 0x4BA320
-void sub_4BA320(int64_t a1, int64_t a2, int a3)
+void party_join_feedback_schedule(int64_t a1, int64_t a2, int a3)
 {
     TimeEvent timeevent;
     DateTime datetime;

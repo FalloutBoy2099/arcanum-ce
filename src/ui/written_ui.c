@@ -449,7 +449,7 @@ void written_ui_start_obj(int64_t written_obj, int64_t pc_obj)
     } else {
         // Determine if the newspaper is "The Vendigroth Times" (affects
         // background).
-        written_ui_is_vendigroth_times = sub_49B290(written_obj) == BP_VENDIGROTH_NEWSPAPER;
+        written_ui_is_vendigroth_times = proto_number_from_instance(written_obj) == BP_VENDIGROTH_NEWSPAPER;
 
         // Proceed to starting the written UI.
         mp_ui_written_start_type(pc_obj, subtype, start);

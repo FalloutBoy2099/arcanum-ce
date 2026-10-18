@@ -24,7 +24,7 @@ bool map_new(MapNewInfo* new_map_info);
 bool map_open(const char* base_path, const char* save_path, bool a3);
 bool map_open_in_game(int map, bool a2, bool a3);
 void map_precache_sectors(int64_t loc);
-void sub_40FED0(void);
+void map_game_entry_hook_stub(void);
 bool map_get_name(int map, char** name);
 int map_current_map(void);
 int map_by_type(int map_type);

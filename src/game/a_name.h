@@ -16,15 +16,15 @@ typedef enum TileSoundType {
 bool a_name_tile_init(void);
 void a_name_tile_exit(void);
 bool a_name_tile_aid_to_fname(tig_art_id_t aid, char* fname, size_t maxlen);
-bool sub_4EBA30(tig_art_id_t a, tig_art_id_t b);
+bool a_name_tile_transition_uses_endpoint(tig_art_id_t a, tig_art_id_t b);
 bool a_name_tile_is_blocking(tig_art_id_t aid);
 bool a_name_tile_is_sinkable(tig_art_id_t aid);
 bool a_name_tile_is_slippery(tig_art_id_t aid);
 bool a_name_tile_is_natural(tig_art_id_t aid);
 bool a_name_tile_is_soundproof(tig_art_id_t aid);
 int a_name_tile_sound(tig_art_id_t aid);
-void sub_4EBC40(void);
-int sub_4EBEF0(int a1, int a2, int a3, int a4, int a5, int a6);
+void a_name_tile_variant_counts_init(void);
+int a_name_tile_variant_count_get(int a1, int a2, int a3, int a4, int a5, int a6);
 bool a_name_item_init(void);
 void a_name_item_exit(void);
 bool a_name_item_aid_to_fname(tig_art_id_t aid, char* fname, size_t maxlen);

@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #define BENCHMARK_AUTORUN_KEY "benchmark_autorun"
+#define BENCHMARK_SCENARIO_VERSION 2
 
 typedef enum BenchmarkAction {
     BENCHMARK_WARMUP,
@@ -43,5 +44,7 @@ bool benchmark_run_enter(BenchmarkRun* run);
 // False ready at the maximum frame count marks failure, never success.
 bool benchmark_run_advance(BenchmarkRun* run, bool ready);
 bool benchmark_route_find(int64_t pc, int64_t route[4]);
+// Localization ID for a final/preflight status; zero means no visible notice.
+int benchmark_notice_id(const char* status);
 
 #endif

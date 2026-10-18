@@ -936,7 +936,7 @@ bool sector_lock(int64_t id, Sector** sector_ptr)
         datetime = qword_5B7CD0;
         for (unsigned int j = 0; j < sector_history_size; j++) {
             if (sector_history_entries[j].id == id) {
-                datetime = sub_45A7D0(&(sector_history_entries[j].datetime));
+                datetime = game_time_difference(&(sector_history_entries[j].datetime));
                 memmove(&(sector_history_entries[j]),
                     &(sector_history_entries[j + 1]),
                     sizeof(*sector_history_entries) * (sector_history_size - j - 1));
@@ -1192,7 +1192,7 @@ bool sector_history_save(TigFile* stream)
                 }
 
                 sector_history_entries[sector_history_size].id = cache_entry->sector.id;
-                sector_history_entries[sector_history_size].datetime = sub_45A7C0();
+                sector_history_entries[sector_history_size].datetime = game_time_get();
                 sector_history_size++;
             }
         }
@@ -1288,7 +1288,7 @@ void sector_cache_evict(Sector* sector)
         }
 
         sector_history_entries[sector_history_size].id = sector->id;
-        sector_history_entries[sector_history_size].datetime = sub_45A7C0();
+        sector_history_entries[sector_history_size].datetime = game_time_get();
         sector_history_size++;
     }
 
@@ -1440,7 +1440,7 @@ bool sector_load_editor(int64_t id, Sector* sector)
     }
 
     sector_validate_editor("sector post-load (pre-fold)");
-    objlist_fold(&(sector->objects), id, sub_45A9B0(&(sector->datetime), 3000));
+    objlist_fold(&(sector->objects), id, datetime_is_at_least_milliseconds(&(sector->datetime), 3000));
     sector_light_list_fold(&(sector->lights), id, &(sector->tiles));
     sector_validate_editor("sector post-fold");
 
@@ -1678,7 +1678,7 @@ bool sector_load_game(int64_t id, Sector* sector)
 
     sector_validate_game("sector post-load (pre-fold)");
     li_update();
-    objlist_fold(&(sector->objects), id, sub_45A9B0(&(sector->datetime), 3000));
+    objlist_fold(&(sector->objects), id, datetime_is_at_least_milliseconds(&(sector->datetime), 3000));
     li_update();
     sector_light_list_fold(&(sector->lights), id, &(sector->tiles));
     sector_validate_game("sector post-fold");

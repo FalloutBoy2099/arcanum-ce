@@ -78,7 +78,7 @@ void reference_object_list_location(int64_t loc, unsigned int flags, ObjectList*
 
         if (obj_find_walk_first(sector_id, &obj, &iter)) {
             do {
-                if (!sub_43D940(obj)
+                if (!object_type_is_sector_static(obj)
                     && (obj_field_int32_get(obj, OBJ_F_FLAGS) & OF_INVENTORY) == 0
                     && obj_field_int64_get(obj, OBJ_F_LOCATION) == loc
                     && (reference_excluded_flags & obj_field_int32_get(obj, OBJ_F_FLAGS)) == 0

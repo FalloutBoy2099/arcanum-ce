@@ -59,24 +59,24 @@
 #define OBJ_TRAVERSAL_SOUND 0x20u
 
 // TODO: Better name.
-typedef struct Ryan {
+typedef struct ObjectReference {
     /* 0000 */ ObjectID objid;
     /* 0018 */ int64_t location;
     /* 0020 */ int map;
     /* 0024 */ int padding_24;
-} Ryan;
+} ObjectReference;
 
 // Serializeable.
-static_assert(sizeof(Ryan) == 0x28, "wrong size");
+static_assert(sizeof(ObjectReference) == 0x28, "wrong size");
 
 // TODO: Better name.
-typedef struct FollowerInfo {
+typedef struct ObjectHandleReference {
     /* 0000 */ int64_t obj;
-    /* 0008 */ Ryan field_8;
-} FollowerInfo;
+    /* 0008 */ ObjectReference reference;
+} ObjectHandleReference;
 
 // Serializeable.
-static_assert(sizeof(FollowerInfo) == 0x30, "wrong size");
+static_assert(sizeof(ObjectHandleReference) == 0x30, "wrong size");
 
 typedef struct ObjectList {
     /* 0000 */ int num_sectors;
@@ -90,7 +90,7 @@ extern bool dword_5E2E94;
 extern tig_art_id_t object_hover_underlay_art_id;
 extern tig_color_t object_hover_color;
 extern tig_art_id_t object_hover_overlay_art_id;
-extern Ryan stru_5E2F60;
+extern ObjectReference stru_5E2F60;
 extern int64_t object_hover_obj;
 
 bool object_init(GameInitInfo* init_info);
@@ -106,7 +106,7 @@ void object_type_toggle(int obj_type);
 void object_draw(GameDrawInfo* draw_info);
 void object_hover_obj_set(int64_t obj);
 int64_t object_hover_obj_get(void);
-void sub_43C690(GameDrawInfo* draw_info);
+void object_hover_overlay_draw(GameDrawInfo* draw_info);
 void object_invalidate_rect(TigRect* rect);
 void object_flush(void);
 bool object_create(int64_t proto_obj, int64_t loc, int64_t* obj_ptr);
@@ -114,7 +114,7 @@ bool object_create_ex(int64_t proto_obj, int64_t loc, ObjectID oid, int64_t* obj
 bool object_duplicate(int64_t proto_obj, int64_t loc, int64_t* obj_ptr);
 bool object_duplicate_ex(int64_t proto_obj, int64_t loc, ObjectID* oids, int64_t* obj_ptr);
 void object_destroy(int64_t obj);
-void sub_43CF70(int64_t obj);
+void object_sector_remove(int64_t obj);
 void object_delete(int64_t obj);
 void object_flags_set(int64_t obj, unsigned int flags);
 void object_flags_unset(int64_t obj, unsigned int flags);
@@ -128,11 +128,11 @@ int object_hp_max(int64_t obj);
 int object_hp_current(int64_t obj);
 int object_get_resistance(int64_t obj, int resistance_type, bool a2);
 int object_get_ac(int64_t obj, bool a2);
-bool sub_43D940(int64_t obj);
+bool object_type_is_sector_static(int64_t obj);
 bool object_is_static(int64_t obj);
-bool sub_43D9F0(int x, int y, int64_t* obj_ptr, unsigned int flags);
+bool object_pick_at_screen_xy(int x, int y, int64_t* obj_ptr, unsigned int flags);
 void object_get_rect(int64_t obj, unsigned int flags, TigRect* rect);
-void sub_43E770(int64_t obj, int64_t loc, int offset_x, int offset_y);
+void object_move_to_location(int64_t obj, int64_t loc, int offset_x, int offset_y);
 bool object_teleported_timeevent_process(TimeEvent* timeevent);
 void object_set_offset(int64_t obj, int offset_x, int offset_y);
 void object_set_current_aid(int64_t obj, tig_art_id_t aid);
@@ -143,11 +143,11 @@ void object_set_overlay_light(int64_t obj, int index, unsigned int flags, tig_ar
 void object_set_blit_scale(int64_t obj, int value);
 void object_add_flags(int64_t obj, unsigned int flags);
 void object_remove_flags(int64_t obj, unsigned int flags);
-void sub_43F030(int64_t obj);
+void object_render_cache_invalidate(int64_t obj);
 void object_cycle_palette(int64_t obj);
 void object_bust(int64_t obj, int64_t triggerer_obj);
 bool object_is_busted(int64_t obj);
-void sub_43F710(int64_t obj);
+void object_scenery_animation_refresh(int64_t obj);
 void object_inc_current_aid(int64_t obj);
 void object_dec_current_aid(int64_t obj);
 void object_eye_candy_aid_inc(int64_t obj, int fld, int index);
@@ -184,24 +184,24 @@ bool object_locked_get(int64_t obj);
 bool object_locked_set(int64_t obj, bool locked);
 bool object_lock_timeevent_process(TimeEvent* timeevent);
 bool object_jammed_set(int64_t obj, bool jammed);
-void sub_441FC0(int64_t obj, int a2);
+void object_npc_ai_schedule_immediate(int64_t obj, int a2);
 void object_blit_flags_set(unsigned int flags);
 int object_blit_flags_get(void);
-void sub_442050(uint8_t** data_ptr, int* size_ptr, int64_t obj);
-bool sub_4420D0(uint8_t* data, int64_t* obj_ptr, int64_t loc);
-void sub_442520(int64_t obj);
-void sub_443770(int64_t obj);
-bool sub_4437E0(TigRect* rect);
-bool object_save_obj_handle_safe(int64_t* obj_ptr, Ryan* a2, TigFile* stream);
-bool object_load_obj_handle_safe(int64_t* obj_ptr, Ryan* a2, TigFile* stream);
-void sub_443EB0(int64_t obj, Ryan* a2);
-bool sub_443F80(int64_t* obj_ptr, Ryan* a2);
-bool sub_444020(int64_t* obj_ptr, Ryan* a2);
-void sub_4440E0(int64_t obj, FollowerInfo* a2);
-bool sub_444110(FollowerInfo* a1);
-bool sub_444130(FollowerInfo* a1);
+void object_serialize_to_memory(uint8_t** data_ptr, int* size_ptr, int64_t obj);
+bool object_deserialize_at_location(uint8_t* data, int64_t* obj_ptr, int64_t loc);
+void object_lighting_render_cache_refresh(int64_t obj);
+void object_render_resources_clear(int64_t obj);
+bool object_hover_rect_get(TigRect* rect);
+bool object_save_obj_handle_safe(int64_t* obj_ptr, ObjectReference* reference, TigFile* stream);
+bool object_load_obj_handle_safe(int64_t* obj_ptr, ObjectReference* reference, TigFile* stream);
+void object_reference_init(int64_t obj, ObjectReference* reference);
+bool object_reference_resolve(int64_t* obj_ptr, ObjectReference* reference);
+bool object_handle_recover_if_stale(int64_t* obj_ptr, ObjectReference* reference);
+void object_handle_reference_init(int64_t obj, ObjectHandleReference* handle_reference);
+bool object_handle_reference_resolve(ObjectHandleReference* handle_reference);
+bool object_handle_reference_recover_if_stale(ObjectHandleReference* handle_reference);
 int64_t get_fire_at_location(int64_t loc);
-void sub_4445A0(int64_t a1, int64_t a2);
+void object_pull_adjacent_to_source(int64_t a1, int64_t a2);
 
 void object_highlight_mode_set(bool enabled);
 

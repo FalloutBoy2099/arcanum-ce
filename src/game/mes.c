@@ -110,6 +110,8 @@ static LocalizedCatalog localized_catalogs[] = {
     { "language_names", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
     { "worldmap", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
     { "follower_ui", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
+    { "item_compare_ui", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
+    { "benchmark_ui", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
 };
 
 static const char* mes_localized_lookup(const char* name, int id, bool fallback_only)

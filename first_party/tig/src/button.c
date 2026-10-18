@@ -34,8 +34,8 @@ static int tig_button_handle_to_index(tig_button_handle_t button_handle);
 static tig_button_handle_t tig_button_index_to_handle(int index);
 static void tig_button_play_sound(tig_button_handle_t button_handle, int event);
 static tig_button_handle_t tig_button_radio_group_get_selected(int group);
-static void sub_5387B0(int group);
-static void sub_5387D0(void);
+static void tig_button_radio_group_clear_selection(int group);
+static void tig_button_clear_mouse_tracking(void);
 
 // 0x5C26F8
 static tig_button_handle_t tig_button_pressed_button_handle = TIG_BUTTON_HANDLE_INVALID;
@@ -176,7 +176,7 @@ int tig_button_destroy(tig_button_handle_t button_handle)
     }
 
     if (tig_button_pressed_button_handle == button_handle || tig_button_hovered_button_handle == button_handle) {
-        sub_5387D0();
+        tig_button_clear_mouse_tracking();
     }
 
     tig_window_invalidate_rect(&(buttons[button_index].rect));
@@ -345,7 +345,7 @@ void tig_button_state_change(tig_button_handle_t button_handle, TigButtonState s
             if (state == 0) {
                 in_state_change = true;
                 if ((buttons[button_index].usage & TIG_BUTTON_USAGE_RADIO) != 0) {
-                    sub_5387B0(buttons[button_index].group);
+                    tig_button_radio_group_clear_selection(buttons[button_index].group);
                 }
                 in_state_change = false;
             }
@@ -424,7 +424,7 @@ tig_button_handle_t tig_button_get_at_position(int x, int y)
                 return window_buttons[index];
             }
 
-            if (sub_502E50(btn->art_id, x - btn->rect.x, y - btn->rect.y, &color) == TIG_OK
+            if (tig_art_pixel_color_get(btn->art_id, x - btn->rect.x, y - btn->rect.y, &color) == TIG_OK
                 && tig_art_anim_data(btn->art_id, &art_anim_data) == TIG_OK
                 && color != art_anim_data.color_key) {
                 return window_buttons[index];
@@ -513,7 +513,7 @@ bool tig_button_process_mouse_msg(TigMouseMessageData* mouse)
                 }
 
                 if ((buttons[button_index].usage & TIG_BUTTON_USAGE_RADIO) != 0) {
-                    sub_5387B0(buttons[button_index].group);
+                    tig_button_radio_group_clear_selection(buttons[button_index].group);
                 }
 
                 new_state = buttons[button_index].state == TIG_BUTTON_STATE_PRESSED
@@ -695,8 +695,9 @@ int tig_button_radio_group_create(int count, tig_button_handle_t* button_handles
     return TIG_OK;
 }
 
+// Returns the selected radio button in the supplied button's group.
 // 0x538730
-tig_button_handle_t sub_538730(tig_button_handle_t button_handle)
+tig_button_handle_t tig_button_radio_selected_peer_get(tig_button_handle_t button_handle)
 {
     int button_index = tig_button_handle_to_index(button_handle);
     return tig_button_radio_group_get_selected(buttons[button_index].group);
@@ -721,8 +722,9 @@ tig_button_handle_t tig_button_radio_group_get_selected(int group)
     return TIG_BUTTON_HANDLE_INVALID;
 }
 
+// Releases the selected button, leaving the radio group without a selection.
 // 0x5387B0
-void sub_5387B0(int group)
+void tig_button_radio_group_clear_selection(int group)
 {
     tig_button_handle_t button_handle = tig_button_radio_group_get_selected(group);
     if (button_handle != TIG_BUTTON_HANDLE_INVALID) {
@@ -730,8 +732,9 @@ void sub_5387B0(int group)
     }
 }
 
+// Clears cached pressed/hovered handles without changing button states.
 // 0x5387D0
-void sub_5387D0(void)
+void tig_button_clear_mouse_tracking(void)
 {
     tig_button_pressed_button_handle = TIG_BUTTON_HANDLE_INVALID;
     tig_button_hovered_button_handle = TIG_BUTTON_HANDLE_INVALID;

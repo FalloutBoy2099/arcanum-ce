@@ -96,7 +96,7 @@ int tig_window_button_destroy(tig_window_handle_t window_handle);
 int tig_window_message_filter_set(tig_window_handle_t window_handle, TigWindowMessageFilterFunc func);
 int tig_window_data(tig_window_handle_t window_handle, TigWindowData* window_data);
 int tig_window_display(void);
-void sub_51D050(TigRect* src_rect, TigVideoBuffer* dst_video_buffer, int dx, int dy, int top_window_index);
+void tig_window_region_composite(TigRect* src_rect, TigVideoBuffer* dst_video_buffer, int dx, int dy, int top_window_index);
 int tig_window_fill(tig_window_handle_t window_handle, TigRect* rect, tig_color_t color);
 int tig_window_line(tig_window_handle_t window_handle, TigLine* line, tig_color_t color);
 int tig_window_box(tig_window_handle_t window_handle, TigRect* rect, tig_color_t color);
@@ -117,7 +117,7 @@ int tig_window_button_remove(tig_window_handle_t window_handle, tig_button_handl
 int tig_window_button_list(tig_window_handle_t window_handle, tig_button_handle_t** buttons);
 int tig_window_get_at_position(int x, int y, tig_window_handle_t* window_handle_ptr);
 bool tig_window_filter_message(TigMessage* msg);
-int sub_51E850(tig_window_handle_t window_handle);
+int tig_window_restack(tig_window_handle_t window_handle);
 int tig_window_move_on_top(tig_window_handle_t window_handle);
 int tig_window_show(tig_window_handle_t window_handle);
 int tig_window_hide(tig_window_handle_t window_handle);

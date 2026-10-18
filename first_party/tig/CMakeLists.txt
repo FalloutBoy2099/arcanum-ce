@@ -1,6 +1,7 @@
 # Keep alphabetically sorted.
 set(HDRS
     "include/tig/art.h"
+    "include/tig/art_decode.h"
     "include/tig/bmp.h"
     "include/tig/bsearch.h"
     "include/tig/button.h"
@@ -25,6 +26,7 @@ set(HDRS
     "include/tig/palette.h"
     "include/tig/performance.h"
     "include/tig/rect.h"
+    "include/tig/scale_region.h"
     "include/tig/sound.h"
     "include/tig/str_parse.h"
     "include/tig/text_cache.h"
@@ -38,6 +40,7 @@ set(HDRS
 # Keep alphabetically sorted.
 set(SRCS
     "src/art.c"
+    "src/art_decode.c"
     "src/bmp.c"
     "src/bsearch.c"
     "src/button.c"
@@ -62,6 +65,7 @@ set(SRCS
     "src/palette.c"
     "src/performance.c"
     "src/rect.c"
+    "src/scale_region.c"
     "src/sound.c"
     "src/str_parse.c"
     "src/text_cache.c"

@@ -627,8 +627,8 @@ void critter_kill(int64_t obj)
         return;
     }
 
-    sub_4B2210(OBJ_HANDLE_NULL, obj, &combat);
-    combat.dam_flags |= CDF_DEATH;
+    combat_context_init(OBJ_HANDLE_NULL, obj, &combat);
+    combat.dam_flags |= COMBAT_DAMAGE_DEATH;
     combat_dmg(&combat);
 
     object_hp_damage_set(obj, 32000);
@@ -645,7 +645,7 @@ void critter_kill(int64_t obj)
         }
         object_set_current_aid(obj, art_id);
         object_flags_set(obj, OF_FLAT | OF_NO_BLOCK);
-        sub_432D90(obj);
+        anim_blood_pool_create(obj);
     }
 }
 
@@ -678,7 +678,7 @@ void critter_notify_killed(int64_t victim_obj, int64_t killer_obj, int anim)
 
     combat_critter_deactivate_combat_mode(victim_obj);
     obj_field_int32_set(victim_obj, OBJ_F_CRITTER_DEATH_TIME, datetime_current_second());
-    sub_459740(victim_obj);
+    magictech_object_removal_notify(victim_obj);
     combat_recalc_reaction(victim_obj);
 
     if (obj_field_int32_get(victim_obj, OBJ_F_TYPE) == OBJ_TYPE_NPC) {
@@ -703,7 +703,7 @@ void critter_notify_killed(int64_t victim_obj, int64_t killer_obj, int anim)
                 obj_field_int32_set(victim_obj, OBJ_F_NPC_EXPERIENCE_WORTH, 0);
 
                 // Adjust alignment.
-                sub_45DC90(pc_killer_obj, victim_obj, true);
+                critter_alignment_adjust_for_victim(pc_killer_obj, victim_obj, true);
 
                 // Record kill.
                 logbook_add_kill(pc_killer_obj, victim_obj);
@@ -730,7 +730,7 @@ void critter_notify_killed(int64_t victim_obj, int64_t killer_obj, int anim)
         monstergen_notify_killed(victim_obj);
     } else {
         // Move items from hotkey bar to inventory.
-        sub_467520(victim_obj);
+        item_multiplayer_hotkey_items_reinsert(victim_obj);
     }
 
     // Remove weapon from death animation.
@@ -761,7 +761,7 @@ void critter_notify_killed(int64_t victim_obj, int64_t killer_obj, int anim)
  *
  * 0x45DC90
  */
-void sub_45DC90(int64_t killer_obj, int64_t victim_obj, bool a3)
+void critter_alignment_adjust_for_victim(int64_t killer_obj, int64_t victim_obj, bool a3)
 {
     int64_t summoner_obj;
     int alignment1;
@@ -770,7 +770,7 @@ void sub_45DC90(int64_t killer_obj, int64_t victim_obj, bool a3)
     int v1;
     int alignment;
 
-    if (!sub_459040(victim_obj, OSF_SUMMONED, &summoner_obj) || summoner_obj != killer_obj) {
+    if (!magictech_spell_flag_caster_find(victim_obj, OSF_SUMMONED, &summoner_obj) || summoner_obj != killer_obj) {
         alignment2 = stat_level_get(victim_obj, STAT_ALIGNMENT);
         if (alignment2 < 0) {
             alignment1 = stat_level_get(killer_obj, STAT_ALIGNMENT);
@@ -949,7 +949,7 @@ bool critter_disband(int64_t obj, bool force)
             }
 
             // Mind-controlled critters cannot voluntarily leave their master.
-            if (sub_459040(obj, OSF_MIND_CONTROLLED, &v1)) {
+            if (magictech_spell_flag_caster_find(obj, OSF_MIND_CONTROLLED, &v1)) {
                 return false;
             }
         }
@@ -983,7 +983,7 @@ void critter_disband_internal(int64_t obj)
         return;
     }
 
-    sub_459EA0(obj);
+    magictech_tempus_fugit_and_familiar_flags_clear(obj);
 
     // Find and remove the critter from the leader's follower list.
     cnt = obj_arrayfield_length_get(leader_obj, OBJ_F_CRITTER_FOLLOWER_IDX);
@@ -1012,7 +1012,7 @@ void critter_disband_internal(int64_t obj)
     critter_leader_set(obj, OBJ_HANDLE_NULL);
 
     // Update animations.
-    sub_424070(obj, PRIORITY_5, false, true);
+    anim_object_interrupt_by_priority(obj, PRIORITY_5, false, true);
     anim_speed_recalc(obj);
 
     // Remove forced follower flag if present.
@@ -1035,7 +1035,7 @@ void critter_disband_internal(int64_t obj)
  *
  * 0x45E180
  */
-bool sub_45E180(int64_t obj)
+bool critter_leave_group(int64_t obj)
 {
     int type;
 
@@ -1181,7 +1181,7 @@ int critter_num_followers(int64_t obj, bool exclude_forced_followers)
  *
  * 0x45E460
  */
-int sub_45E460(int64_t critter_obj, bool exclude_forced_followers)
+int critter_count_followers_recursive(int64_t critter_obj, bool exclude_forced_followers)
 {
     int cnt;
     int all_followers_cnt;
@@ -1199,7 +1199,7 @@ int sub_45E460(int64_t critter_obj, bool exclude_forced_followers)
             && (obj_field_int32_get(follower_obj, OBJ_F_NPC_FLAGS) & ONF_FORCED_FOLLOWER) != 0) {
             cnt--;
         } else {
-            cnt += sub_45E460(follower_obj, exclude_forced_followers);
+            cnt += critter_count_followers_recursive(follower_obj, exclude_forced_followers);
         }
     }
 
@@ -1323,7 +1323,7 @@ bool critter_fatigue_timeevent_process(TimeEvent* timeevent)
     }
 
     // TODO: Figure out math.
-    v3 = sub_45A820(timeevent->params[2].integer_value) / 8 / 10;
+    v3 = game_time_seconds_elapsed_since(timeevent->params[2].integer_value) / 8 / 10;
     if (v3 < 1) {
         v3 = 1;
     }
@@ -1399,8 +1399,8 @@ bool critter_fatigue_timeevent_schedule(int64_t obj, int type, int delay)
     timeevent.type = TIMEEVENT_TYPE_FATIGUE;
     timeevent.params[0].integer_value = type;
     timeevent.params[1].object_value = obj;
-    timeevent.params[2].integer_value = sub_45A7F0();
-    sub_45A950(&datetime, delay);
+    timeevent.params[2].integer_value = game_time_seconds_get();
+    datetime_init(&datetime, delay);
     return timeevent_add_delay(&timeevent, &datetime);
 }
 
@@ -1472,7 +1472,7 @@ bool critter_resting_timeevent_process(TimeEvent* timeevent)
         return true;
     }
 
-    hours = sub_45A820(timeevent->params[1].integer_value) / 3600;
+    hours = game_time_seconds_elapsed_since(timeevent->params[1].integer_value) / 3600;
     if (hours < 1) {
         hours = 1;
     }
@@ -1520,8 +1520,8 @@ bool critter_resting_timeevent_schedule(int64_t obj)
     // Schedule the event.
     timeevent.type = TIMEEVENT_TYPE_RESTING;
     timeevent.params[0].object_value = obj;
-    timeevent.params[1].integer_value = sub_45A7F0();
-    sub_45A950(&datetime, 3600000);
+    timeevent.params[1].integer_value = game_time_seconds_get();
+    datetime_init(&datetime, 3600000);
     return timeevent_add_delay(&timeevent, &datetime);
 }
 
@@ -1546,7 +1546,7 @@ bool critter_decay_timeevent_process(TimeEvent* timeevent)
             return false;
         }
 
-        sub_463860(obj, true);
+        item_inventory_drop_or_destroy_summoned(obj, true);
     }
 
     object_destroy(obj);
@@ -1575,13 +1575,13 @@ bool critter_decay_timeevent_schedule(int64_t obj)
     // Schedule decay event.
     timeevent.type = TIMEEVENT_TYPE_DECAY_DEAD_BODIE;
     timeevent.params[0].object_value = obj;
-    timeevent.params[1].integer_value = sub_45A7F0();
+    timeevent.params[1].integer_value = game_time_seconds_get();
     if (obj_type_is_critter(type)) {
         // 1 day for critters.
-        sub_45A950(&datetime, 86400000);
+        datetime_init(&datetime, 86400000);
     } else {
         // 2 days for non-critters.
-        sub_45A950(&datetime, 172800000);
+        datetime_init(&datetime, 172800000);
     }
     return timeevent_add_delay(&timeevent, &datetime);
 }
@@ -1656,8 +1656,8 @@ bool critter_npc_combat_focus_wipe_schedule(int64_t npc_obj)
     // Schedule the event.
     timeevent.type = TIMEEVENT_TYPE_COMBAT_FOCUS_WIPE;
     timeevent.params[0].object_value = npc_obj;
-    timeevent.params[1].integer_value = sub_45A7F0();
-    sub_45A950(&datetime, 600000); // 10 minutes.
+    timeevent.params[1].integer_value = game_time_seconds_get();
+    datetime_init(&datetime, 600000); // 10 minutes.
 
     return timeevent_add_delay(&timeevent, &datetime);
 }
@@ -1708,7 +1708,7 @@ void critter_set_concealed_internal(int64_t obj, bool concealed)
     tig_art_id_t new_art_id;
     unsigned int flags;
 
-    sub_424070(obj, PRIORITY_5, false, false);
+    anim_object_interrupt_by_priority(obj, PRIORITY_5, false, false);
 
     // Update animation based on concealed state.
     art_id = obj_field_int32_get(obj, OBJ_F_CURRENT_AID);
@@ -1735,7 +1735,7 @@ void critter_set_concealed_internal(int64_t obj, bool concealed)
     // Apply new animation if active.
     if (critter_is_active(obj)) {
         object_set_current_aid(obj, new_art_id);
-        sub_43F030(obj);
+        object_render_cache_invalidate(obj);
     }
 
     // Trigger fidget animation if revealed in combat.
@@ -1863,7 +1863,7 @@ void critter_give_xp(int64_t obj, int xp_gain)
         stat_base_set(obj, STAT_EXPERIENCE_POINTS, xp);
 
         if (player_is_local_pc_obj(obj)) {
-            sub_4601C0();
+            ui_character_panels_refresh();
         }
     }
 }
@@ -1902,7 +1902,7 @@ bool critter_enter_bed(int64_t obj, int64_t bed)
     obj_location = obj_field_int64_get(obj, OBJ_F_LOCATION);
     if (bed_location == obj_location
         && location_in_dir(obj_location, 4, &location)) {
-        sub_43E770(obj, location, 0, 0);
+        object_move_to_location(obj, location, 0, 0);
     }
 
     return true;
@@ -2102,7 +2102,7 @@ int critter_teleport_map_get(int64_t obj)
 }
 
 // 0x45F710
-void sub_45F710(int64_t obj)
+void critter_teleport_map_refresh(int64_t obj)
 {
     critter_teleport_map_get(obj);
 }

@@ -58,7 +58,7 @@ typedef enum SchematicUiReadiness {
     SCHEMATIC_UI_READINESS_COUNT,
 } SchematicUiReadiness;
 
-static void sub_56D0D0(void);
+static void schematic_ui_view_state_reset(void);
 static void schematic_ui_create(void);
 static void schematic_ui_destroy(void);
 static bool schematic_ui_message_filter(TigMessage* msg);
@@ -464,7 +464,7 @@ bool schematic_ui_init(GameInitInfo* init_info)
     schematic_ui_initialized = true;
     schematic_ui_primary_obj = OBJ_HANDLE_NULL;
     schematic_ui_secondary_obj = OBJ_HANDLE_NULL;
-    sub_56D0D0();
+    schematic_ui_view_state_reset();
 
     return true;
 }
@@ -501,11 +501,11 @@ void schematic_ui_reset(void)
 {
     schematic_ui_primary_obj = OBJ_HANDLE_NULL;
     schematic_ui_secondary_obj = OBJ_HANDLE_NULL;
-    sub_56D0D0();
+    schematic_ui_view_state_reset();
 }
 
 // 0x56D0D0
-void sub_56D0D0(void)
+void schematic_ui_view_state_reset(void)
 {
     ui_search_bar_close(&schematic_ui_toolbar_window);
     ui_search_cache_clear(&schematic_ui_search_cache);
@@ -563,7 +563,7 @@ void schematic_ui_toggle(int64_t primary_obj, int64_t secondary_obj)
 
     // Reset state for NPCs.
     if (obj_field_int32_get(primary_obj, OBJ_F_TYPE) == OBJ_TYPE_NPC) {
-        sub_56D0D0();
+        schematic_ui_view_state_reset();
     }
 
     // Initialize number of known schematics. The number of found schematics is
@@ -857,7 +857,7 @@ bool schematic_ui_message_filter(TigMessage* msg)
             // Check mouse hover over "component 1" button.
             if (msg->data.button.button_handle == schematic_ui_component1_button) {
                 if (schematic_ui_component1_obj != OBJ_HANDLE_NULL) {
-                    sub_57CCF0(schematic_ui_secondary_obj, schematic_ui_component1_obj);
+                    tb_ui_examine_and_select_object(schematic_ui_secondary_obj, schematic_ui_component1_obj);
                 }
                 return true;
             }
@@ -865,7 +865,7 @@ bool schematic_ui_message_filter(TigMessage* msg)
             // Check mouse hover over "component 2" button.
             if (msg->data.button.button_handle == schematic_ui_component2_button) {
                 if (schematic_ui_component2_obj != OBJ_HANDLE_NULL) {
-                    sub_57CCF0(schematic_ui_secondary_obj, schematic_ui_component2_obj);
+                    tb_ui_examine_and_select_object(schematic_ui_secondary_obj, schematic_ui_component2_obj);
                 }
                 return true;
             }
@@ -904,7 +904,7 @@ bool schematic_ui_message_filter(TigMessage* msg)
             for (tech = 0; tech < TECH_COUNT; tech++) {
                 if (msg->data.button.button_handle == schematic_ui_tabs[tech].button_handle) {
                     ui_message.type = UI_MSG_TYPE_TECH;
-                    ui_message.field_8 = tech;
+                    ui_message.primary_value = tech;
                     intgame_message_window_display_msg(&ui_message);
                     return true;
                 }
@@ -1104,7 +1104,7 @@ static bool schematic_ui_search_matches(int schematic)
     for (int component = 0; component < 2; component++) {
         const int* alternatives = component == 0 ? info.item1 : info.item2;
         for (int i = 0; i < 3; i++) {
-            int64_t prototype = alternatives[i] > 0 ? sub_4685A0(alternatives[i]) : OBJ_HANDLE_NULL;
+            int64_t prototype = alternatives[i] > 0 ? proto_handle_get(alternatives[i]) : OBJ_HANDLE_NULL;
             if (prototype != OBJ_HANDLE_NULL
                 && language_text_contains(description_get(obj_field_int32_get(prototype, OBJ_F_DESCRIPTION)), schematic_ui_search, gamelib_current_language_get())) return true;
         }
@@ -1283,7 +1283,7 @@ int tech_from_schematic(int schematic)
     // field (`OBJ_F_ITEM_DISCIPLINE`).
     if (schematic >= 4000) {
         schematic_ui_info_get(schematic, &schematic_info);
-        obj = sub_4685A0(schematic_info.prod[0]);
+        obj = proto_handle_get(schematic_info.prod[0]);
         return obj_field_int32_get(obj, OBJ_F_ITEM_DISCIPLINE);
     }
 
@@ -1503,7 +1503,7 @@ void schematic_ui_redraw(void)
     tig_font_pop();
 
     // Draw tech discipline icon.
-    obj = sub_4685A0(schematic_info.prod[0]);
+    obj = proto_handle_get(schematic_info.prod[0]);
     icon[0] = (char)obj_field_int32_get(obj, OBJ_F_ITEM_DISCIPLINE) + '0';
     icon[1] = '\0';
 
@@ -1810,9 +1810,9 @@ void schematic_ui_learned_schematic_component_names(int tech, int degree, char* 
 
     schematic_ui_info_get(tech_schematic_get(tech, degree), &schematic_info);
 
-    obj = sub_4685A0(schematic_info.item1[0]);
+    obj = proto_handle_get(schematic_info.item1[0]);
     object_examine(obj, obj, item1);
 
-    obj = sub_4685A0(schematic_info.item2[0]);
+    obj = proto_handle_get(schematic_info.item2[0]);
     object_examine(obj, obj, item2);
 }

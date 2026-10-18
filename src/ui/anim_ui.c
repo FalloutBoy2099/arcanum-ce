@@ -17,7 +17,7 @@
 #include "ui/slide_ui.h"
 #include "ui/wmap_ui.h"
 
-static bool sub_57D3B0(TimeEvent* timeevent);
+static bool anim_ui_timeevent_matches_current(TimeEvent* timeevent);
 static bool anim_ui_bkg_process_callback(TimeEvent* timeevent);
 static bool ambient_lighting_is_enabled(void);
 static bool ambient_lighting_process_callback(TimeEvent* timeevent);
@@ -51,7 +51,7 @@ bool anim_ui_init(GameInitInfo* init_info)
     timeevent_set_funcs(&callbacks);
 
     timeevent.type = TIMEEVENT_TYPE_AMBIENT_LIGHTING;
-    sub_45A950(&datetime, 1);
+    datetime_init(&datetime, 1);
     timeevent_add_delay(&timeevent, &datetime);
 
     return true;
@@ -69,7 +69,7 @@ void anim_ui_reset(void)
     TimeEvent timeevent;
 
     timeevent.type = TIMEEVENT_TYPE_AMBIENT_LIGHTING;
-    sub_45A950(&datetime, 1);
+    datetime_init(&datetime, 1);
     timeevent_add_delay(&timeevent, &datetime);
 }
 
@@ -91,7 +91,7 @@ bool anim_ui_load(GameLoadInfo* load_info)
 
     timeevent_clear_all_typed(TIMEEVENT_TYPE_AMBIENT_LIGHTING);
     timeevent.type = TIMEEVENT_TYPE_AMBIENT_LIGHTING;
-    sub_45A950(&datetime, 3600000);
+    datetime_init(&datetime, 3600000);
     timeevent_add_delay(&timeevent, &datetime);
 
     return true;
@@ -112,12 +112,12 @@ void anim_ui_event_add_delay(int type, int param, int milliseconds)
     timeevent.type = TIMEEVENT_TYPE_BKG_ANIM;
     timeevent.params[0].integer_value = type;
     timeevent.params[1].integer_value = param;
-    sub_45A950(&datetime, milliseconds);
+    datetime_init(&datetime, milliseconds);
     timeevent_add_delay(&timeevent, &datetime);
 }
 
 // 0x57D3B0
-bool sub_57D3B0(TimeEvent* timeevent)
+bool anim_ui_timeevent_matches_current(TimeEvent* timeevent)
 {
     return timeevent->params[0].integer_value == dword_5CB40C
         && timeevent->params[1].integer_value == dword_5CB410;
@@ -129,7 +129,7 @@ void anim_ui_event_remove(int type, int param)
     dword_5CB40C = type;
     dword_5CB410 = param;
     // FIX: Original code uses `type` as timeevent type which is obviously wrong.
-    timeevent_clear_one_ex(TIMEEVENT_TYPE_BKG_ANIM, sub_57D3B0);
+    timeevent_clear_one_ex(TIMEEVENT_TYPE_BKG_ANIM, anim_ui_timeevent_matches_current);
     dword_5CB40C = -1;
     dword_5CB410 = -1;
 }
@@ -159,10 +159,10 @@ bool anim_ui_bkg_process_callback(TimeEvent* timeevent)
     case ANIM_UI_EVENT_TYPE_END_DEATH:
         if (critter_is_dead(player_get_local_pc_obj())) {
             if (inven_ui_drag_item_obj_get() != OBJ_HANDLE_NULL) {
-                sub_575770();
+                inven_ui_drag_cancel_and_restore();
             }
             if (mainmenu_ui_is_active()) {
-                sub_5412D0();
+                mainmenu_ui_game_resume();
                 anim_ui_event_add_delay(ANIM_UI_EVENT_TYPE_END_DEATH, -1, 300);
             } else {
                 slide_ui_start(SLIDE_UI_TYPE_DEATH);
@@ -181,10 +181,10 @@ bool anim_ui_bkg_process_callback(TimeEvent* timeevent)
         break;
     case ANIM_UI_EVENT_TYPE_END_GAME:
         if (inven_ui_drag_item_obj_get() != OBJ_HANDLE_NULL) {
-            sub_575770();
+            inven_ui_drag_cancel_and_restore();
         }
         if (mainmenu_ui_is_active()) {
-            sub_5412D0();
+            mainmenu_ui_game_resume();
             anim_ui_event_add_delay(ANIM_UI_EVENT_TYPE_END_GAME, -1, 300);
         } else {
             slide_ui_start(SLIDE_UI_TYPE_END_GAME);
@@ -254,7 +254,7 @@ bool ambient_lighting_process_callback(TimeEvent* timeevent)
 
     timeevent_clear_all_typed(TIMEEVENT_TYPE_AMBIENT_LIGHTING);
     next_timeevent.type = TIMEEVENT_TYPE_AMBIENT_LIGHTING;
-    sub_45A950(&datetime, 3600000);
+    datetime_init(&datetime, 3600000);
     timeevent_add_delay(&next_timeevent, &datetime);
 
     return true;
@@ -271,6 +271,6 @@ void ambient_lighting_reschedule(void)
     light_scheme_set_hour(hour);
     timeevent_clear_all_typed(TIMEEVENT_TYPE_AMBIENT_LIGHTING);
     timeevent.type = TIMEEVENT_TYPE_AMBIENT_LIGHTING;
-    sub_45A950(&datetime, 3600000);
+    datetime_init(&datetime, 3600000);
     timeevent_add_delay(&timeevent, &datetime);
 }

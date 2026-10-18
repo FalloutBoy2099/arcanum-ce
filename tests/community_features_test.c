@@ -599,8 +599,8 @@ static void test_worldmap_accents(const char* path)
         for (int y = 0; y < data.height; y++) {
             for (int x = 0; x < data.width; x++) {
                 unsigned int base, pixel;
-                CHECK(sub_502E50(plain, x, y, &base) == TIG_OK);
-                CHECK(sub_502E50(accented, x, y, &pixel) == TIG_OK);
+                CHECK(tig_art_pixel_color_get(plain, x, y, &base) == TIG_OK);
+                CHECK(tig_art_pixel_color_get(accented, x, y, &pixel) == TIG_OK);
                 if (y >= 8) CHECK(pixel == base);
                 else if (pixel != anim.color_key) marks++;
             }
@@ -715,9 +715,9 @@ static void test_button_art(const char* directory)
         for (int y = 0; y < 40; y++) {
             for (int x = 0; x < 40; x++) {
                 unsigned int normal, pressed, hover;
-                CHECK(sub_502E50(ids[0], x, y, &normal) == TIG_OK);
-                CHECK(sub_502E50(ids[1], x, y, &pressed) == TIG_OK);
-                CHECK(sub_502E50(ids[2], x, y, &hover) == TIG_OK);
+                CHECK(tig_art_pixel_color_get(ids[0], x, y, &normal) == TIG_OK);
+                CHECK(tig_art_pixel_color_get(ids[1], x, y, &pressed) == TIG_OK);
+                CHECK(tig_art_pixel_color_get(ids[2], x, y, &hover) == TIG_OK);
                 double dx = x + 0.5 - 20;
                 double dy = y + 0.5 - 20;
                 bool opaque = dx * dx + dy * dy <= 400;
@@ -764,7 +764,7 @@ static void test_ini_round_trip(void)
     CHECK(stream != NULL);
     if (stream == NULL) return;
     fputs("[global]\nlanguage=french\n[video]\ndialog_font=2\nscroll_using_borders=0\ncamera_follows_player=1\nvsync_mode=2\nzoom_min=0.5\nzoom_max=1.75\nzoom_enabled=1\nzoom_filter=nearest\n"
-          "[ui]\nhud_stage=2\ndialogue_camera_mode=2\nschematic_color_available=#407090\nschematic_color_missing=160,50,60\nschematic_opacity_available=30\nschematic_opacity_missing=30\n"
+          "[ui]\nbarter_color_better=#123456\nbarter_color_worse=200,20,30\nbarter_color_equal=#F5F5F5\nhud_stage=2\ndialogue_camera_mode=2\nschematic_color_available=#407090\nschematic_color_missing=160,50,60\nschematic_opacity_available=30\nschematic_opacity_missing=30\n"
           "dialogue_camera_zoom_to_fit=1\ndialogue_camera_tween_back=1\ntranslucent_black_ui=1\n"
           "dialogue_option_numbers=1\ndialogue_emote_dim=1\ndialogue_emote_dim_choices=1\ndialogue_emote_dim_percent=60\nfloating_shadow_opacity=70\n"
           "[game]\nautosave_travel=0\nautosave_sleep=1\naction_tooltips=1\nrandom_encounters=2\nlighting=50\n[bindings]\nzoom_reset=Keypad 0\ncycle_hud=TAB\ninventory=J\n"
@@ -783,6 +783,9 @@ static void test_ini_round_trip(void)
     settings_set_value(&settings, SCHEMATIC_OPACITY_MISSING_KEY, 150);
     CHECK(modern_font_int_for(SCHEMATIC_OPACITY_MISSING_KEY, 100, 0, 100) == 100);
     settings_set_value(&settings, SCHEMATIC_OPACITY_MISSING_KEY, 30);
+    CHECK(modern_font_color_for(BARTER_COLOR_BETTER_KEY, 0, 255, 0) == tig_color_make(18, 52, 86));
+    CHECK(modern_font_color_for(BARTER_COLOR_WORSE_KEY, 255, 0, 0) == tig_color_make(200, 20, 30));
+    CHECK(modern_font_color_for(BARTER_COLOR_EQUAL_KEY, 245, 245, 245) == tig_color_make(245, 245, 245));
     tig_color_t schematic_color;
     CHECK(modern_font_color_read(SCHEMATIC_COLOR_AVAILABLE_KEY, &schematic_color));
     CHECK(schematic_color == tig_color_make(64, 112, 144));
@@ -843,6 +846,9 @@ static void test_ini_round_trip(void)
     CHECK(settings_get_value(&settings, LIGHTING_KEY) == 50);
     CHECK(strcmp(settings_get_str_value(&settings, ZOOM_FILTER_KEY), "nearest") == 0);
     settings_set_value(&settings, VSYNC_MODE_KEY, 1);
+    settings_set_str_value(&settings, "training_expert", "2.5");
+    settings_set_value(&settings, "stat_points", 1);
+    settings_set_value(&settings, "schematic", 3);
     settings_save(&settings);
     CHECK((settings.flags & SETTINGS_CHANGED) == 0);
     stream = fopen("arcanum.ini", "rt");
@@ -852,13 +858,18 @@ static void test_ini_round_trip(void)
         bool in_ui = false;
         bool in_controller = false;
         int controller_keys = 0;
-        bool in_fonts = false, in_video = false;
+        bool in_fonts = false, in_video = false, in_time = false;
+        int time_keys = 0;
         int font_keys = 0;
         int toolbar_keys = 0;
         while (fgets(line, sizeof(line), stream) != NULL) {
             CHECK(line[0] != ';' && line[0] != '#');
             if (line[0] == '[') in_ui = strcmp(line, "[ui]\n") == 0;
+            if (line[0] == '[') in_time = strcmp(line, "[time]\n") == 0;
+            if (strncmp(line, "training_expert=", 16) == 0 || strncmp(line, "stat_points=", 12) == 0
+                || strncmp(line, "schematic=", 10) == 0) { CHECK(in_time); time_keys++; }
             if (strncmp(line, "schematic_color_", 16) == 0) CHECK(in_ui);
+            if (strncmp(line, "barter_color_", 13) == 0) CHECK(in_ui);
             if (strncmp(line, "schematic_opacity_", 18) == 0) CHECK(in_ui);
             if (line[0] == '[') in_controller = strcmp(line, "[xbox_controller]\n") == 0;
             if (line[0] == '[') in_fonts = strcmp(line, "[fonts]\n") == 0;
@@ -880,11 +891,15 @@ static void test_ini_round_trip(void)
         CHECK(toolbar_keys == 3);
         CHECK(controller_keys == 2);
         CHECK(font_keys == 3);
+        CHECK(time_keys == 3);
         fclose(stream);
     }
     settings_exit(&settings);
     settings_init(&settings, "arcanum.ini");
     settings_load(&settings);
+    CHECK(strcmp(settings_get_str_value(&settings, "training_expert"), "2.5") == 0);
+    CHECK(settings_get_value(&settings, "stat_points") == 1);
+    CHECK(settings_get_value(&settings, "schematic") == 3);
     CHECK(settings_get_value(&settings, VSYNC_MODE_KEY) == 1);
     CHECK(settings_get_value(&settings, SCHEMATIC_TOOLBAR_KEY) == 0);
     CHECK(settings_get_value(&settings, WORLDMAP_TOOLBAR_KEY) == 0);

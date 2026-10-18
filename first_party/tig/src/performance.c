@@ -22,16 +22,23 @@ static const char* metric_names[TIG_PERF_METRIC_COUNT] = {
     "journal_paginate",
     "texture_upload", "render_present_with_vsync",
     "lighting", "object_render", "collision", "event_dispatch",
+    "object_sort", "art_eviction",
+    "art_load", "art_prepare", "art_blit",
+    "art_file_open", "art_metadata", "art_pixels",
 };
 static const char* counter_names[TIG_PERF_COUNTER_COUNT] = {
     "dirty_pixels_requested", "path_expansions", "path_scanned_cells",
     "search_cache_builds", "search_cache_hits", "history_cache_hits", "index_cache_hits",
     "texture_upload_bytes", "text_cache_hits", "text_cache_misses",
     "object_queries", "object_query_visits", "event_nodes_new", "event_nodes_reused", "event_insert_steps",
+    "object_sector_loads",
+    "object_blits", "art_evictions",
+    "zoom_scaled_pixels", "zoom_full_copies",
 };
 static PerformanceSamples samples[TIG_PERF_METRIC_COUNT];
 static Uint64 counters[TIG_PERF_COUNTER_COUNT];
 static FILE* output;
+static FILE* details;
 static Uint64 frequency;
 static Uint64 window_start;
 static Uint64 session;
@@ -65,6 +72,7 @@ bool tig_performance_set_enabled(bool enabled, const char* path)
             fclose(output);
             output = NULL;
         }
+        if (details != NULL) { fclose(details); details = NULL; }
         return true;
     }
     if (output != NULL) return true;
@@ -82,6 +90,15 @@ bool tig_performance_set_enabled(bool enabled, const char* path)
     }
     session = SDL_GetPerformanceCounter();
     interval = 0;
+    char details_path[1024];
+    int size = snprintf(details_path, sizeof(details_path), "%s.details.csv", path != NULL ? path : "performance.csv");
+    if (size > 0 && size < sizeof(details_path)) {
+        details = fopen(details_path, "a+");
+        if (details != NULL) {
+            if (fseek(details, 0, SEEK_END) == 0 && ftell(details) == 0)
+                fputs("session,interval,metric,milliseconds,resource\n", details);
+        }
+    }
     reset_window();
     return true;
 }
@@ -105,6 +122,26 @@ void tig_performance_end(TigPerformanceMetric metric, Uint64 start)
         Uint64 now = SDL_GetPerformanceCounter();
         if (now >= start) tig_performance_record(metric, (double)(now - start) * 1000.0 / (double)frequency);
     }
+}
+
+void tig_performance_end_detail(TigPerformanceMetric metric, Uint64 start, const char* detail)
+{
+    if (output == NULL || start == 0) return;
+    Uint64 now = SDL_GetPerformanceCounter();
+    if (now >= start) tig_performance_record_detail(metric, (double)(now - start) * 1000.0 / (double)frequency, detail);
+}
+
+void tig_performance_record_detail(TigPerformanceMetric metric, double milliseconds, const char* detail)
+{
+    tig_performance_record(metric, milliseconds);
+    if (output == NULL || details == NULL || metric < 0 || metric >= TIG_PERF_METRIC_COUNT
+        || !isfinite(milliseconds) || milliseconds < 5.0 || detail == NULL) return;
+    fprintf(details, "%llu,%u,%s,%.6f,\"", (unsigned long long)session, interval, metric_names[metric], milliseconds);
+    for (const char* p = detail; *p != '\0'; p++) {
+        if (*p == '"') fputc('"', details);
+        fputc(*p == '\n' || *p == '\r' ? ' ' : *p, details);
+    }
+    fputs("\"\n", details);
 }
 
 void tig_performance_record(TigPerformanceMetric metric, double milliseconds)
@@ -177,6 +214,7 @@ void tig_performance_flush(void)
     write_counter(elapsed, "tig_live_blocks", memory.live_blocks);
 #endif
     fflush(output);
+    if (details != NULL) fflush(details);
     interval++;
     reset_window();
 }

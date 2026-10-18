@@ -3,7 +3,7 @@
 #include "game/gamelib.h"
 #include "ui/intgame.h"
 
-static void sub_557F30(void);
+static void iso_loading_font_create(void);
 
 // 0x64C6F8
 static TigRect stru_64C6F8;
@@ -39,13 +39,13 @@ bool iso_init(GameInitInfo* init_info)
     iso_content_rect.y = 0;
     iso_content_rect.width = window_data.rect.width;
     iso_content_rect.height = window_data.rect.height;
-    sub_558130(&iso_content_rect);
+    iso_draw_rect_set(&iso_content_rect);
 
     iso_interface_create(iso_window_handle);
     iso_interface_created = true;
 
     dword_64C710 = 0;
-    sub_557F30();
+    iso_loading_font_create();
 
     return true;
 }
@@ -62,8 +62,8 @@ void iso_exit(void)
 // 0x557EC0
 void iso_reset(void)
 {
-    sub_54AA30();
-    sub_557FD0(NULL);
+    intgame_mode_and_message_history_reset();
+    iso_loading_message_draw(NULL);
 }
 
 // 0x557ED0
@@ -75,7 +75,7 @@ void iso_resize(GameResizeInfo* resize_info)
 }
 
 // 0x557F30
-void sub_557F30(void)
+void iso_loading_font_create(void)
 {
     TigFont font;
 
@@ -87,7 +87,7 @@ void sub_557F30(void)
 }
 
 // 0x557FD0
-void sub_557FD0(const char* str)
+void iso_loading_message_draw(const char* str)
 {
     TigRect rect;
     TigWindowData window_data;
@@ -126,7 +126,7 @@ bool iso_redraw(void)
 }
 
 // 0x558130
-void sub_558130(TigRect* rect)
+void iso_draw_rect_set(TigRect* rect)
 {
     if (rect != NULL) {
         stru_64C6F8 = *rect;

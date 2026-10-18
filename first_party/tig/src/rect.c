@@ -23,7 +23,7 @@
 #define MISS_LEFT 0x1
 
 static void tig_rect_node_reserve(void);
-static void sub_52DC90(float x, float y, TigLine* line, unsigned int* flags);
+static void tig_line_point_outcode(float x, float y, TigLine* line, unsigned int* flags);
 
 // 0x62B2A4
 static TigRectListNode* tig_rect_free_node_head;
@@ -197,7 +197,7 @@ int tig_rect_clip(const TigRect* a, const TigRect* b, TigRect* rects)
 }
 
 // 0x52D480
-void sub_52D480(TigRectListNode** node_ptr, TigRect* rect)
+void tig_rect_list_add_coalesced(TigRectListNode** node_ptr, TigRect* rect)
 {
     TigRectListNode* prev;
     TigRectListNode* node;
@@ -309,7 +309,7 @@ void sub_52D480(TigRectListNode** node_ptr, TigRect* rect)
             node->rect.height -= height;
 
             if (node->next != NULL) {
-                sub_52D480(&(node->next), &tmp);
+                tig_rect_list_add_coalesced(&(node->next), &tmp);
             } else {
                 node->next = tig_rect_node_create();
                 node->next->rect = tmp;
@@ -405,7 +405,7 @@ void sub_52D480(TigRectListNode** node_ptr, TigRect* rect)
                 height = node->rect.y - y;
 
                 if (node->next != NULL) {
-                    sub_52D480(&(node->next), &tmp);
+                    tig_rect_list_add_coalesced(&(node->next), &tmp);
                 } else {
                     node->next = tig_rect_node_create();
                     node->next->rect = tmp;
@@ -430,7 +430,7 @@ void sub_52D480(TigRectListNode** node_ptr, TigRect* rect)
                 node->rect.height = y - node->rect.y;
 
                 if (node->next != NULL) {
-                    sub_52D480(&(node->next), &tmp);
+                    tig_rect_list_add_coalesced(&(node->next), &tmp);
                 } else {
                     node->next = tig_rect_node_create();
                     node->next->rect = tmp;
@@ -491,7 +491,7 @@ void sub_52D480(TigRectListNode** node_ptr, TigRect* rect)
             node->rect.height = y - node->rect.y;
 
             if (node->next != NULL) {
-                sub_52D480(&(node->next), &tmp);
+                tig_rect_list_add_coalesced(&(node->next), &tmp);
             } else {
                 node->next = tig_rect_node_create();
                 node->next->rect = tmp;
@@ -512,7 +512,7 @@ void sub_52D480(TigRectListNode** node_ptr, TigRect* rect)
             node->rect.height = y - node->rect.y;
 
             if (node->next != NULL) {
-                sub_52D480(&(node->next), &tmp);
+                tig_rect_list_add_coalesced(&(node->next), &tmp);
             } else {
                 node->next = tig_rect_node_create();
                 node->next->rect = tmp;
@@ -547,7 +547,7 @@ void sub_52D480(TigRectListNode** node_ptr, TigRect* rect)
             node->rect.height -= height;
 
             if (node->next != NULL) {
-                sub_52D480(&(node->next), &tmp);
+                tig_rect_list_add_coalesced(&(node->next), &tmp);
             } else {
                 node->next = tig_rect_node_create();
                 node->next->rect = tmp;
@@ -625,7 +625,7 @@ int tig_rect_union(const TigRect* a, const TigRect* b, TigRect* r)
 }
 
 // 0x52DC90
-void sub_52DC90(float x, float y, TigLine* line, unsigned int* flags)
+void tig_line_point_outcode(float x, float y, TigLine* line, unsigned int* flags)
 {
     *flags = 0;
 
@@ -667,8 +667,8 @@ int tig_line_intersection(const TigRect* rect, TigLine* line)
     temp_line.x2 = rect->x + rect->width;
     temp_line.y2 = rect->y + rect->height;
 
-    sub_52DC90(x1, y1, &temp_line, &flags1);
-    sub_52DC90(x2, y2, &temp_line, &flags2);
+    tig_line_point_outcode(x1, y1, &temp_line, &flags1);
+    tig_line_point_outcode(x2, y2, &temp_line, &flags2);
 
     while (1) {
         if (flags1 == 0 && flags2 == 0) {
@@ -699,11 +699,11 @@ int tig_line_intersection(const TigRect* rect, TigLine* line)
         if (flags == flags1) {
             x1 = x3;
             y1 = y3;
-            sub_52DC90(x3, y3, &temp_line, &flags1);
+            tig_line_point_outcode(x3, y3, &temp_line, &flags1);
         } else {
             x2 = x3;
             y2 = y3;
-            sub_52DC90(x3, y3, &temp_line, &flags2);
+            tig_line_point_outcode(x3, y3, &temp_line, &flags2);
         }
     }
 

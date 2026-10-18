@@ -14,8 +14,8 @@
 
 static TigTextCache tig_font_text_cache;
 
-static int sub_535850(TigVideoBuffer* video_buffer, const char* str, int length, TigArtBlitInfo* blit_info, bool shadow, bool* in_bracket);
-static int sub_535C40(tig_art_id_t font_art_id, const char* str, int max_width, int* width_ptr);
+static int tig_font_text_run_draw(TigVideoBuffer* video_buffer, const char* str, int length, TigArtBlitInfo* blit_info, bool shadow, bool* in_bracket);
+static int tig_font_line_break_find(tig_art_id_t font_art_id, const char* str, int max_width, int* width_ptr);
 static bool tig_font_glyph_data(tig_art_id_t font_art_id, int ch, int* width_ptr, int* height_ptr, int* dx_ptr, int* dy_ptr);
 static bool tig_font_modern_open(TigFont* font);
 static void tig_font_modern_close(TigFont* font);
@@ -184,7 +184,7 @@ void tig_font_measure(TigFont* font)
 
             pos = 0;
             for (;;) {
-                line_length = sub_535C40(tig_font_stack[tig_font_stack_index]->art_id, &(str[pos]), font->width, &line_width);
+                line_length = tig_font_line_break_find(tig_font_stack[tig_font_stack_index]->art_id, &(str[pos]), font->width, &line_width);
                 if (line_length == -1) {
                     font->height = 0;
                     return;
@@ -344,7 +344,7 @@ int tig_font_write(TigVideoBuffer* video_buffer, const char* str, const TigRect*
             line_advance = (int)((float)glyph_height * sc);
 
             while (1) {
-                line_length = sub_535C40(tig_font_stack[tig_font_stack_index]->art_id, remainder, wrap_width, &line_width);
+                line_length = tig_font_line_break_find(tig_font_stack[tig_font_stack_index]->art_id, remainder, wrap_width, &line_width);
                 if (line_length == -1) {
                     break;
                 }
@@ -371,7 +371,7 @@ int tig_font_write(TigVideoBuffer* video_buffer, const char* str, const TigRect*
                     dst_rect.x = dst_rect_x + dx;
                 }
 
-                rc = sub_535850(video_buffer, remainder, line_length + 1, &blit_info, shadow, &in_bracket);
+                rc = tig_font_text_run_draw(video_buffer, remainder, line_length + 1, &blit_info, shadow, &in_bracket);
                 if (rc != TIG_OK) {
                     return rc;
                 }
@@ -488,7 +488,7 @@ int tig_font_underline_ranges(TigVideoBuffer* buffer, const char* str, const Tig
     int y = rect->y;
     while (y + advance <= rect->y + rect->height) {
         int line_width;
-        int line_length = sub_535C40(font->art_id, line, (int)(rect->width / scale), &line_width);
+        int line_length = tig_font_line_break_find(font->art_id, line, (int)(rect->width / scale), &line_width);
         if (line_length < 0) break;
         int dx = (font->flags & TIG_FONT_CENTERED) != 0 ? (rect->width - (int)(line_width * scale)) / 2
             : (font->flags & TIG_FONT_RIGHT) != 0 ? rect->width - (int)(line_width * scale) : 0;
@@ -514,7 +514,7 @@ int tig_font_underline_ranges(TigVideoBuffer* buffer, const char* str, const Tig
 }
 
 // 0x535850
-int sub_535850(TigVideoBuffer* video_buffer, const char* str, int length, TigArtBlitInfo* blit_info, bool shadow, bool* in_bracket)
+int tig_font_text_run_draw(TigVideoBuffer* video_buffer, const char* str, int length, TigArtBlitInfo* blit_info, bool shadow, bool* in_bracket)
 {
     tig_art_id_t glyph_art_id;
     int blt_dst_rect_x;
@@ -655,7 +655,7 @@ int sub_535850(TigVideoBuffer* video_buffer, const char* str, int length, TigArt
 }
 
 // 0x535C40
-int sub_535C40(tig_art_id_t font_art_id, const char* str, int max_width, int* width_ptr)
+int tig_font_line_break_find(tig_art_id_t font_art_id, const char* str, int max_width, int* width_ptr)
 {
     int glyph_width;
     int glyph_height;

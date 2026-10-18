@@ -1,4 +1,5 @@
 #include "game/dialog.h"
+#include "game/activity_time.h"
 
 #include <stdio.h>
 
@@ -172,17 +173,17 @@ typedef struct DialogFile {
 } DialogFile;
 
 static void dialog_state_init(int64_t npc_obj, int64_t pc_obj, DialogState* state);
-static void sub_414810(int a1, int a2, int a3, int a4, DialogState* a5);
-static void sub_414E60(DialogState* a1, bool randomize);
-static int sub_414F50(DialogState* a1, int* a2);
-static bool sub_4150D0(DialogState* a1, char* a2);
-static bool sub_415BA0(DialogState* a1, char* a2, int a3);
-static int sub_4167C0(const char* str);
-static bool sub_416840(DialogState* a1, bool a2);
+static void dialog_response_dispatch(int a1, int a2, int a3, int a4, DialogState* state);
+static void dialog_turn_build(DialogState* state, bool randomize);
+static int dialog_collect_eligible_options(DialogState* state, int* a2);
+static bool dialog_conditions_evaluate(DialogState* state, char* a2);
+static bool dialog_actions_execute(DialogState* state, char* a2, int a3);
+static int dialog_parse_integer_after_first(const char* str);
+static bool dialog_npc_reply_build(DialogState* state, bool a2);
 static bool dialog_search(int dlg, DialogFileEntry* entry);
-static void sub_416B00(char* dst, char* src, DialogState* a3);
-static bool sub_416C10(int a1, int a2, DialogState* a3);
-static void sub_417590(int a1, int* a2, int* a3);
+static void dialog_expand_name_tokens(char* dst, char* src, DialogState* state);
+static bool dialog_pc_option_build(int a1, int a2, DialogState* state);
+static void dialog_response_decode(int a1, int* a2, int* a3);
 static bool find_dialog(const char* path, int* index_ptr);
 static void dialog_load_internal(DialogFile* dialog);
 static bool dialog_parse_entry(TigFile* stream, DialogFileEntry* entry, int* line_ptr);
@@ -203,10 +204,10 @@ static void dialog_copy_npc_class_specific_msg(char* buffer, DialogState* state,
 static void dialog_copy_npc_race_specific_msg(char* buffer, DialogState* state, int num);
 static void dialog_copy_npc_generic_msg(char* buffer, DialogState* state, int start, int end);
 static bool dialog_copy_npc_override_msg(char* buffer, DialogState* state, int num);
-static int sub_4189C0(const char* a1, int a2);
+static int dialog_speech_id_encode(const char* a1, int a2);
 static void dialog_ask_money(int amt, int param1, int param2, int a4, int a5, DialogState* state);
-static void sub_418B30(int a1, DialogState* a2);
-static void sub_418C40(int a1, int a2, int a3, DialogState* a4);
+static void dialog_payment_process(int a1, DialogState* state);
+static void dialog_acknowledgement_build(int a1, int a2, int a3, DialogState* state);
 static void dialog_offer_training(int* skills, int cnt, int back_response_val, DialogState* state);
 static void dialog_ask_money_for_training(int skill, DialogState* state);
 static void dialog_perform_training(int skill, DialogState* state);
@@ -214,8 +215,8 @@ static void dialog_ask_money_for_rumor(int cost, int* rumors, int num_rumors, in
 static void dialog_tell_rumor(int rumor, int a2, int a3, DialogState* state);
 static void dialog_build_pc_insult_option(int a1, int a2, int a3, DialogState* a4);
 static void dialog_insult_reply(int a1, int a2, DialogState* state);
-static void sub_419260(DialogState* a1, const char* a2);
-static bool sub_4197D0(unsigned int flags, int a2, DialogState* a3);
+static void dialog_generated_greeting_build(DialogState* state, const char* a2);
+static bool dialog_greeting_override_apply(unsigned int flags, int a2, DialogState* state);
 static void dialog_offer_healing(DialogHealingOfferType type, int response_val, DialogState* state);
 static void dialog_build_use_skill_option(int index, int skill, int response_val, DialogState* state);
 static void dialog_build_use_spell_option(int index, int spell, int response_val, DialogState* state);
@@ -274,7 +275,7 @@ static const char* dialog_gd_mes_file_names[GD_COUNT] = {
 };
 
 // 0x5A06BC
-static const char* off_5A06BC[DIALOG_COND_COUNT] = {
+static const char* dialog_condition_names[DIALOG_COND_COUNT] = {
     "ps",
     "ch",
     "pe",
@@ -315,7 +316,7 @@ static const char* off_5A06BC[DIALOG_COND_COUNT] = {
 };
 
 // 0x5A0750
-static const char* off_5A0750[DIALOG_ACTION_COUNT] = {
+static const char* dialog_action_names[DIALOG_ACTION_COUNT] = {
     "$$",
     "re",
     "qu",
@@ -420,7 +421,7 @@ void dialog_exit(void)
 
     for (index = 0; index < dialog_files_capacity; index++) {
         if (dialog_files[index].path[0] != '\0') {
-            sub_412F60(index);
+            dialog_cache_entry_free(index);
         }
     }
 
@@ -439,11 +440,11 @@ bool dialog_load(const char* path, int* dlg_ptr)
 
     if (find_dialog(path, &index)) {
         dialog_files[index].refcount++;
-        dialog_files[index].timestamp = sub_45A7C0();
+        dialog_files[index].timestamp = game_time_get();
     } else {
         strcpy(dialog.path, path);
         dialog.refcount = 1;
-        dialog.timestamp = sub_45A7C0();
+        dialog.timestamp = game_time_get();
         dialog.entries_length = 0;
         dialog.entries_capacity = 0;
         dialog.entries = NULL;
@@ -468,8 +469,9 @@ void dialog_unload(int dlg)
     dialog_files[dlg].refcount--;
 }
 
+// Frees cached dialog entries and clears the cache path without changing refcount.
 // 0x412F60
-void sub_412F60(int dlg)
+void dialog_cache_entry_free(int dlg)
 {
     int index;
 
@@ -483,88 +485,92 @@ void sub_412F60(int dlg)
     dialog_files_length--;
 }
 
+// Checks speech eligibility, begins reaction tracking and prepares the opening turn or hostility reply.
 // 0x412FD0
-bool sub_412FD0(DialogState* state)
+bool dialog_conversation_begin(DialogState* state)
 {
     if (ai_can_speak(state->npc_obj, state->pc_obj, false) != AI_SPEAK_OK) {
         return false;
     }
 
-    sub_4C1020(state->npc_obj, state->pc_obj);
+    reaction_begin_conversation(state->npc_obj, state->pc_obj);
 
     if (critter_is_dead(state->npc_obj) || ai_check_kos(state->npc_obj, state->pc_obj) == AI_KOS_NO) {
         if (player_is_local_pc_obj(state->pc_obj)) {
             dialog_camera_start(state->pc_obj, state->npc_obj);
         }
 
-        state->field_17EC = state->num;
-        state->field_17E8 = 0;
-        sub_414E60(state, 0);
+        state->response_value = state->num;
+        state->turn_status = 0;
+        dialog_turn_build(state, 0);
     } else {
         dialog_copy_npc_race_specific_msg(state->reply, state, 1000);
-        state->field_17E8 = 4;
+        state->turn_status = 4;
     }
 
     return true;
 }
 
+// Executes the selected option actions and dispatches its response when the conversation permits it.
 // 0x413130
-void sub_413130(DialogState* state, int index)
+void dialog_option_select(DialogState* state, int index)
 {
     int v1;
     int v2;
     int v3;
 
-    if (state->field_17E8 == 4
-        || state->field_17E8 == 5
-        || state->field_17E8 == 7
-        || state->field_17E8 == 6
-        || state->field_17E8 == 8
-        || state->field_17E8 == 9) {
+    if (state->turn_status == 4
+        || state->turn_status == 5
+        || state->turn_status == 7
+        || state->turn_status == 6
+        || state->turn_status == 8
+        || state->turn_status == 9) {
         return;
     }
 
     if (ai_can_speak(state->npc_obj, state->pc_obj, false) != AI_SPEAK_OK) {
-        state->field_17E8 = 1;
+        state->turn_status = 1;
         return;
     }
 
-    if (state->field_17E8 == 3) {
-        sub_417590(state->field_17EC, &v1, &v2);
+    if (state->turn_status == 3) {
+        dialog_response_decode(state->response_value, &v1, &v2);
         v3 = 0;
-    } else if (sub_415BA0(state, state->actions[index], index)) {
-        v1 = state->field_17F0[index];
-        v2 = state->field_1804[index];
-        v3 = state->field_1818[index];
+    } else if (dialog_actions_execute(state, state->actions[index], index)) {
+        v1 = state->option_response_types[index];
+        v2 = state->option_response_values[index];
+        v3 = state->option_response_extra_values[index];
     } else {
         return;
     }
 
     if (critter_is_dead(state->npc_obj) || ai_check_kos(state->npc_obj, state->pc_obj) == AI_KOS_NO) {
-        sub_414810(v1, v2, v3, index, state);
+        dialog_response_dispatch(v1, v2, v3, index, state);
     } else {
         dialog_copy_npc_race_specific_msg(state->reply, state, 1000);
-        state->field_17E8 = 4;
+        state->turn_status = 4;
     }
 }
 
+// Finalizes the conversation reaction memory.
 // 0x413280
-void sub_413280(DialogState* state)
+void dialog_conversation_end(DialogState* state)
 {
-    sub_4C10A0(state->npc_obj, state->pc_obj);
+    reaction_end_conversation(state->npc_obj, state->pc_obj);
 }
 
+// Builds the generated NPC greeting, with follower-specific parameters when appropriate.
 // 0x4132A0
-void sub_4132A0(int64_t npc_obj, int64_t pc_obj, char* buffer)
+void dialog_copy_npc_greeting_msg(int64_t npc_obj, int64_t pc_obj, char* buffer)
 {
     DialogState state;
 
     if (ai_can_speak(npc_obj, pc_obj, false) == AI_SPEAK_OK) {
         dialog_state_init(npc_obj, pc_obj, &state);
         if (critter_pc_leader_get(npc_obj) == pc_obj) {
-            sub_419260(&state, "1 0, 2 0, 3 0, 4 0, 5 0, 6 0, 7 0, 8 0");
+            dialog_generated_greeting_build(&state, "1 0, 2 0, 3 0, 4 0, 5 0, 6 0, 7 0, 8 0");
         } else {
-            sub_419260(&state, NULL);
+            dialog_generated_greeting_build(&state, NULL);
         }
         strcpy(buffer, state.reply);
     } else {
@@ -577,8 +583,8 @@ void dialog_state_init(int64_t npc_obj, int64_t pc_obj, DialogState* state)
 {
     state->npc_obj = npc_obj;
     state->pc_obj = pc_obj;
-    sub_443EB0(state->npc_obj, &(state->field_40));
-    sub_443EB0(state->pc_obj, &(state->field_10));
+    object_reference_init(state->npc_obj, &(state->npc_reference));
+    object_reference_init(state->pc_obj, &(state->pc_reference));
     state->script_num = 0;
 }
 
@@ -736,16 +742,17 @@ void dialog_copy_npc_let_me_handle_msg(int64_t npc_obj, int64_t pc_obj, char* bu
     }
 }
 
+// Loads the current NPC reply, optionally bypassing the speech eligibility check.
 // 0x413A30
-void sub_413A30(DialogState* a1, bool a2)
+void dialog_prepare_npc_reply(DialogState* state, bool a2)
 {
-    if (a2 || ai_can_speak(a1->npc_obj, a1->pc_obj, false) == AI_SPEAK_OK) {
-        a1->field_17EC = a1->num;
-        a1->field_17E8 = 0;
-        sub_416840(a1, 0);
+    if (a2 || ai_can_speak(state->npc_obj, state->pc_obj, false) == AI_SPEAK_OK) {
+        state->response_value = state->num;
+        state->turn_status = 0;
+        dialog_npc_reply_build(state, 0);
     } else {
-        a1->reply[0] = '\0';
-        a1->speech_id = -1;
+        state->reply[0] = '\0';
+        state->speech_id = -1;
     }
 }
 
@@ -1155,160 +1162,163 @@ void dialog_copy_npc_repair_msg(int64_t npc_obj, int64_t pc_obj, char* buffer)
     }
 }
 
+// Dispatches a response code to a new line, conversation state or service action.
 // 0x414810
-void sub_414810(int a1, int a2, int a3, int a4, DialogState* a5)
+void dialog_response_dispatch(int a1, int a2, int a3, int a4, DialogState* state)
 {
     int v1[100];
     int cnt;
 
     switch (a1) {
     case 0:
-        a5->field_17EC = a2;
-        a5->field_17E8 = 0;
-        sub_414E60(a5, 0);
+        state->response_value = a2;
+        state->turn_status = 0;
+        dialog_turn_build(state, 0);
         break;
     case 1:
-        a5->field_17E8 = 1;
+        state->turn_status = 1;
         break;
     case 2:
-        a5->field_17EC = a2;
-        a5->field_17E8 = 2;
+        state->response_value = a2;
+        state->turn_status = 2;
         break;
     case 3:
-        a5->field_17EC = a2;
-        a5->field_17E8 = 3;
+        state->response_value = a2;
+        state->turn_status = 3;
         break;
     case 4:
-        sub_418B30(a2, a5);
+        dialog_payment_process(a2, state);
         break;
     case 5:
-        cnt = dialog_parse_params(v1, &(a5->options[a4][strlen(a5->options[a4]) + 1]));
-        dialog_offer_training(v1, cnt, a2, a5);
+        cnt = dialog_parse_params(v1, &(state->options[a4][strlen(state->options[a4]) + 1]));
+        dialog_offer_training(v1, cnt, a2, state);
         break;
     case 6:
-        dialog_ask_money_for_training(a2, a5);
+        dialog_ask_money_for_training(a2, state);
         break;
     case 7:
-        dialog_perform_training(a2, a5);
+        dialog_perform_training(a2, state);
         break;
     case 8: {
         char* pch;
         int cost;
 
-        pch = strchr(&(a5->options[a4][strlen(a5->options[a4]) + 1]), '$');
+        pch = strchr(&(state->options[a4][strlen(state->options[a4]) + 1]), '$');
         cost = atoi(pch + 1);
 
         pch = strchr(pch, ',');
         cnt = dialog_parse_params(v1, pch + 1);
-        dialog_ask_money_for_rumor(cost, v1, cnt, a2, a5);
+        dialog_ask_money_for_rumor(cost, v1, cnt, a2, state);
         break;
     }
     case 9:
-        dialog_tell_rumor(a2, a5->field_17F0[1], a5->field_1804[1], a5);
+        dialog_tell_rumor(a2, state->option_response_types[1], state->option_response_values[1], state);
         break;
     case 10:
-        dialog_insult_reply(a2, a3, a5);
+        dialog_insult_reply(a2, a3, state);
         break;
     case 11:
-        dialog_offer_healing(DIALOG_HEALING_OFFER_OPTIONS, a2, a5);
+        dialog_offer_healing(DIALOG_HEALING_OFFER_OPTIONS, a2, state);
         break;
     case 12:
-        dialog_offer_healing(DIALOG_HEALING_OFFER_MAGICKAL_HEALING, a2, a5);
+        dialog_offer_healing(DIALOG_HEALING_OFFER_MAGICKAL_HEALING, a2, state);
         break;
     case 13:
-        dialog_offer_healing(DIALOG_HEALING_OFFER_MAGICKAL_POISON_HEALING, a2, a5);
+        dialog_offer_healing(DIALOG_HEALING_OFFER_MAGICKAL_POISON_HEALING, a2, state);
         break;
     case 14:
-        dialog_ask_money_for_skill(a2, a3, a5);
+        dialog_ask_money_for_skill(a2, a3, state);
         break;
     case 15:
-        dialog_ask_money_for_spell(a2, a3, a5);
+        dialog_ask_money_for_spell(a2, a3, state);
         break;
     case 16:
-        dialog_use_skill(a2, a5->field_17F0[1], a5->field_1804[1], a5);
+        dialog_use_skill(a2, state->option_response_types[1], state->option_response_values[1], state);
         break;
     case 17:
-        dialog_use_spell(a2, a5->field_17F0[1], a5->field_1804[1], a5);
+        dialog_use_spell(a2, state->option_response_types[1], state->option_response_values[1], state);
         break;
     case 18:
-        dialog_offer_directions(&(a5->options[a4][strlen(a5->options[a4]) + 1]), a2, a3, false, a5);
+        dialog_offer_directions(&(state->options[a4][strlen(state->options[a4]) + 1]), a2, a3, false, state);
         break;
     case 19:
-        dialog_ask_money_for_directions(a5->field_17EC, a2, a3, a5);
+        dialog_ask_money_for_directions(state->response_value, a2, a3, state);
         break;
     case 20:
-        dialog_give_directions(a2, a5->field_17F0[1], a5->field_1804[1], a5);
+        dialog_give_directions(a2, state->option_response_types[1], state->option_response_values[1], state);
         break;
     case 21:
-        dialog_offer_directions(&(a5->options[a4][strlen(a5->options[a4]) + 1]), a2, a3, true, a5);
+        dialog_offer_directions(&(state->options[a4][strlen(state->options[a4]) + 1]), a2, a3, true, state);
         break;
     case 22:
-        dialog_ask_money_for_mark_area(a5->field_17EC, a2, a3, a5);
+        dialog_ask_money_for_mark_area(state->response_value, a2, a3, state);
         break;
     case 23:
-        dialog_mark_area(a2, a5->field_17F0[1], a5->field_1804[1], a5);
+        dialog_mark_area(a2, state->option_response_types[1], state->option_response_values[1], state);
         break;
     case 24:
-        dialog_check_story(a2, a5);
+        dialog_check_story(a2, state);
         break;
     case 25:
-        dialog_ask_about_buying_newspapers(a2, a5);
+        dialog_ask_about_buying_newspapers(a2, state);
         break;
     case 26:
-        dialog_offer_today_newspaper(a2, a5);
+        dialog_offer_today_newspaper(a2, state);
         break;
     case 27:
-        dialog_offer_older_newspaper(a2, a5);
+        dialog_offer_older_newspaper(a2, state);
         break;
     case 28:
-        dialog_ask_money_for_newspaper(a2, a3, a5);
+        dialog_ask_money_for_newspaper(a2, a3, state);
         break;
     case 29:
-        dialog_buy_newspaper(a2, a5->field_17F0[1], a5->field_1804[1], a5);
+        dialog_buy_newspaper(a2, state->option_response_types[1], state->option_response_values[1], state);
         break;
     case 30:
-        a5->field_17E8 = 6;
+        state->turn_status = 6;
         break;
     }
 }
 
+// Builds the NPC reply and eligible PC options, optionally replaying the stored random seed.
 // 0x414E60
-void sub_414E60(DialogState* a1, bool randomize)
+void dialog_turn_build(DialogState* state, bool randomize)
 {
     int index;
     int v1[DIALOG_MAX_OPTIONS];
     int v2;
 
     for (index = 0; index < DIALOG_MAX_OPTIONS; index++) {
-        a1->actions[index] = NULL;
-        a1->options[index][0] = '\0';
+        state->actions[index] = NULL;
+        state->options[index][0] = '\0';
     }
 
     if (randomize) {
-        random_seed(a1->seed);
+        random_seed(state->seed);
     } else {
-        a1->seed = random_seed_generate();
+        state->seed = random_seed_generate();
     }
 
-    if (sub_416840(a1, randomize)) {
-        a1->num_options = sub_414F50(a1, v1);
+    if (dialog_npc_reply_build(state, randomize)) {
+        state->num_options = dialog_collect_eligible_options(state, v1);
         v2 = 0;
-        for (index = 0; index < a1->num_options; index++) {
-            if (!sub_416C10(v1[index], index - v2, a1)) {
+        for (index = 0; index < state->num_options; index++) {
+            if (!dialog_pc_option_build(v1[index], index - v2, state)) {
                 v2++;
             }
         }
-        a1->num_options -= v2;
-        if (a1->num_options == 0) {
-            dialog_copy_pc_generic_msg(a1->options[0], a1, 400, 499);
-            a1->field_17F0[0] = 1;
-            a1->num_options = 1;
+        state->num_options -= v2;
+        if (state->num_options == 0) {
+            dialog_copy_pc_generic_msg(state->options[0], state, 400, 499);
+            state->option_response_types[0] = 1;
+            state->num_options = 1;
         }
     }
 }
 
+// Collects option line numbers filtered by gender, intelligence and dialog conditions.
 // 0x414F50
-int sub_414F50(DialogState* a1, int* a2)
+int dialog_collect_eligible_options(DialogState* state, int* a2)
 {
     DialogFileEntry key;
     int gender;
@@ -1318,16 +1328,16 @@ int sub_414F50(DialogState* a1, int* a2)
     int idx;
     int cnt;
 
-    key.num = a1->field_17EC;
-    gender = stat_level_get(a1->pc_obj, STAT_GENDER);
-    intelligence = stat_level_get(a1->pc_obj, STAT_INTELLIGENCE);
+    key.num = state->response_value;
+    gender = stat_level_get(state->pc_obj, STAT_GENDER);
+    intelligence = stat_level_get(state->pc_obj, STAT_INTELLIGENCE);
 
     if (intelligence > LOW_INTELLIGENCE
-        && critter_is_dumb(a1->pc_obj)) {
+        && critter_is_dumb(state->pc_obj)) {
         intelligence = 1;
     }
 
-    dialog = &(dialog_files[a1->dlg]);
+    dialog = &(dialog_files[state->dlg]);
     entry = bsearch(&key,
         dialog->entries,
         dialog->entries_length,
@@ -1349,7 +1359,7 @@ int sub_414F50(DialogState* a1, int* a2)
         if (entry->data.gender == -1 || entry->data.gender == gender) {
             if ((entry->iq < 0 && intelligence <= -entry->iq)
                 || (entry->iq >= 0 && intelligence >= entry->iq)) {
-                if (entry->conditions == NULL || sub_4150D0(a1, entry->conditions)) {
+                if (entry->conditions == NULL || dialog_conditions_evaluate(state, entry->conditions)) {
                     a2[cnt++] = entry->num;
                 }
             }
@@ -1359,8 +1369,9 @@ int sub_414F50(DialogState* a1, int* a2)
     return cnt;
 }
 
+// Evaluates the two-character condition operators from a dialog condition string.
 // 0x4150D0
-bool sub_4150D0(DialogState* a1, char* a2)
+bool dialog_conditions_evaluate(DialogState* state, char* a2)
 {
     char* pch;
     int cond;
@@ -1401,7 +1412,7 @@ bool sub_4150D0(DialogState* a1, char* a2)
 
         value = atoi(pch);
         for (cond = 0; cond < DIALOG_COND_COUNT; cond++) {
-            if (SDL_strcasecmp(off_5A06BC[cond], code) == 0) {
+            if (SDL_strcasecmp(dialog_condition_names[cond], code) == 0) {
                 break;
             }
         }
@@ -1409,99 +1420,99 @@ bool sub_4150D0(DialogState* a1, char* a2)
         switch (cond) {
         case DIALOG_COND_PS:
             if (value < 0) {
-                if (basic_skill_level(a1->pc_obj, BASIC_SKILL_PERSUATION) > -value) {
+                if (basic_skill_level(state->pc_obj, BASIC_SKILL_PERSUATION) > -value) {
                     return false;
                 }
             } else {
-                if (basic_skill_level(a1->pc_obj, BASIC_SKILL_PERSUATION) < value) {
+                if (basic_skill_level(state->pc_obj, BASIC_SKILL_PERSUATION) < value) {
                     return false;
                 }
             }
             break;
         case DIALOG_COND_CH:
             if (value < 0) {
-                if (stat_level_get(a1->pc_obj, STAT_CHARISMA) > -value) {
+                if (stat_level_get(state->pc_obj, STAT_CHARISMA) > -value) {
                     return false;
                 }
             } else {
-                if (stat_level_get(a1->pc_obj, STAT_CHARISMA) < value) {
+                if (stat_level_get(state->pc_obj, STAT_CHARISMA) < value) {
                     return false;
                 }
             }
             break;
         case DIALOG_COND_PE:
             if (value < 0) {
-                if (stat_level_get(a1->pc_obj, STAT_PERCEPTION) > -value) {
+                if (stat_level_get(state->pc_obj, STAT_PERCEPTION) > -value) {
                     return false;
                 }
             } else {
-                if (stat_level_get(a1->pc_obj, STAT_PERCEPTION) < value) {
+                if (stat_level_get(state->pc_obj, STAT_PERCEPTION) < value) {
                     return false;
                 }
             }
             break;
         case DIALOG_COND_AL:
             if (value < 0) {
-                if (stat_level_get(a1->pc_obj, STAT_ALIGNMENT) > -value) {
+                if (stat_level_get(state->pc_obj, STAT_ALIGNMENT) > -value) {
                     return false;
                 }
             } else {
-                if (stat_level_get(a1->pc_obj, STAT_ALIGNMENT) < value) {
+                if (stat_level_get(state->pc_obj, STAT_ALIGNMENT) < value) {
                     return false;
                 }
             }
             break;
         case DIALOG_COND_MA:
             if (value < 0) {
-                if (stat_level_get(a1->pc_obj, STAT_MAGICK_TECH_APTITUDE) > -value) {
+                if (stat_level_get(state->pc_obj, STAT_MAGICK_TECH_APTITUDE) > -value) {
                     return false;
                 }
             } else {
-                if (stat_level_get(a1->pc_obj, STAT_MAGICK_TECH_APTITUDE) < value) {
+                if (stat_level_get(state->pc_obj, STAT_MAGICK_TECH_APTITUDE) < value) {
                     return false;
                 }
             }
             break;
         case DIALOG_COND_TA:
             if (value < 0) {
-                if (-stat_level_get(a1->pc_obj, STAT_MAGICK_TECH_APTITUDE) > -value) {
+                if (-stat_level_get(state->pc_obj, STAT_MAGICK_TECH_APTITUDE) > -value) {
                     return false;
                 }
             } else {
-                if (-stat_level_get(a1->pc_obj, STAT_MAGICK_TECH_APTITUDE) < value) {
+                if (-stat_level_get(state->pc_obj, STAT_MAGICK_TECH_APTITUDE) < value) {
                     return false;
                 }
             }
             break;
         case DIALOG_COND_GV:
-            if (script_global_var_get(value) != sub_4167C0(pch)) {
+            if (script_global_var_get(value) != dialog_parse_integer_after_first(pch)) {
                 return false;
             }
             break;
         case DIALOG_COND_GF:
-            if (script_global_flag_get(value) != sub_4167C0(pch)) {
+            if (script_global_flag_get(value) != dialog_parse_integer_after_first(pch)) {
                 return false;
             }
             break;
         case DIALOG_COND_QU:
-            if (quest_state_get(a1->pc_obj, value) != sub_4167C0(pch)) {
+            if (quest_state_get(state->pc_obj, value) != dialog_parse_integer_after_first(pch)) {
                 return false;
             }
             break;
         case DIALOG_COND_RE:
             if (value < 0) {
-                if (reaction_get(a1->npc_obj, a1->pc_obj) > -value) {
+                if (reaction_get(state->npc_obj, state->pc_obj) > -value) {
                     return false;
                 }
             } else {
-                if (reaction_get(a1->npc_obj, a1->pc_obj) < value) {
+                if (reaction_get(state->npc_obj, state->pc_obj) < value) {
                     return false;
                 }
             }
             break;
         case DIALOG_COND_GOLD:
-            gold = item_gold_get(a1->pc_obj);
-            object_list_followers(a1->pc_obj, &followers);
+            gold = item_gold_get(state->pc_obj);
+            object_list_followers(state->pc_obj, &followers);
             node = followers.head;
             while (node != NULL) {
                 gold += item_gold_get(node->obj);
@@ -1521,8 +1532,8 @@ bool sub_4150D0(DialogState* a1, char* a2)
         case DIALOG_COND_IN:
             if (value < 0) {
                 value = -value;
-                if (item_find_by_name(a1->npc_obj, value) == OBJ_HANDLE_NULL) {
-                    substitute_inventory_obj = critter_substitute_inventory_get(a1->npc_obj);
+                if (item_find_by_name(state->npc_obj, value) == OBJ_HANDLE_NULL) {
+                    substitute_inventory_obj = critter_substitute_inventory_get(state->npc_obj);
                     if (substitute_inventory_obj == OBJ_HANDLE_NULL) {
                         return false;
                     }
@@ -1531,8 +1542,8 @@ bool sub_4150D0(DialogState* a1, char* a2)
                     }
                 }
             } else {
-                if (!item_find_by_name(a1->pc_obj, value)) {
-                    object_list_followers(a1->pc_obj, &followers);
+                if (!item_find_by_name(state->pc_obj, value)) {
+                    object_list_followers(state->pc_obj, &followers);
                     node = followers.head;
                     while (node != NULL) {
                         if (item_find_by_name(node->obj, value) != OBJ_HANDLE_NULL) {
@@ -1549,68 +1560,68 @@ bool sub_4150D0(DialogState* a1, char* a2)
             break;
         case DIALOG_COND_HA:
             if (value < 0) {
-                if (basic_skill_level(a1->pc_obj, BASIC_SKILL_HAGGLE) > -value) {
+                if (basic_skill_level(state->pc_obj, BASIC_SKILL_HAGGLE) > -value) {
                     return false;
                 }
             } else {
-                if (basic_skill_level(a1->pc_obj, BASIC_SKILL_HAGGLE) < value) {
+                if (basic_skill_level(state->pc_obj, BASIC_SKILL_HAGGLE) < value) {
                     return false;
                 }
             }
             break;
         case DIALOG_COND_LF:
-            if (script_local_flag_get(a1->npc_obj, SAP_DIALOG, value) != sub_4167C0(pch)) {
+            if (script_local_flag_get(state->npc_obj, SAP_DIALOG, value) != dialog_parse_integer_after_first(pch)) {
                 return false;
             }
             break;
         case DIALOG_COND_LC:
-            if (script_local_counter_get(a1->npc_obj, SAP_DIALOG, value) != sub_4167C0(pch)) {
+            if (script_local_counter_get(state->npc_obj, SAP_DIALOG, value) != dialog_parse_integer_after_first(pch)) {
                 return false;
             }
             break;
         case DIALOG_COND_TR:
-            training = sub_4167C0(pch);
+            training = dialog_parse_integer_after_first(pch);
             if (IS_TECH_SKILL(value)) {
                 if (training < 0) {
-                    if (tech_skill_training_get(a1->pc_obj, GET_TECH_SKILL(value)) > -training) {
+                    if (tech_skill_training_get(state->pc_obj, GET_TECH_SKILL(value)) > -training) {
                         return false;
                     }
                 } else {
-                    if (tech_skill_training_get(a1->pc_obj, GET_TECH_SKILL(value)) < training) {
+                    if (tech_skill_training_get(state->pc_obj, GET_TECH_SKILL(value)) < training) {
                         return false;
                     }
                 }
             } else {
                 if (training < 0) {
-                    if (basic_skill_training_get(a1->pc_obj, GET_BASIC_SKILL(value)) > -training) {
+                    if (basic_skill_training_get(state->pc_obj, GET_BASIC_SKILL(value)) > -training) {
                         return false;
                     }
                 } else {
-                    if (basic_skill_training_get(a1->pc_obj, GET_BASIC_SKILL(value)) < training) {
+                    if (basic_skill_training_get(state->pc_obj, GET_BASIC_SKILL(value)) < training) {
                         return false;
                     }
                 }
             }
             break;
         case DIALOG_COND_SK:
-            level = sub_4167C0(pch);
+            level = dialog_parse_integer_after_first(pch);
             if (IS_TECH_SKILL(value)) {
                 if (level < 0) {
-                    if (tech_skill_level(a1->pc_obj, GET_TECH_SKILL(value)) > -level) {
+                    if (tech_skill_level(state->pc_obj, GET_TECH_SKILL(value)) > -level) {
                         return false;
                     }
                 } else {
-                    if (tech_skill_level(a1->pc_obj, GET_TECH_SKILL(value)) < level) {
+                    if (tech_skill_level(state->pc_obj, GET_TECH_SKILL(value)) < level) {
                         return false;
                     }
                 }
             } else {
                 if (level < 0) {
-                    if (basic_skill_level(a1->pc_obj, GET_BASIC_SKILL(value)) > -level) {
+                    if (basic_skill_level(state->pc_obj, GET_BASIC_SKILL(value)) > -level) {
                         return false;
                     }
                 } else {
-                    if (basic_skill_level(a1->pc_obj, GET_BASIC_SKILL(value)) < level) {
+                    if (basic_skill_level(state->pc_obj, GET_BASIC_SKILL(value)) < level) {
                         return false;
                     }
                 }
@@ -1618,11 +1629,11 @@ bool sub_4150D0(DialogState* a1, char* a2)
             break;
         case DIALOG_COND_RU:
             if (value < 0) {
-                if (rumor_known_get(a1->pc_obj, -value)) {
+                if (rumor_known_get(state->pc_obj, -value)) {
                     return false;
                 }
             } else {
-                if (!rumor_known_get(a1->pc_obj, value)) {
+                if (!rumor_known_get(state->pc_obj, value)) {
                     return false;
                 }
             }
@@ -1640,38 +1651,38 @@ bool sub_4150D0(DialogState* a1, char* a2)
             break;
         case DIALOG_COND_FO:
             if (value == 0) {
-                if (critter_leader_get(a1->npc_obj) != a1->pc_obj) {
+                if (critter_leader_get(state->npc_obj) != state->pc_obj) {
                     return false;
                 }
             } else if (value == 1) {
-                if (critter_leader_get(a1->npc_obj) == a1->pc_obj) {
+                if (critter_leader_get(state->npc_obj) == state->pc_obj) {
                     return false;
                 }
             }
             break;
         case DIALOG_COND_LE:
             if (value < 0) {
-                if (-stat_level_get(a1->pc_obj, STAT_LEVEL) > -value) {
+                if (-stat_level_get(state->pc_obj, STAT_LEVEL) > -value) {
                     return false;
                 }
             } else {
-                if (-stat_level_get(a1->pc_obj, STAT_LEVEL) < value) {
+                if (-stat_level_get(state->pc_obj, STAT_LEVEL) < value) {
                     return false;
                 }
             }
             break;
         case DIALOG_COND_QB:
-            if (quest_state_get(a1->pc_obj, value) > sub_4167C0(pch)) {
+            if (quest_state_get(state->pc_obj, value) > dialog_parse_integer_after_first(pch)) {
                 return false;
             }
             break;
         case DIALOG_COND_ME:
             if (value == 0) {
-                if (reaction_met_before(a1->npc_obj, a1->pc_obj)) {
+                if (reaction_met_before(state->npc_obj, state->pc_obj)) {
                     return false;
                 }
             } else if (value == 1) {
-                if (!reaction_met_before(a1->npc_obj, a1->pc_obj)) {
+                if (!reaction_met_before(state->npc_obj, state->pc_obj)) {
                     return false;
                 }
             }
@@ -1679,22 +1690,22 @@ bool sub_4150D0(DialogState* a1, char* a2)
         case DIALOG_COND_NI:
             if (value < 0) {
                 value = -value;
-                if (item_find_by_name(a1->npc_obj, value) != OBJ_HANDLE_NULL) {
+                if (item_find_by_name(state->npc_obj, value) != OBJ_HANDLE_NULL) {
                     return false;
                 }
 
-                substitute_inventory_obj = critter_substitute_inventory_get(a1->npc_obj);
+                substitute_inventory_obj = critter_substitute_inventory_get(state->npc_obj);
                 if (substitute_inventory_obj != OBJ_HANDLE_NULL) {
                     if (item_find_by_name(substitute_inventory_obj, value) != OBJ_HANDLE_NULL) {
                         return false;
                     }
                 }
             } else {
-                if (item_find_by_name(a1->pc_obj, value)) {
+                if (item_find_by_name(state->pc_obj, value)) {
                     return false;
                 }
 
-                object_list_followers(a1->pc_obj, &followers);
+                object_list_followers(state->pc_obj, &followers);
                 node = followers.head;
                 while (node != NULL) {
                     if (item_find_by_name(node->obj, value)) {
@@ -1709,17 +1720,17 @@ bool sub_4150D0(DialogState* a1, char* a2)
             }
             break;
         case DIALOG_COND_QA:
-            if (quest_state_get(a1->pc_obj, value) < sub_4167C0(pch)) {
+            if (quest_state_get(state->pc_obj, value) < dialog_parse_integer_after_first(pch)) {
                 return false;
             }
             break;
         case DIALOG_COND_RA:
             if (value > 0) {
-                if (stat_level_get(a1->pc_obj, STAT_RACE) + 1 != value) {
+                if (stat_level_get(state->pc_obj, STAT_RACE) + 1 != value) {
                     return false;
                 }
             } else {
-                if (stat_level_get(a1->pc_obj, STAT_RACE) + 1 == -value) {
+                if (stat_level_get(state->pc_obj, STAT_RACE) + 1 == -value) {
                     return false;
                 }
             }
@@ -1731,7 +1742,7 @@ bool sub_4150D0(DialogState* a1, char* a2)
             } else {
                 inverse = false;
             }
-            object_list_followers(a1->pc_obj, &followers);
+            object_list_followers(state->pc_obj, &followers);
             node = followers.head;
             while (node != NULL) {
                 if ((obj_field_int32_get(node->obj, OBJ_F_SPELL_FLAGS) & OSF_MIND_CONTROLLED) == 0
@@ -1763,7 +1774,7 @@ bool sub_4150D0(DialogState* a1, char* a2)
             }
             break;
         case DIALOG_COND_WA:
-            if ((obj_field_int32_get(a1->npc_obj, OBJ_F_NPC_FLAGS) & ONF_AI_WAIT_HERE) != 0) {
+            if ((obj_field_int32_get(state->npc_obj, OBJ_F_NPC_FLAGS) & ONF_AI_WAIT_HERE) != 0) {
                 if (value == 0) {
                     return false;
                 }
@@ -1774,7 +1785,7 @@ bool sub_4150D0(DialogState* a1, char* a2)
             }
             break;
         case DIALOG_COND_WT:
-            if ((obj_field_int32_get(a1->npc_obj, OBJ_F_NPC_FLAGS) & ONF_JILTED) != 0) {
+            if ((obj_field_int32_get(state->npc_obj, OBJ_F_NPC_FLAGS) & ONF_JILTED) != 0) {
                 if (value == 0) {
                     return false;
                 }
@@ -1785,62 +1796,62 @@ bool sub_4150D0(DialogState* a1, char* a2)
             }
             break;
         case DIALOG_COND_PV:
-            if (script_pc_var_get(a1->pc_obj, value) != sub_4167C0(pch)) {
+            if (script_pc_var_get(state->pc_obj, value) != dialog_parse_integer_after_first(pch)) {
                 return false;
             }
             break;
         case DIALOG_COND_PF:
-            if (script_pc_flag_get(a1->pc_obj, value) != sub_4167C0(pch)) {
+            if (script_pc_flag_get(state->pc_obj, value) != dialog_parse_integer_after_first(pch)) {
                 return false;
             }
             break;
         case DIALOG_COND_NA:
             if (value < 0) {
-                if (stat_level_get(a1->pc_obj, STAT_ALIGNMENT) > value) {
+                if (stat_level_get(state->pc_obj, STAT_ALIGNMENT) > value) {
                     return false;
                 }
             } else {
-                if (stat_level_get(a1->pc_obj, STAT_ALIGNMENT) < -value) {
+                if (stat_level_get(state->pc_obj, STAT_ALIGNMENT) < -value) {
                     return false;
                 }
             }
             break;
         case DIALOG_COND_AR:
             if (value > 0) {
-                if (!area_is_known(a1->pc_obj, value)) {
+                if (!area_is_known(state->pc_obj, value)) {
                     return false;
                 }
             } else {
-                if (area_is_known(a1->pc_obj, -value)) {
+                if (area_is_known(state->pc_obj, -value)) {
                     return false;
                 }
             }
             break;
         case DIALOG_COND_RP:
             if (value > 0) {
-                if (!reputation_has(a1->pc_obj, value)) {
+                if (!reputation_has(state->pc_obj, value)) {
                     return false;
                 }
             } else {
-                if (reputation_has(a1->pc_obj, -value)) {
+                if (reputation_has(state->pc_obj, -value)) {
                     return false;
                 }
             }
             break;
         case DIALOG_COND_IA:
             if (value > 0) {
-                if (area_of_object(a1->pc_obj) != value) {
+                if (area_of_object(state->pc_obj) != value) {
                     return false;
                 }
             } else {
-                if (area_of_object(a1->pc_obj) == -value) {
+                if (area_of_object(state->pc_obj) == -value) {
                     return false;
                 }
             }
             break;
         case DIALOG_COND_SC:
-            v39 = sub_4167C0(pch);
-            v40 = spell_college_level_get(a1->pc_obj, value);
+            v39 = dialog_parse_integer_after_first(pch);
+            v40 = spell_college_level_get(state->pc_obj, value);
             if (v39 > 0) {
                 if (v40 < v39) {
                     return false;
@@ -1860,8 +1871,9 @@ bool sub_4150D0(DialogState* a1, char* a2)
     return true;
 }
 
+// Executes dialog action operators and reports whether normal response handling can continue.
 // 0x415BA0
-bool sub_415BA0(DialogState* a1, char* a2, int a3)
+bool dialog_actions_execute(DialogState* state, char* a2, int a3)
 {
     char* pch;
     int act;
@@ -1897,7 +1909,7 @@ bool sub_415BA0(DialogState* a1, char* a2, int a3)
 
         value = atoi(pch);
         for (act = 0; act < DIALOG_ACTION_COUNT; act++) {
-            if (SDL_strcasecmp(off_5A0750[act], code) == 0) {
+            if (SDL_strcasecmp(dialog_action_names[act], code) == 0) {
                 break;
             }
         }
@@ -1905,18 +1917,18 @@ bool sub_415BA0(DialogState* a1, char* a2, int a3)
         switch (act) {
         case DIALOG_ACTION_GOLD:
             if (value > 0) {
-                item_gold_transfer(OBJ_HANDLE_NULL, a1->pc_obj, value, OBJ_HANDLE_NULL);
+                item_gold_transfer(OBJ_HANDLE_NULL, state->pc_obj, value, OBJ_HANDLE_NULL);
             } else if (value < 0) {
                 int total_gold;
 
                 value = -value;
 
-                total_gold = item_gold_get(a1->pc_obj);
-                item_gold_transfer(a1->pc_obj, a1->npc_obj, value, OBJ_HANDLE_NULL);
+                total_gold = item_gold_get(state->pc_obj);
+                item_gold_transfer(state->pc_obj, state->npc_obj, value, OBJ_HANDLE_NULL);
 
                 value -= total_gold;
                 if (value > 0) {
-                    object_list_followers(a1->pc_obj, &followers);
+                    object_list_followers(state->pc_obj, &followers);
                     node = followers.head;
                     while (node != NULL) {
                         if (value <= 0) {
@@ -1924,7 +1936,7 @@ bool sub_415BA0(DialogState* a1, char* a2, int a3)
                         }
 
                         total_gold = item_gold_get(node->obj);
-                        item_gold_transfer(node->obj, a1->npc_obj, value, OBJ_HANDLE_NULL);
+                        item_gold_transfer(node->obj, state->npc_obj, value, OBJ_HANDLE_NULL);
 
                         node = node->next;
                     }
@@ -1935,70 +1947,70 @@ bool sub_415BA0(DialogState* a1, char* a2, int a3)
         case DIALOG_ACTION_RE: {
             int reaction;
 
-            reaction = reaction_get(a1->npc_obj, a1->pc_obj);
+            reaction = reaction_get(state->npc_obj, state->pc_obj);
 
             while (SDL_isspace(*pch)) {
                 pch++;
             }
 
             if (*pch == '+' || *pch == '-') {
-                reaction_adj(a1->npc_obj, a1->pc_obj, value);
+                reaction_adj(state->npc_obj, state->pc_obj, value);
             } else if (*pch == '>') {
                 if (reaction < value) {
-                    reaction_adj(a1->npc_obj, a1->pc_obj, value - reaction);
+                    reaction_adj(state->npc_obj, state->pc_obj, value - reaction);
                 }
             } else if (*pch == '<') {
                 if (reaction > value) {
-                    reaction_adj(a1->npc_obj, a1->pc_obj, value - reaction);
+                    reaction_adj(state->npc_obj, state->pc_obj, value - reaction);
                 }
             } else {
-                reaction_adj(a1->npc_obj, a1->pc_obj, value - reaction);
+                reaction_adj(state->npc_obj, state->pc_obj, value - reaction);
             }
 
             break;
         }
         case DIALOG_ACTION_QU:
-            quest_state_set(a1->pc_obj, value, sub_4167C0(pch), a1->npc_obj);
+            quest_state_set(state->pc_obj, value, dialog_parse_integer_after_first(pch), state->npc_obj);
             break;
         case DIALOG_ACTION_FL:
-            a1->num = value;
-            sub_413A30(a1, false);
-            a1->field_17E8 = 4;
+            state->num = value;
+            dialog_prepare_npc_reply(state, false);
+            state->turn_status = 4;
             v57 = false;
             break;
         case DIALOG_ACTION_CO:
             attack = true;
             break;
         case DIALOG_ACTION_GV:
-            script_global_var_set(value, sub_4167C0(pch));
+            script_global_var_set(value, dialog_parse_integer_after_first(pch));
             break;
         case DIALOG_ACTION_GF:
-            script_global_flag_set(value, sub_4167C0(pch));
+            script_global_flag_set(value, dialog_parse_integer_after_first(pch));
             break;
         case DIALOG_ACTION_MM:
-            area_set_known(a1->pc_obj, value);
+            area_set_known(state->pc_obj, value);
             break;
         case DIALOG_ACTION_AL: {
             int alignment;
 
-            alignment = stat_base_get(a1->pc_obj, STAT_ALIGNMENT);
+            alignment = stat_base_get(state->pc_obj, STAT_ALIGNMENT);
 
             while (SDL_isspace(*pch)) {
                 pch++;
             }
 
             if (*pch == '+' || *pch == '-') {
-                stat_base_set(a1->pc_obj, STAT_ALIGNMENT, alignment + value);
+                stat_base_set(state->pc_obj, STAT_ALIGNMENT, alignment + value);
             } else if (*pch == '>') {
                 if (alignment < value) {
-                    stat_base_set(a1->pc_obj, STAT_ALIGNMENT, value);
+                    stat_base_set(state->pc_obj, STAT_ALIGNMENT, value);
                 }
             } else if (*pch == '<') {
                 if (alignment > value) {
-                    stat_base_set(a1->pc_obj, STAT_ALIGNMENT, value);
+                    stat_base_set(state->pc_obj, STAT_ALIGNMENT, value);
                 }
             } else {
-                stat_base_set(a1->pc_obj, STAT_ALIGNMENT, value);
+                stat_base_set(state->pc_obj, STAT_ALIGNMENT, value);
             }
 
             break;
@@ -2011,26 +2023,26 @@ bool sub_415BA0(DialogState* a1, char* a2, int a3)
             if (value < 0) {
                 value = -value;
 
-                item_obj = item_find_by_name(a1->npc_obj, value);
+                item_obj = item_find_by_name(state->npc_obj, value);
                 if (item_obj == OBJ_HANDLE_NULL) {
-                    substitute_inventory_obj = critter_substitute_inventory_get(a1->npc_obj);
+                    substitute_inventory_obj = critter_substitute_inventory_get(state->npc_obj);
                     if (substitute_inventory_obj != OBJ_HANDLE_NULL) {
                         item_obj = item_find_by_name(substitute_inventory_obj, value);
                     }
                 }
 
                 if (item_obj != OBJ_HANDLE_NULL) {
-                    item_transfer(item_obj, a1->pc_obj);
+                    item_transfer(item_obj, state->pc_obj);
                     item_parent(item_obj, &parent_obj);
-                    if (parent_obj != a1->pc_obj) {
+                    if (parent_obj != state->pc_obj) {
                         item_remove(item_obj);
-                        sub_466E50(item_obj, obj_field_int64_get(a1->pc_obj, OBJ_F_LOCATION));
+                        item_drop_into_junk_pile_with_decay(item_obj, obj_field_int64_get(state->pc_obj, OBJ_F_LOCATION));
                     }
                 }
             } else {
-                item_obj = item_find_by_name(a1->pc_obj, value);
+                item_obj = item_find_by_name(state->pc_obj, value);
                 if (item_obj == OBJ_HANDLE_NULL) {
-                    object_list_followers(a1->pc_obj, &followers);
+                    object_list_followers(state->pc_obj, &followers);
                     node = followers.head;
                     while (node != NULL) {
                         item_obj = item_find_by_name(node->obj, value);
@@ -2043,12 +2055,12 @@ bool sub_415BA0(DialogState* a1, char* a2, int a3)
                 }
 
                 if (item_obj != OBJ_HANDLE_NULL) {
-                    item_transfer(item_obj, a1->npc_obj);
+                    item_transfer(item_obj, state->npc_obj);
                     item_parent(item_obj, &parent_obj);
-                    if (parent_obj != a1->npc_obj) {
-                        if (critter_pc_leader_get(a1->npc_obj) != OBJ_HANDLE_NULL) {
+                    if (parent_obj != state->npc_obj) {
+                        if (critter_pc_leader_get(state->npc_obj) != OBJ_HANDLE_NULL) {
                             item_remove(item_obj);
-                            sub_466E50(item_obj, obj_field_int64_get(a1->npc_obj, OBJ_F_LOCATION));
+                            item_drop_into_junk_pile_with_decay(item_obj, obj_field_int64_get(state->npc_obj, OBJ_F_LOCATION));
                         } else {
                             object_destroy(item_obj);
                         }
@@ -2058,24 +2070,28 @@ bool sub_415BA0(DialogState* a1, char* a2, int a3)
             break;
         }
         case DIALOG_ACTION_LF:
-            script_local_flag_set(a1->npc_obj, SAP_DIALOG, value, sub_4167C0(pch));
+            script_local_flag_set(state->npc_obj, SAP_DIALOG, value, dialog_parse_integer_after_first(pch));
             break;
         case DIALOG_ACTION_LC:
-            script_local_counter_set(a1->npc_obj, SAP_DIALOG, value, sub_4167C0(pch));
+            script_local_counter_set(state->npc_obj, SAP_DIALOG, value, dialog_parse_integer_after_first(pch));
             break;
         case DIALOG_ACTION_TR: {
             int training;
 
-            training = sub_4167C0(pch);
+            training = dialog_parse_integer_after_first(pch);
             if (IS_TECH_SKILL(value)) {
-                tech_skill_training_set(a1->pc_obj, GET_TECH_SKILL(value), training);
+                int before = tech_skill_training_get(state->pc_obj, GET_TECH_SKILL(value));
+                int after = tech_skill_training_set(state->pc_obj, GET_TECH_SKILL(value), training);
+                activity_time_training(state->pc_obj, before, after);
             } else {
-                basic_skill_training_set(a1->pc_obj, GET_BASIC_SKILL(value), training);
+                int before = basic_skill_training_get(state->pc_obj, GET_BASIC_SKILL(value));
+                int after = basic_skill_training_set(state->pc_obj, GET_BASIC_SKILL(value), training);
+                activity_time_training(state->pc_obj, before, after);
             }
             break;
         }
         case DIALOG_ACTION_RU:
-            rumor_known_set(a1->pc_obj, value);
+            rumor_known_set(state->pc_obj, value);
             break;
         case DIALOG_ACTION_RQ:
             rumor_qstate_set(value);
@@ -2084,111 +2100,111 @@ bool sub_415BA0(DialogState* a1, char* a2, int a3)
             int v41;
             int rc;
 
-            v41 = sub_4167C0(pch);
-            rc = ai_check_follow(a1->npc_obj, a1->pc_obj, value);
+            v41 = dialog_parse_integer_after_first(pch);
+            rc = ai_check_follow(state->npc_obj, state->pc_obj, value);
             if (rc == AI_FOLLOW_OK) {
-                critter_follow(a1->npc_obj, a1->pc_obj, value);
-                a1->field_17EC = v41;
-                a1->field_17E8 = 0;
-                sub_414E60(a1, false);
+                critter_follow(state->npc_obj, state->pc_obj, value);
+                state->response_value = v41;
+                state->turn_status = 0;
+                dialog_turn_build(state, false);
                 v57 = false;
             } else {
-                dialog_copy_npc_wont_follow_msg(a1->npc_obj, a1->pc_obj, rc, a1->reply, &(a1->speech_id));
-                a1->num_options = 1;
-                dialog_copy_pc_generic_msg(a1->options[0], a1, 600, 699);
-                a1->field_17F0[0] = a1->field_17F0[a3];
-                a1->field_1804[0] = a1->field_1804[a3];
-                a1->actions[0] = 0;
+                dialog_copy_npc_wont_follow_msg(state->npc_obj, state->pc_obj, rc, state->reply, &(state->speech_id));
+                state->num_options = 1;
+                dialog_copy_pc_generic_msg(state->options[0], state, 600, 699);
+                state->option_response_types[0] = state->option_response_types[a3];
+                state->option_response_values[0] = state->option_response_values[a3];
+                state->actions[0] = 0;
                 v57 = false;
             }
             break;
         }
         case DIALOG_ACTION_WA:
-            ai_npc_wait(a1->npc_obj);
+            ai_npc_wait(state->npc_obj);
             break;
         case DIALOG_ACTION_LV:
-            critter_disband(a1->npc_obj, true);
+            critter_disband(state->npc_obj, true);
             break;
         case DIALOG_ACTION_SS:
             script_story_state_set(value);
             break;
         case DIALOG_ACTION_SC:
-            critter_stay_close(a1->npc_obj);
+            critter_stay_close(state->npc_obj);
             break;
         case DIALOG_ACTION_SO:
-            critter_spread_out(a1->npc_obj);
+            critter_spread_out(state->npc_obj);
             break;
         case DIALOG_ACTION_UW: {
             int v43;
             int rc;
 
-            v43 = sub_4167C0(pch);
-            rc = ai_check_follow(a1->npc_obj, a1->pc_obj, value);
+            v43 = dialog_parse_integer_after_first(pch);
+            rc = ai_check_follow(state->npc_obj, state->pc_obj, value);
             if (rc == AI_FOLLOW_OK) {
-                ai_npc_unwait(a1->npc_obj, value);
-                a1->field_17EC = v43;
-                a1->field_17E8 = 0;
-                sub_414E60(a1, false);
+                ai_npc_unwait(state->npc_obj, value);
+                state->response_value = v43;
+                state->turn_status = 0;
+                dialog_turn_build(state, false);
                 v57 = false;
             } else {
-                dialog_copy_npc_wont_follow_msg(a1->npc_obj, a1->pc_obj, rc, a1->reply, &(a1->speech_id));
-                a1->num_options = 1;
-                dialog_copy_pc_generic_msg(a1->options[0], a1, 600, 699);
-                a1->field_17F0[0] = a1->field_17F0[a3];
-                a1->field_1804[0] = a1->field_1804[a3];
-                a1->actions[0] = NULL;
+                dialog_copy_npc_wont_follow_msg(state->npc_obj, state->pc_obj, rc, state->reply, &(state->speech_id));
+                state->num_options = 1;
+                dialog_copy_pc_generic_msg(state->options[0], state, 600, 699);
+                state->option_response_types[0] = state->option_response_types[a3];
+                state->option_response_values[0] = state->option_response_values[a3];
+                state->actions[0] = NULL;
                 v57 = false;
             }
             break;
         }
         case DIALOG_ACTION_PV:
-            script_pc_var_set(a1->pc_obj, value, sub_4167C0(pch));
+            script_pc_var_set(state->pc_obj, value, dialog_parse_integer_after_first(pch));
             break;
         case DIALOG_ACTION_PF:
-            script_pc_flag_set(a1->pc_obj, value, sub_4167C0(pch));
+            script_pc_flag_set(state->pc_obj, value, dialog_parse_integer_after_first(pch));
             break;
         case DIALOG_ACTION_XP:
-            critter_give_xp(a1->pc_obj, quest_get_xp(value));
+            critter_give_xp(state->pc_obj, quest_get_xp(value));
             break;
         case DIALOG_ACTION_NK:
-            critter_kill(a1->npc_obj);
+            critter_kill(state->npc_obj);
             break;
         case DIALOG_ACTION_RP:
             if (value > 0) {
-                reputation_add(a1->pc_obj, value);
+                reputation_add(state->pc_obj, value);
             } else {
-                reputation_remove(a1->pc_obj, -value);
+                reputation_remove(state->pc_obj, -value);
             }
             break;
         case DIALOG_ACTION_NP:
-            newspaper_enqueue(value, sub_4167C0(pch));
+            newspaper_enqueue(value, dialog_parse_integer_after_first(pch));
             break;
         case DIALOG_ACTION_CE:
-            dialog_copy_npc_order_ok_msg(a1->npc_obj, a1->pc_obj, a1->reply, &(a1->speech_id));
-            a1->field_17E8 = 5;
+            dialog_copy_npc_order_ok_msg(state->npc_obj, state->pc_obj, state->reply, &(state->speech_id));
+            state->turn_status = 5;
             v57 = false;
             break;
         case DIALOG_ACTION_FP:
-            stat_base_set(a1->pc_obj,
+            stat_base_set(state->pc_obj,
                 STAT_FATE_POINTS,
-                stat_base_get(a1->pc_obj, STAT_FATE_POINTS) + 1);
+                stat_base_get(state->pc_obj, STAT_FATE_POINTS) + 1);
             break;
         case DIALOG_ACTION_SU:
-            dialog_copy_npc_order_ok_msg(a1->npc_obj, a1->pc_obj, a1->reply, &(a1->speech_id));
-            a1->field_17E8 = 7;
+            dialog_copy_npc_order_ok_msg(state->npc_obj, state->pc_obj, state->reply, &(state->speech_id));
+            state->turn_status = 7;
             v57 = false;
             break;
         case DIALOG_ACTION_OR:
-            critter_origin_set(a1->npc_obj, value);
+            critter_origin_set(state->npc_obj, value);
             break;
         case DIALOG_ACTION_II:
-            dialog_copy_npc_order_ok_msg(a1->npc_obj, a1->pc_obj, a1->reply, &(a1->speech_id));
-            a1->field_17E8 = 8;
+            dialog_copy_npc_order_ok_msg(state->npc_obj, state->pc_obj, state->reply, &(state->speech_id));
+            state->turn_status = 8;
             v57 = false;
             break;
         case DIALOG_ACTION_RI:
-            dialog_copy_npc_order_ok_msg(a1->npc_obj, a1->pc_obj, a1->reply, &(a1->speech_id));
-            a1->field_17E8 = 9;
+            dialog_copy_npc_order_ok_msg(state->npc_obj, state->pc_obj, state->reply, &(state->speech_id));
+            state->turn_status = 9;
             v57 = false;
             break;
         case DIALOG_ACTION_ET: {
@@ -2196,37 +2212,37 @@ bool sub_415BA0(DialogState* a1, char* a2, int a3)
             int training;
             int level;
 
-            v50 = sub_4167C0(pch);
+            v50 = dialog_parse_integer_after_first(pch);
             if (IS_TECH_SKILL(value)) {
-                level = tech_skill_level(a1->pc_obj, GET_TECH_SKILL(value));
-                training = tech_skill_training_get(a1->pc_obj, GET_TECH_SKILL(value));
+                level = tech_skill_level(state->pc_obj, GET_TECH_SKILL(value));
+                training = tech_skill_training_get(state->pc_obj, GET_TECH_SKILL(value));
             } else {
-                level = basic_skill_level(a1->pc_obj, GET_BASIC_SKILL(value));
-                training = basic_skill_training_get(a1->pc_obj, GET_BASIC_SKILL(value));
+                level = basic_skill_level(state->pc_obj, GET_BASIC_SKILL(value));
+                training = basic_skill_training_get(state->pc_obj, GET_BASIC_SKILL(value));
             }
 
             if (level < training_min_skill_level_required(TRAINING_EXPERT)) {
-                dialog_copy_npc_wont_follow_msg(a1->npc_obj, a1->pc_obj, 34, a1->reply, &(a1->speech_id));
-                dialog_copy_npc_generic_msg(a1->reply, a1, 6200, 6299);
-                a1->num_options = 1;
-                dialog_copy_pc_generic_msg(a1->options[0], a1, 600, 699);
-                a1->field_17F0[0] = a1->field_17F0[a3];
-                a1->field_1804[0] = a1->field_1804[a3];
-                a1->actions[0] = NULL;
+                dialog_copy_npc_wont_follow_msg(state->npc_obj, state->pc_obj, 34, state->reply, &(state->speech_id));
+                dialog_copy_npc_generic_msg(state->reply, state, 6200, 6299);
+                state->num_options = 1;
+                dialog_copy_pc_generic_msg(state->options[0], state, 600, 699);
+                state->option_response_types[0] = state->option_response_types[a3];
+                state->option_response_values[0] = state->option_response_values[a3];
+                state->actions[0] = NULL;
                 v57 = false;
             } else if (training < TRAINING_APPRENTICE) {
-                dialog_copy_npc_wont_follow_msg(a1->npc_obj, a1->pc_obj, 34, a1->reply, &(a1->speech_id));
-                dialog_copy_npc_generic_msg(a1->reply, a1, 6300, 6399);
-                a1->num_options = 1;
-                dialog_copy_pc_generic_msg(a1->options[0], a1, 600, 699);
-                a1->field_17F0[0] = a1->field_17F0[a3];
-                a1->field_1804[0] = a1->field_1804[a3];
-                a1->actions[0] = NULL;
+                dialog_copy_npc_wont_follow_msg(state->npc_obj, state->pc_obj, 34, state->reply, &(state->speech_id));
+                dialog_copy_npc_generic_msg(state->reply, state, 6300, 6399);
+                state->num_options = 1;
+                dialog_copy_pc_generic_msg(state->options[0], state, 600, 699);
+                state->option_response_types[0] = state->option_response_types[a3];
+                state->option_response_values[0] = state->option_response_values[a3];
+                state->actions[0] = NULL;
                 v57 = false;
             } else {
-                a1->field_17EC = v50;
-                a1->field_17E8 = 0;
-                sub_414E60(a1, false);
+                state->response_value = v50;
+                state->turn_status = 0;
+                dialog_turn_build(state, false);
                 v57 = false;
             }
             break;
@@ -2238,14 +2254,15 @@ bool sub_415BA0(DialogState* a1, char* a2, int a3)
     }
 
     if (attack) {
-        ai_attack(a1->pc_obj, a1->npc_obj, LOUDNESS_NORMAL, 0);
+        ai_attack(state->pc_obj, state->npc_obj, LOUDNESS_NORMAL, 0);
     }
 
     return v57;
 }
 
+// Skips leading whitespace and unsigned decimal digits, then applies atoi to the remainder.
 // 0x4167C0
-int sub_4167C0(const char* str)
+int dialog_parse_integer_after_first(const char* str)
 {
     while (SDL_isspace(*str)) {
         str++;
@@ -2258,38 +2275,39 @@ int sub_4167C0(const char* str)
     return atoi(str);
 }
 
+// Loads a reply line, optionally executes its actions, and expands generated reply operators.
 // 0x416840
-bool sub_416840(DialogState* a1, bool a2)
+bool dialog_npc_reply_build(DialogState* state, bool a2)
 {
     DialogFileEntry entry;
 
-    entry.num = a1->field_17EC;
-    if (!dialog_search(a1->dlg, &entry)) {
-        a1->speech_id = -1;
-        a1->reply[0] = ' ';
-        a1->reply[1] = '\0';
+    entry.num = state->response_value;
+    if (!dialog_search(state->dlg, &entry)) {
+        state->speech_id = -1;
+        state->reply[0] = ' ';
+        state->reply[1] = '\0';
         return false;
     }
 
-    a1->field_1840 = entry.response_val;
-    a1->speech_id = sub_4189C0(entry.conditions, a1->script_num);
+    state->npc_response_value = entry.response_val;
+    state->speech_id = dialog_speech_id_encode(entry.conditions, state->script_num);
 
     if (!a2) {
-        sub_415BA0(a1, entry.actions, 0);
+        dialog_actions_execute(state, entry.actions, 0);
     }
 
     if (SDL_strncasecmp(entry.str, "g:", 2) == 0) {
-        sub_419260(a1, &(entry.str[2]));
+        dialog_generated_greeting_build(state, &(entry.str[2]));
 
-        if (a1->field_17E8) {
-            a1->num_options = 0;
+        if (state->turn_status) {
+            state->num_options = 0;
             return false;
         }
         return true;
     }
 
     if (SDL_strcasecmp(entry.str, "i:") == 0) {
-        dialog_copy_npc_race_specific_msg(a1->reply, a1, 1000);
+        dialog_copy_npc_race_specific_msg(state->reply, state, 1000);
         return true;
     }
 
@@ -2308,9 +2326,9 @@ bool sub_416840(DialogState* a1, bool a2)
         pch = strchr(pch, ',') + 1;
         v3 = atoi(pch);
 
-        sub_417590(v3, &v4, &v5);
-        sub_417590(entry.response_val, &v6, &v7);
-        dialog_ask_money(v2, v4, v5, v6, v7, a1);
+        dialog_response_decode(v3, &v4, &v5);
+        dialog_response_decode(entry.response_val, &v6, &v7);
+        dialog_ask_money(v2, v4, v5, v6, v7, state);
 
         return false;
     }
@@ -2327,15 +2345,15 @@ bool sub_416840(DialogState* a1, bool a2)
         pch = strchr(pch, ',');
         cnt = dialog_parse_params(rumors, pch + 1);
 
-        dialog_ask_money_for_rumor(cost, rumors, cnt, entry.response_val, a1);
+        dialog_ask_money_for_rumor(cost, rumors, cnt, entry.response_val, state);
         return false;
     }
 
-    if (obj_type_is_critter(obj_field_int32_get(a1->pc_obj, OBJ_F_TYPE))
-        && stat_level_get(a1->pc_obj, STAT_GENDER) != GENDER_MALE) {
-        sub_416B00(a1->reply, entry.data.female_str, a1);
+    if (obj_type_is_critter(obj_field_int32_get(state->pc_obj, OBJ_F_TYPE))
+        && stat_level_get(state->pc_obj, STAT_GENDER) != GENDER_MALE) {
+        dialog_expand_name_tokens(state->reply, entry.data.female_str, state);
     } else {
-        sub_416B00(a1->reply, entry.str, a1);
+        dialog_expand_name_tokens(state->reply, entry.str, state);
     }
 
     return true;
@@ -2360,8 +2378,9 @@ bool dialog_search(int dlg, DialogFileEntry* entry)
     return true;
 }
 
+// Expands pcname and npcname tokens delimited by at-signs, temporarily editing the source string.
 // 0x416B00
-void sub_416B00(char* dst, char* src, DialogState* a3)
+void dialog_expand_name_tokens(char* dst, char* src, DialogState* state)
 {
     char* remainder;
     char* start;
@@ -2377,9 +2396,9 @@ void sub_416B00(char* dst, char* src, DialogState* a3)
         end = strchr(start + 1, '@');
         *end = '\0';
         if (SDL_strcasecmp(start + 1, "pcname") == 0) {
-            object_examine(a3->pc_obj, OBJ_HANDLE_NULL, dst + strlen(dst));
+            object_examine(state->pc_obj, OBJ_HANDLE_NULL, dst + strlen(dst));
         } else if (SDL_strcasecmp(start + 1, "npcname") == 0) {
-            object_examine(a3->pc_obj, a3->npc_obj, dst + strlen(dst));
+            object_examine(state->pc_obj, state->npc_obj, dst + strlen(dst));
         }
 
         *start = '@';
@@ -2391,8 +2410,9 @@ void sub_416B00(char* dst, char* src, DialogState* a3)
     strcat(dst, remainder);
 }
 
+// Builds a PC option from literal text or a generated option operator, recording its response and actions.
 // 0x416C10
-bool sub_416C10(int a1, int a2, DialogState* a3)
+bool dialog_pc_option_build(int a1, int a2, DialogState* state)
 {
     DialogFileEntry entry;
     char* pch;
@@ -2403,120 +2423,120 @@ bool sub_416C10(int a1, int a2, DialogState* a3)
     int v4;
 
     entry.num = a1;
-    dialog_search(a3->dlg, &entry);
+    dialog_search(state->dlg, &entry);
 
     if (SDL_strcasecmp(entry.str, "a:") == 0) {
-        dialog_copy_pc_class_specific_msg(a3->options[a2], a3, 1000);
-        sub_417590(entry.response_val, &(a3->field_17F0[a2]), &(a3->field_1804[a2]));
+        dialog_copy_pc_class_specific_msg(state->options[a2], state, 1000);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
     } else if (SDL_strcasecmp(entry.str, "b:") == 0) {
-        if (critter_leader_get(a3->npc_obj) == a3->pc_obj) {
-            dialog_copy_pc_generic_msg(a3->options[a2], a3, 1600, 1699);
+        if (critter_leader_get(state->npc_obj) == state->pc_obj) {
+            dialog_copy_pc_generic_msg(state->options[a2], state, 1600, 1699);
         } else {
-            dialog_copy_pc_generic_msg(a3->options[a2], a3, 300, 399);
+            dialog_copy_pc_generic_msg(state->options[a2], state, 300, 399);
         }
-        a3->field_17F0[a2] = 3;
-        a3->field_1804[a2] = entry.response_val;
+        state->option_response_types[a2] = 3;
+        state->option_response_values[a2] = entry.response_val;
     } else if (SDL_strncasecmp(entry.str, "c:", 2) == 0) {
-        dialog_copy_pc_story_msg(a3->options[a2], a3);
-        a3->field_17F0[a2] = 24;
-        a3->field_1804[a2] = entry.response_val;
+        dialog_copy_pc_story_msg(state->options[a2], state);
+        state->option_response_types[a2] = 24;
+        state->option_response_values[a2] = entry.response_val;
     } else if (SDL_strncasecmp(entry.str, "d:", 2) == 0) {
         pch = strchr(entry.str, ',');
         cnt = dialog_parse_params(values, pch + 1);
-        if (filter_unknown_areas(a3->pc_obj, values, cnt) == 0) {
+        if (filter_unknown_areas(state->pc_obj, values, cnt) == 0) {
             return false;
         }
-        dialog_copy_pc_generic_msg(a3->options[a2], a3, 1300, 1399);
+        dialog_copy_pc_generic_msg(state->options[a2], state, 1300, 1399);
 
-        pch = a3->options[a2];
+        pch = state->options[a2];
         strcpy(&(pch[strlen(pch) + 1]), entry.str + 2);
-        a3->field_17F0[a2] = 18;
-        a3->field_1804[a2] = entry.response_val;
-        a3->field_1818[a2] = 0;
+        state->option_response_types[a2] = 18;
+        state->option_response_values[a2] = entry.response_val;
+        state->option_response_extra_values[a2] = 0;
     } else if (SDL_strcasecmp(entry.str, "e:") == 0) {
-        dialog_copy_pc_generic_msg(a3->options[a2], a3, 400, 499);
-        sub_417590(entry.response_val, &(a3->field_17F0[a2]), &(a3->field_1804[a2]));
+        dialog_copy_pc_generic_msg(state->options[a2], state, 400, 499);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
     } else if (SDL_strcasecmp(entry.str, "f:") == 0) {
-        dialog_copy_pc_generic_msg(a3->options[a2], a3, 800, 899);
-        sub_417590(entry.response_val, &(a3->field_17F0[a2]), &(a3->field_1804[a2]));
+        dialog_copy_pc_generic_msg(state->options[a2], state, 800, 899);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
     } else if (SDL_strcasecmp(entry.str, "h:") == 0) {
-        dialog_copy_pc_generic_msg(a3->options[a2], a3, 700, 799);
-        a3->field_17F0[a2] = 11;
-        a3->field_1804[a2] = entry.response_val;
+        dialog_copy_pc_generic_msg(state->options[a2], state, 700, 799);
+        state->option_response_types[a2] = 11;
+        state->option_response_values[a2] = entry.response_val;
     } else if (SDL_strcasecmp(entry.str, "i:") == 0) {
-        sub_417590(entry.response_val, &v2, &v3);
-        dialog_build_pc_insult_option(a2, v2, v3, a3);
+        dialog_response_decode(entry.response_val, &v2, &v3);
+        dialog_build_pc_insult_option(a2, v2, v3, state);
     } else if (SDL_strcasecmp(entry.str, "k:") == 0) {
-        dialog_copy_pc_generic_msg(a3->options[a2], a3, 1500, 1599);
-        sub_417590(entry.response_val, &(a3->field_17F0[a2]), &(a3->field_1804[a2]));
+        dialog_copy_pc_generic_msg(state->options[a2], state, 1500, 1599);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
     } else if (SDL_strcasecmp(entry.str, "l:") == 0) {
-        dialog_copy_pc_generic_msg(a3->options[a2], a3, 2300, 2399);
-        a3->field_17F0[a2] = 30;
-        a3->field_1804[a2] = entry.response_val;
+        dialog_copy_pc_generic_msg(state->options[a2], state, 2300, 2399);
+        state->option_response_types[a2] = 30;
+        state->option_response_values[a2] = entry.response_val;
     } else if (SDL_strcasecmp(entry.str, "n:") == 0) {
-        dialog_copy_pc_generic_msg(a3->options[a2], a3, 100, 199);
-        sub_417590(entry.response_val, &(a3->field_17F0[a2]), &(a3->field_1804[a2]));
+        dialog_copy_pc_generic_msg(state->options[a2], state, 100, 199);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
     } else if (SDL_strcasecmp(entry.str, "p:") == 0) {
-        dialog_copy_pc_generic_msg(a3->options[a2], a3, 1900, 1999);
-        a3->field_17F0[a2] = 25;
-        a3->field_1804[a2] = entry.response_val;
+        dialog_copy_pc_generic_msg(state->options[a2], state, 1900, 1999);
+        state->option_response_types[a2] = 25;
+        state->option_response_values[a2] = entry.response_val;
     } else if (SDL_strncasecmp(entry.str, "q:", 2) == 0) {
-        v4 = quest_dialog_line(a3->pc_obj, a3->npc_obj, atoi(entry.str + 2));
+        v4 = quest_dialog_line(state->pc_obj, state->npc_obj, atoi(entry.str + 2));
         if (v4 != -1) {
-            return sub_416C10(v4, a2, a3);
+            return dialog_pc_option_build(v4, a2, state);
         }
         return false;
     } else if (SDL_strncasecmp(entry.str, "r:", 2) == 0) {
-        dialog_copy_pc_class_specific_msg(a3->options[a2], a3, 2000);
+        dialog_copy_pc_class_specific_msg(state->options[a2], state, 2000);
 
-        pch = a3->options[a2];
+        pch = state->options[a2];
         strcpy(&(pch[strlen(pch) + 1]), entry.str + 2);
-        a3->field_17F0[a2] = 8;
-        a3->field_1804[a2] = entry.response_val;
+        state->option_response_types[a2] = 8;
+        state->option_response_values[a2] = entry.response_val;
     } else if (SDL_strcasecmp(entry.str, "s:") == 0) {
-        dialog_copy_pc_generic_msg(a3->options[a2], a3, 200, 299);
-        sub_417590(entry.response_val, &(a3->field_17F0[a2]), &(a3->field_1804[a2]));
+        dialog_copy_pc_generic_msg(state->options[a2], state, 200, 299);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
     } else if (SDL_strncasecmp(entry.str, "t:", 2) == 0) {
-        dialog_copy_pc_generic_msg(a3->options[a2], a3, 500, 599);
+        dialog_copy_pc_generic_msg(state->options[a2], state, 500, 599);
 
-        pch = a3->options[a2];
+        pch = state->options[a2];
         strcpy(&(pch[strlen(pch) + 1]), entry.str + 2);
-        a3->field_17F0[a2] = 5;
-        a3->field_1804[a2] = entry.response_val;
+        state->option_response_types[a2] = 5;
+        state->option_response_values[a2] = entry.response_val;
     } else if (SDL_strncasecmp(entry.str, "u:", 2) == 0) {
         v4 = atoi(entry.str + 2);
-        if (ai_check_use_skill(a3->npc_obj, a3->pc_obj, skill_supplementary_item(a3->npc_obj, v4), v4) != AI_USE_SKILL_OK) {
+        if (ai_check_use_skill(state->npc_obj, state->pc_obj, skill_supplementary_item(state->npc_obj, v4), v4) != AI_USE_SKILL_OK) {
             return false;
         }
 
-        dialog_build_use_skill_option(a2, v4, entry.response_val, a3);
+        dialog_build_use_skill_option(a2, v4, entry.response_val, state);
     } else if (SDL_strcasecmp(entry.str, "w:") == 0) {
-        dialog_copy_pc_generic_msg(a3->options[a2], a3, 1800, 1899);
-        sub_417590(entry.response_val, &(a3->field_17F0[a2]), &(a3->field_1804[a2]));
+        dialog_copy_pc_generic_msg(state->options[a2], state, 1800, 1899);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
     } else if (SDL_strncasecmp(entry.str, "x:", 2) == 0) {
         pch = strchr(entry.str, ',');
         cnt = dialog_parse_params(values, pch + 1);
-        if (filter_unknown_areas(a3->pc_obj, values, cnt) == 0) {
+        if (filter_unknown_areas(state->pc_obj, values, cnt) == 0) {
             return false;
         }
 
-        dialog_copy_pc_generic_msg(a3->options[a2], a3, 1400, 1499);
-        pch = a3->options[a2];
+        dialog_copy_pc_generic_msg(state->options[a2], state, 1400, 1499);
+        pch = state->options[a2];
         strcpy(&(pch[strlen(pch) + 1]), entry.str + 2);
-        a3->field_17F0[a2] = 21;
-        a3->field_1804[a2] = entry.response_val;
-        a3->field_1818[a2] = 0;
+        state->option_response_types[a2] = 21;
+        state->option_response_values[a2] = entry.response_val;
+        state->option_response_extra_values[a2] = 0;
     } else if (SDL_strcasecmp(entry.str, "y:") == 0) {
-        dialog_copy_pc_generic_msg(a3->options[a2], a3, 1, 99);
-        sub_417590(entry.response_val, &(a3->field_17F0[a2]), &(a3->field_1804[a2]));
+        dialog_copy_pc_generic_msg(state->options[a2], state, 1, 99);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
     } else if (SDL_strncasecmp(entry.str, "z:", 2) == 0) {
-        dialog_build_use_spell_option(a2, atoi(entry.str + 2), entry.response_val, a3);
+        dialog_build_use_spell_option(a2, atoi(entry.str + 2), entry.response_val, state);
     } else {
-        sub_416B00(a3->options[a2], entry.str, a3);
-        sub_417590(entry.response_val, &(a3->field_17F0[a2]), &(a3->field_1804[a2]));
+        dialog_expand_name_tokens(state->options[a2], entry.str, state);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
     }
 
-    a3->actions[a2] = entry.actions;
+    state->actions[a2] = entry.actions;
 
     if (dialog_numbers_enabled) {
         char str[20];
@@ -2526,18 +2546,19 @@ bool sub_416C10(int a1, int a2, DialogState* a3)
         snprintf(str, sizeof(str), "[%d]", entry.num);
         len = strlen(str);
         for (pos = 999; pos >= len; pos--) {
-            a3->options[a2][pos] = a3->options[a2][pos - len];
+            state->options[a2][pos] = state->options[a2][pos - len];
         }
         if (len > 0) {
-            strncpy(a3->options[a2], str, len);
+            strncpy(state->options[a2], str, len);
         }
     }
 
     return true;
 }
 
+// Maps a signed response value to normal line, end-dialog or negative-line action code.
 // 0x417590
-void sub_417590(int a1, int* a2, int* a3)
+void dialog_response_decode(int a1, int* a2, int* a3)
 {
     if (a1 > 0) {
         *a2 = 0;
@@ -2577,7 +2598,7 @@ bool find_dialog(const char* path, int* index_ptr)
     if (candidate != -1) {
         *index_ptr = candidate;
         if (dialog_files[candidate].path[0] != '\0') {
-            sub_412F60(candidate);
+            dialog_cache_entry_free(candidate);
         }
         return false;
     }
@@ -3069,7 +3090,7 @@ void dialog_copy_pc_generic_msg(char* buffer, DialogState* state, int start, int
     mes_file_entry.num = start + random_between(0, cnt - 1);
     mes_get_msg(dialog_mes_files[gd], &mes_file_entry);
 
-    sub_416B00(buffer, mes_file_entry.str, state);
+    dialog_expand_name_tokens(buffer, mes_file_entry.str, state);
 }
 
 // 0x418390
@@ -3097,7 +3118,7 @@ void dialog_copy_pc_class_specific_msg(char* buffer, DialogState* state, int num
     mes_file_entry.num = num + random_between(0, cnt - 1);
     mes_get_msg(dialog_mes_files[gd], &mes_file_entry);
 
-    sub_416B00(buffer, mes_file_entry.str, state);
+    dialog_expand_name_tokens(buffer, mes_file_entry.str, state);
 }
 
 // 0x418460
@@ -3148,7 +3169,7 @@ void dialog_copy_npc_class_specific_msg(char* buffer, DialogState* state, int nu
     mes_file_entry.num = num + random_between(0, cnt - 1);
     mes_get_msg(dialog_mes_files[gd], &mes_file_entry);
 
-    sub_416B00(buffer, mes_file_entry.str, state);
+    dialog_expand_name_tokens(buffer, mes_file_entry.str, state);
     state->speech_id = -1;
 }
 
@@ -3197,7 +3218,7 @@ void dialog_copy_npc_race_specific_msg(char* buffer, DialogState* state, int num
     mes_file_entry.num = num + random_between(0, cnt - 1);
     mes_get_msg(dialog_mes_files[gd], &mes_file_entry);
 
-    sub_416B00(buffer, mes_file_entry.str, state);
+    dialog_expand_name_tokens(buffer, mes_file_entry.str, state);
     state->speech_id = -1;
 }
 
@@ -3228,7 +3249,7 @@ void dialog_copy_npc_generic_msg(char* buffer, DialogState* state, int start, in
     mes_file_entry.num = start + random_between(0, cnt - 1);
     mes_get_msg(dialog_mes_files[gd], &mes_file_entry);
 
-    sub_416B00(buffer, mes_file_entry.str, state);
+    dialog_expand_name_tokens(buffer, mes_file_entry.str, state);
     state->speech_id = -1;
 }
 
@@ -3271,13 +3292,14 @@ bool dialog_copy_npc_override_msg(char* buffer, DialogState* state, int num)
         strcpy(buffer, entry.data.female_str);
     }
 
-    state->speech_id = sub_4189C0(entry.conditions, scr.num);
+    state->speech_id = dialog_speech_id_encode(entry.conditions, scr.num);
 
     return true;
 }
 
+// Combines a script number and textual voice number into a speech ID, or returns minus one.
 // 0x4189C0
-int sub_4189C0(const char* a1, int a2)
+int dialog_speech_id_encode(const char* a1, int a2)
 {
     if (a1 != NULL && a2 != 0) {
         return ((a2 & 0x7FFF) << 16) | (atoi(a1) & 0xFFFF);
@@ -3286,8 +3308,9 @@ int sub_4189C0(const char* a1, int a2)
     }
 }
 
+// Splits a speech ID into script and voice numbers; minus one produces zeros.
 // 0x418A00
-void sub_418A00(int a1, int* a2, int* a3)
+void dialog_speech_id_decode(int a1, int* a2, int* a3)
 {
     if (a1 != -1) {
         *a2 = (a1 >> 16) & 0x7FFF;
@@ -3303,7 +3326,7 @@ void dialog_ask_money(int amt, int param1, int param2, int a4, int a5, DialogSta
 {
     char buffer[1000];
 
-    amt = sub_4C1150(state->npc_obj, state->pc_obj, amt);
+    amt = reaction_adjust_price(state->npc_obj, state->pc_obj, amt);
     if (amt == 1) {
         amt = 2;
     }
@@ -3314,42 +3337,44 @@ void dialog_ask_money(int amt, int param1, int param2, int a4, int a5, DialogSta
 
     // PC: "Yes."
     dialog_copy_pc_generic_msg(state->options[0], state, 1, 99);
-    state->field_17F0[0] = 4;
-    state->field_1804[0] = amt;
+    state->option_response_types[0] = 4;
+    state->option_response_values[0] = amt;
     state->actions[0] = NULL;
 
     // PC: "No."
     dialog_copy_pc_generic_msg(state->options[1], state, 100, 199);
-    state->field_17F0[1] = a4;
-    state->field_1804[1] = a5;
+    state->option_response_types[1] = a4;
+    state->option_response_values[1] = a5;
     state->actions[1] = NULL;
 
     state->num_options = 2;
 
-    state->field_17F0[2] = param1;
-    state->field_1804[2] = param2;
+    state->option_response_types[2] = param1;
+    state->option_response_values[2] = param2;
 }
 
+// Checks available gold, then transfers payment and dispatches continuation or builds the insufficient-funds reply.
 // 0x418B30
-void sub_418B30(int a1, DialogState* a2)
+void dialog_payment_process(int a1, DialogState* state)
 {
-    if (item_gold_get(a2->pc_obj) < a1) {
-        sub_418C40(2000, a2->field_17F0[1], a2->field_1804[1], a2);
+    if (item_gold_get(state->pc_obj) < a1) {
+        dialog_acknowledgement_build(2000, state->option_response_types[1], state->option_response_values[1], state);
     } else {
-        item_gold_transfer(a2->pc_obj, a2->npc_obj, a1, OBJ_HANDLE_NULL);
-        sub_414810(a2->field_17F0[2], a2->field_1804[2], a2->field_1818[2], 2, a2);
+        item_gold_transfer(state->pc_obj, state->npc_obj, a1, OBJ_HANDLE_NULL);
+        dialog_response_dispatch(state->option_response_types[2], state->option_response_values[2], state->option_response_extra_values[2], 2, state);
     }
 }
 
+// Builds a class-specific NPC reply and one generic PC acknowledgement option.
 // 0x418C40
-void sub_418C40(int a1, int a2, int a3, DialogState* a4)
+void dialog_acknowledgement_build(int a1, int a2, int a3, DialogState* state)
 {
-    dialog_copy_npc_class_specific_msg(a4->reply, a4, a1);
-    a4->num_options = 1;
-    dialog_copy_pc_generic_msg(a4->options[0], a4, 600, 699);
-    a4->field_17F0[0] = a2;
-    a4->field_1804[0] = a3;
-    a4->actions[0] = NULL;
+    dialog_copy_npc_class_specific_msg(state->reply, state, a1);
+    state->num_options = 1;
+    dialog_copy_pc_generic_msg(state->options[0], state, 600, 699);
+    state->option_response_types[0] = a2;
+    state->option_response_values[0] = a3;
+    state->actions[0] = NULL;
 }
 
 // 0x418CA0
@@ -3372,15 +3397,15 @@ void dialog_offer_training(int* skills, int cnt, int back_response_val, DialogSt
             strcpy(state->options[index], basic_skill_name(GET_BASIC_SKILL(skills[index])));
         }
 
-        state->field_17F0[index] = 6;
-        state->field_1804[index] = skills[index];
+        state->option_response_types[index] = 6;
+        state->option_response_values[index] = skills[index];
         state->actions[index] = NULL;
     }
 
     // Last option - "Forget it".
     state->actions[cnt] = NULL;
     dialog_copy_pc_generic_msg(state->options[cnt], state, 800, 899);
-    sub_417590(back_response_val, &(state->field_17F0[cnt]), &(state->field_1804[cnt]));
+    dialog_response_decode(back_response_val, &(state->option_response_types[cnt]), &(state->option_response_values[cnt]));
 }
 
 // 0x418DE0
@@ -3393,7 +3418,7 @@ void dialog_ask_money_for_training(int skill, DialogState* state)
         // Check if PC is already trained.
         if (tech_skill_training_get(state->pc_obj, GET_TECH_SKILL(skill)) != TRAINING_NONE) {
             // "You already have received apprentice training in that skill."
-            sub_418C40(4000, state->field_17F0[index], state->field_1804[index], state);
+            dialog_acknowledgement_build(4000, state->option_response_types[index], state->option_response_values[index], state);
             return;
         }
 
@@ -3401,7 +3426,7 @@ void dialog_ask_money_for_training(int skill, DialogState* state)
         // training.
         if (tech_skill_training_set(state->pc_obj, GET_TECH_SKILL(skill), TRAINING_APPRENTICE) == TRAINING_NONE) {
             // "You are not skilled enough to be trained as an apprentice."
-            sub_418C40(5000, state->field_17F0[index], state->field_1804[index], state);
+            dialog_acknowledgement_build(5000, state->option_response_types[index], state->option_response_values[index], state);
             return;
         }
 
@@ -3409,21 +3434,21 @@ void dialog_ask_money_for_training(int skill, DialogState* state)
         tech_skill_training_set(state->pc_obj, GET_TECH_SKILL(skill), TRAINING_NONE);
 
         // ...and ask for 100 coins.
-        dialog_ask_money(100, 7, skill, state->field_17F0[index], state->field_1804[index], state);
+        dialog_ask_money(100, 7, skill, state->option_response_types[index], state->option_response_values[index], state);
     } else {
         // NOTE: The same flow as above (using basic skill function set).
         if (basic_skill_training_get(state->pc_obj, GET_BASIC_SKILL(skill)) != TRAINING_NONE) {
-            sub_418C40(4000, state->field_17F0[index], state->field_1804[index], state);
+            dialog_acknowledgement_build(4000, state->option_response_types[index], state->option_response_values[index], state);
             return;
         }
 
         if (basic_skill_training_set(state->pc_obj, GET_BASIC_SKILL(skill), TRAINING_APPRENTICE) == TRAINING_NONE) {
-            sub_418C40(5000, state->field_17F0[index], state->field_1804[index], state);
+            dialog_acknowledgement_build(5000, state->option_response_types[index], state->option_response_values[index], state);
             return;
         }
 
         basic_skill_training_set(state->pc_obj, GET_BASIC_SKILL(skill), TRAINING_NONE);
-        dialog_ask_money(100, 7, skill, state->field_17F0[index], state->field_1804[index], state);
+        dialog_ask_money(100, 7, skill, state->option_response_types[index], state->option_response_values[index], state);
     }
 }
 
@@ -3431,9 +3456,13 @@ void dialog_ask_money_for_training(int skill, DialogState* state)
 void dialog_perform_training(int skill, DialogState* state)
 {
     if (IS_TECH_SKILL(skill)) {
-        tech_skill_training_set(state->pc_obj, GET_TECH_SKILL(skill), TRAINING_APPRENTICE);
+        int before = tech_skill_training_get(state->pc_obj, GET_TECH_SKILL(skill));
+        int after = tech_skill_training_set(state->pc_obj, GET_TECH_SKILL(skill), TRAINING_APPRENTICE);
+        activity_time_training(state->pc_obj, before, after);
     } else {
-        basic_skill_training_set(state->pc_obj, GET_BASIC_SKILL(skill), TRAINING_APPRENTICE);
+        int before = basic_skill_training_get(state->pc_obj, GET_BASIC_SKILL(skill));
+        int after = basic_skill_training_set(state->pc_obj, GET_BASIC_SKILL(skill), TRAINING_APPRENTICE);
+        activity_time_training(state->pc_obj, before, after);
     }
 
     // "Your apprentice training is complete."
@@ -3442,8 +3471,8 @@ void dialog_perform_training(int skill, DialogState* state)
     // Appreciate NPC for training.
     state->num_options = 1;
     dialog_copy_pc_class_specific_msg(state->options[0], state, 1000); // "Thank you, sir."
-    state->field_17F0[0] = state->field_17F0[1];
-    state->field_1804[0] = state->field_1804[1];
+    state->option_response_types[0] = state->option_response_types[1];
+    state->option_response_values[0] = state->option_response_values[1];
     state->actions[0] = NULL;
 }
 
@@ -3462,7 +3491,7 @@ void dialog_ask_money_for_rumor(int cost, int* rumors, int num_rumors, int respo
         }
     }
 
-    sub_417590(response_val, &v1, &v2);
+    dialog_response_decode(response_val, &v1, &v2);
 
     if (num_known_rumors != 0) {
         index = random_between(0, num_known_rumors - 1);
@@ -3477,8 +3506,8 @@ void dialog_ask_money_for_rumor(int cost, int* rumors, int num_rumors, int respo
 
         // PC: "[continue]"
         dialog_copy_pc_generic_msg(state->options[0], state, 600, 699);
-        state->field_17F0[0] = v1;
-        state->field_1804[0] = v2;
+        state->option_response_types[0] = v1;
+        state->option_response_values[0] = v2;
 
         state->num_options = 1;
 
@@ -3493,15 +3522,15 @@ void dialog_tell_rumor(int rumor, int a2, int a3, DialogState* state)
 
     // NPC: Rumor-specific.
     rumor_copy_interaction_str(state->pc_obj, state->npc_obj, rumor, buffer);
-    sub_416B00(state->reply, buffer, state);
+    dialog_expand_name_tokens(state->reply, buffer, state);
     state->speech_id = -1;
 
     rumor_known_set(state->pc_obj, rumor);
 
     // PC: "Thank you."
     dialog_copy_pc_class_specific_msg(state->options[0], state, 1000);
-    state->field_17F0[0] = a2;
-    state->field_1804[0] = a3;
+    state->option_response_types[0] = a2;
+    state->option_response_values[0] = a3;
 
     state->num_options = 1;
 
@@ -3512,9 +3541,9 @@ void dialog_tell_rumor(int rumor, int a2, int a3, DialogState* state)
 void dialog_build_pc_insult_option(int index, int a2, int a3, DialogState* state)
 {
     dialog_copy_pc_class_specific_msg(state->options[index], state, 3000);
-    state->field_17F0[index] = 10;
-    state->field_1804[index] = a2;
-    state->field_1818[index] = a3;
+    state->option_response_types[index] = 10;
+    state->option_response_values[index] = a2;
+    state->option_response_extra_values[index] = a3;
 }
 
 // 0x4191E0
@@ -3522,17 +3551,17 @@ void dialog_insult_reply(int a1, int a2, DialogState* state)
 {
     reaction_adj(state->npc_obj, state->pc_obj, -10);
     if (reaction_get(state->npc_obj, state->pc_obj) > 20) {
-        sub_414810(a1, a2, 0, 0, state);
+        dialog_response_dispatch(a1, a2, 0, 0, state);
     } else {
         // NPC: "You insolent worm! How dare you?"
         dialog_copy_npc_race_specific_msg(state->reply, state, 1000);
         state->num_options = 0;
-        state->field_17E8 = 4;
+        state->turn_status = 4;
     }
 }
 
 // 0x419260
-void sub_419260(DialogState* a1, const char* str)
+void dialog_generated_greeting_build(DialogState* state, const char* str)
 {
     unsigned int flags[10];
     int values[10];
@@ -3584,145 +3613,145 @@ void sub_419260(DialogState* a1, const char* str)
         }
     }
 
-    if ((flags[0] & 0x2) == 0 && critter_is_dead(a1->npc_obj)) {
-        if (!sub_4197D0(flags[0], values[0], a1)) {
-            dialog_copy_npc_generic_msg(a1->reply, a1, 1500, 1599);
+    if ((flags[0] & 0x2) == 0 && critter_is_dead(state->npc_obj)) {
+        if (!dialog_greeting_override_apply(flags[0], values[0], state)) {
+            dialog_copy_npc_generic_msg(state->reply, state, 1500, 1599);
         }
         return;
     }
 
-    if (ai_surrendered(a1->npc_obj, NULL)) {
-        dialog_copy_npc_fleeing_msg(a1->npc_obj, a1->pc_obj, a1->reply, &(a1->speech_id));
+    if (ai_surrendered(state->npc_obj, NULL)) {
+        dialog_copy_npc_fleeing_msg(state->npc_obj, state->pc_obj, state->reply, &(state->speech_id));
         return;
     }
 
-    if ((flags[1] & 0x2) == 0 && critter_has_bad_associates(a1->pc_obj)) {
-        if (!sub_4197D0(flags[1], values[1], a1)) {
-            dialog_copy_npc_class_specific_msg(a1->reply, a1, 18000);
+    if ((flags[1] & 0x2) == 0 && critter_has_bad_associates(state->pc_obj)) {
+        if (!dialog_greeting_override_apply(flags[1], values[1], state)) {
+            dialog_copy_npc_class_specific_msg(state->reply, state, 18000);
 
-            if (critter_social_class_get(a1->npc_obj) != SOCIAL_CLASS_WIZARD) {
-                a1->field_17E8 = 4;
+            if (critter_social_class_get(state->npc_obj) != SOCIAL_CLASS_WIZARD) {
+                state->turn_status = 4;
             }
         }
         return;
     }
 
-    spell_flags = obj_field_int32_get(a1->pc_obj, OBJ_F_SPELL_FLAGS);
+    spell_flags = obj_field_int32_get(state->pc_obj, OBJ_F_SPELL_FLAGS);
 
     if ((flags[2] & 0x2) == 0 && (spell_flags & OSF_INVISIBLE) != 0) {
-        if (!sub_4197D0(flags[2], values[2], a1)) {
-            dialog_copy_npc_class_specific_msg(a1->reply, a1, 22000);
+        if (!dialog_greeting_override_apply(flags[2], values[2], state)) {
+            dialog_copy_npc_class_specific_msg(state->reply, state, 22000);
 
-            if (critter_social_class_get(a1->npc_obj) != SOCIAL_CLASS_WIZARD) {
-                a1->field_17E8 = 4;
+            if (critter_social_class_get(state->npc_obj) != SOCIAL_CLASS_WIZARD) {
+                state->turn_status = 4;
             }
         }
         return;
     }
 
     if ((flags[3] & 0x2) == 0 && (spell_flags & (OSF_BODY_OF_AIR | OSF_BODY_OF_EARTH | OSF_BODY_OF_FIRE | OSF_BODY_OF_WATER)) != 0) {
-        if (!sub_4197D0(flags[3], values[3], a1)) {
-            dialog_copy_npc_class_specific_msg(a1->reply, a1, 19000);
+        if (!dialog_greeting_override_apply(flags[3], values[3], state)) {
+            dialog_copy_npc_class_specific_msg(state->reply, state, 19000);
 
-            if (critter_social_class_get(a1->npc_obj) != SOCIAL_CLASS_WIZARD) {
-                a1->field_17E8 = 4;
+            if (critter_social_class_get(state->npc_obj) != SOCIAL_CLASS_WIZARD) {
+                state->turn_status = 4;
             }
         }
         return;
     }
 
     if ((flags[4] & 0x2) == 0 && (spell_flags & OSF_POLYMORPHED) != 0) {
-        if (!sub_4197D0(flags[4], values[4], a1)) {
-            dialog_copy_npc_class_specific_msg(a1->reply, a1, 20000);
+        if (!dialog_greeting_override_apply(flags[4], values[4], state)) {
+            dialog_copy_npc_class_specific_msg(state->reply, state, 20000);
 
-            if (critter_social_class_get(a1->npc_obj) != SOCIAL_CLASS_WIZARD) {
-                a1->field_17E8 = 4;
+            if (critter_social_class_get(state->npc_obj) != SOCIAL_CLASS_WIZARD) {
+                state->turn_status = 4;
             }
         }
         return;
     }
 
     if ((flags[6] & 0x2) == 0 && (spell_flags & OSF_SHRUNK) != 0) {
-        if (!sub_4197D0(flags[6], values[6], a1)) {
-            dialog_copy_npc_race_specific_msg(a1->reply, a1, 6000);
+        if (!dialog_greeting_override_apply(flags[6], values[6], state)) {
+            dialog_copy_npc_race_specific_msg(state->reply, state, 6000);
         }
         return;
     }
 
-    aid = obj_field_int32_get(a1->pc_obj, OBJ_F_CURRENT_AID);
+    aid = obj_field_int32_get(state->pc_obj, OBJ_F_CURRENT_AID);
     armor_type = tig_art_critter_id_armor_get(aid);
 
     if ((flags[7] & 0x2) == 0
         && armor_type == TIG_ART_ARMOR_TYPE_UNDERWEAR) {
-        if (!sub_4197D0(flags[7], values[7], a1)) {
-            dialog_copy_npc_class_specific_msg(a1->reply, a1, 16000);
+        if (!dialog_greeting_override_apply(flags[7], values[7], state)) {
+            dialog_copy_npc_class_specific_msg(state->reply, state, 16000);
         }
         return;
     }
 
     if ((flags[8] & 0x2) == 0
         && armor_type == TIG_ART_ARMOR_TYPE_BARBARIAN) {
-        if (!sub_4197D0(flags[8], values[8], a1)) {
-            dialog_copy_npc_class_specific_msg(a1->reply, a1, 17000);
+        if (!dialog_greeting_override_apply(flags[8], values[8], state)) {
+            dialog_copy_npc_class_specific_msg(state->reply, state, 17000);
         }
         return;
     }
 
     if ((flags[9] & 0x2) == 0) {
-        if (!sub_4197D0(flags[9], values[9], a1)) {
+        if (!dialog_greeting_override_apply(flags[9], values[9], state)) {
             int reaction_level;
             int reputation;
 
             if (random_between(1, 100) <= 20) {
-                reputation = reputation_pick(a1->pc_obj, a1->npc_obj);
+                reputation = reputation_pick(state->pc_obj, state->npc_obj);
                 if (reputation != 0) {
-                    reputation_copy_greeting(a1->pc_obj, a1->npc_obj, reputation, a1->reply);
-                    a1->speech_id = -1;
-                    if (a1->reply[0] != '\0') {
+                    reputation_copy_greeting(state->pc_obj, state->npc_obj, reputation, state->reply);
+                    state->speech_id = -1;
+                    if (state->reply[0] != '\0') {
                         return;
                     }
                 }
             }
 
-            reaction_level = reaction_translate(reaction_get(a1->npc_obj, a1->pc_obj));
-            if (reaction_met_before(a1->npc_obj, a1->pc_obj)) {
+            reaction_level = reaction_translate(reaction_get(state->npc_obj, state->pc_obj));
+            if (reaction_met_before(state->npc_obj, state->pc_obj)) {
                 switch (reaction_level) {
                 case REACTION_LOVE:
-                    dialog_copy_npc_class_specific_msg(a1->reply, a1, 11000);
+                    dialog_copy_npc_class_specific_msg(state->reply, state, 11000);
                     break;
                 case REACTION_AMIABLE:
                 case REACTION_COURTEOUS:
-                    dialog_copy_npc_class_specific_msg(a1->reply, a1, 12000);
+                    dialog_copy_npc_class_specific_msg(state->reply, state, 12000);
                     break;
                 case REACTION_NEUTRAL:
-                    dialog_copy_npc_class_specific_msg(a1->reply, a1, 13000);
+                    dialog_copy_npc_class_specific_msg(state->reply, state, 13000);
                     break;
                 case REACTION_SUSPICIOUS:
                 case REACTION_DISLIKE:
-                    dialog_copy_npc_race_specific_msg(a1->reply, a1, 4000);
+                    dialog_copy_npc_race_specific_msg(state->reply, state, 4000);
                     break;
                 case REACTION_HATRED:
-                    dialog_copy_npc_race_specific_msg(a1->reply, a1, 5000);
+                    dialog_copy_npc_race_specific_msg(state->reply, state, 5000);
                     break;
                 }
             } else {
                 switch (reaction_level) {
                 case REACTION_LOVE:
-                    dialog_copy_npc_class_specific_msg(a1->reply, a1, 8000);
+                    dialog_copy_npc_class_specific_msg(state->reply, state, 8000);
                     break;
                 case REACTION_AMIABLE:
                 case REACTION_COURTEOUS:
-                    dialog_copy_npc_class_specific_msg(a1->reply, a1, 9000);
+                    dialog_copy_npc_class_specific_msg(state->reply, state, 9000);
                     break;
                 case REACTION_NEUTRAL:
-                    dialog_copy_npc_class_specific_msg(a1->reply, a1, 10000);
+                    dialog_copy_npc_class_specific_msg(state->reply, state, 10000);
                     break;
                 case REACTION_SUSPICIOUS:
                 case REACTION_DISLIKE:
-                    dialog_copy_npc_race_specific_msg(a1->reply, a1, 2000);
+                    dialog_copy_npc_race_specific_msg(state->reply, state, 2000);
                     break;
                 case REACTION_HATRED:
-                    dialog_copy_npc_race_specific_msg(a1->reply, a1, 3000);
+                    dialog_copy_npc_race_specific_msg(state->reply, state, 3000);
                     break;
                 }
             }
@@ -3732,19 +3761,19 @@ void sub_419260(DialogState* a1, const char* str)
 }
 
 // 0x4197D0
-bool sub_4197D0(unsigned int flags, int a2, DialogState* a3)
+bool dialog_greeting_override_apply(unsigned int flags, int a2, DialogState* state)
 {
     if ((flags & 0x1) != 0) {
-        a3->num = a2;
-        sub_413A30(a3, 0);
-        a3->field_17E8 = 4;
+        state->num = a2;
+        dialog_prepare_npc_reply(state, 0);
+        state->turn_status = 4;
         return true;
     }
 
     if ((flags & 0x4) != 0) {
-        a3->field_17EC = a2;
-        a3->field_17E8 = 0;
-        sub_414E60(a3, 0);
+        state->response_value = a2;
+        state->turn_status = 0;
+        dialog_turn_build(state, 0);
         return true;
     }
 
@@ -3775,15 +3804,15 @@ void dialog_offer_healing(DialogHealingOfferType type, int response_val, DialogS
         if (lvl >= 1) {
             // PC: "[Magickal Healing]"
             dialog_copy_pc_generic_msg(state->options[cnt], state, 1100, 1199);
-            state->field_17F0[cnt] = 12;
-            state->field_1804[cnt] = response_val;
+            state->option_response_types[cnt] = 12;
+            state->option_response_values[cnt] = response_val;
             cnt++;
         }
         if (lvl >= 2) {
             // PC: "[Magickal Poison Healing]"
             dialog_copy_pc_generic_msg(state->options[cnt], state, 1200, 1299);
-            state->field_17F0[cnt] = 13;
-            state->field_1804[cnt] = response_val;
+            state->option_response_types[cnt] = 13;
+            state->option_response_values[cnt] = response_val;
             cnt++;
         }
         if (lvl == 5) {
@@ -3811,7 +3840,7 @@ void dialog_offer_healing(DialogHealingOfferType type, int response_val, DialogS
 
     // PC: "Forget it."
     dialog_copy_pc_generic_msg(state->options[cnt], state, 800, 899);
-    sub_417590(response_val, &(state->field_17F0[cnt]), &(state->field_1804[cnt]));
+    dialog_response_decode(response_val, &(state->option_response_types[cnt]), &(state->option_response_values[cnt]));
 
     state->num_options = cnt + 1;
 
@@ -3836,9 +3865,9 @@ void dialog_build_use_skill_option(int index, int skill, int response_val, Dialo
     }
 
     snprintf(state->options[index], sizeof(state->options[index]), buffer, name);
-    state->field_17F0[index] = 14;
-    state->field_1804[index] = skill;
-    state->field_1818[index] = response_val;
+    state->option_response_types[index] = 14;
+    state->option_response_values[index] = skill;
+    state->option_response_extra_values[index] = response_val;
 }
 
 // 0x419AC0
@@ -3850,9 +3879,9 @@ void dialog_build_use_spell_option(int index, int spell, int response_val, Dialo
     dialog_copy_pc_generic_msg(buffer, state, 1000, 1099);
 
     snprintf(state->options[index], sizeof(state->options[index]), buffer, spell_name(spell));
-    state->field_17F0[index] = 15;
-    state->field_1804[index] = spell;
-    state->field_1818[index] = response_val;
+    state->option_response_types[index] = 15;
+    state->option_response_values[index] = spell;
+    state->option_response_extra_values[index] = response_val;
 }
 
 // 0x419B50
@@ -3864,7 +3893,7 @@ void dialog_ask_money_for_skill(int skill, int response_val, DialogState* state)
     int training;
     int amt;
 
-    sub_417590(response_val, &v1, &v2);
+    dialog_response_decode(response_val, &v1, &v2);
     if (critter_leader_get(state->npc_obj) == state->pc_obj) {
         dialog_use_skill(skill, v1, v2, state);
     } else {
@@ -3888,7 +3917,7 @@ void dialog_ask_money_for_spell(int spell, int response_val, DialogState* state)
     int v2;
     int amt;
 
-    sub_417590(response_val, &v1, &v2);
+    dialog_response_decode(response_val, &v1, &v2);
     if (critter_leader_get(state->npc_obj) == state->pc_obj) {
         dialog_use_spell(spell, v1, v2, state);
     } else {
@@ -3917,8 +3946,8 @@ void dialog_use_skill(int skill, int a2, int a3, DialogState* state)
 
     // PC: "Thank you."
     dialog_copy_pc_class_specific_msg(state->options[0], state, 1000);
-    state->field_17F0[0] = a2;
-    state->field_1804[0] = a3;
+    state->option_response_types[0] = a2;
+    state->option_response_values[0] = a3;
     state->actions[0] = NULL;
 
     state->num_options = 1;
@@ -3930,7 +3959,7 @@ void dialog_use_spell(int spell, int a2, int a3, DialogState* state)
     MagicTechInvocation mt_invocation;
 
     magictech_invocation_init(&mt_invocation, state->npc_obj, spell);
-    sub_4440E0(state->pc_obj, &(mt_invocation.target_obj));
+    object_handle_reference_init(state->pc_obj, &(mt_invocation.target_obj));
     if (critter_pc_leader_get(state->npc_obj) == OBJ_HANDLE_NULL) {
         mt_invocation.flags |= MAGICTECH_INVOCATION_FREE;
     }
@@ -3941,8 +3970,8 @@ void dialog_use_spell(int spell, int a2, int a3, DialogState* state)
 
     // PC: "Thank you."
     dialog_copy_pc_class_specific_msg(state->options[0], state, 1000);
-    state->field_17F0[0] = a2;
-    state->field_1804[0] = a3;
+    state->option_response_types[0] = a2;
+    state->option_response_values[0] = a3;
     state->actions[0] = NULL;
 
     state->num_options = 1;
@@ -3992,9 +4021,9 @@ void dialog_offer_directions(const char* str, int response_val, int offset, bool
     }
 
     if (critter_leader_get(state->npc_obj) == state->pc_obj) {
-        state->field_17EC = 0;
+        state->response_value = 0;
     } else {
-        state->field_17EC = cost;
+        state->response_value = cost;
     }
 
     // PC: Up to 4 options, each is the name of the area.
@@ -4004,21 +4033,21 @@ void dialog_offer_directions(const char* str, int response_val, int offset, bool
         }
 
         strcpy(state->options[idx], area_get_name(areas[offset + idx]));
-        state->field_17F0[idx] = mark ? 22 : 19;
-        state->field_1804[idx] = areas[offset + idx];
-        state->field_1818[idx] = response_val;
+        state->option_response_types[idx] = mark ? 22 : 19;
+        state->option_response_values[idx] = areas[offset + idx];
+        state->option_response_extra_values[idx] = response_val;
     }
 
     if (offset + idx < cnt) {
         // PC: "[continue]"
         dialog_copy_pc_generic_msg(state->options[idx], state, 600, 699);
-        state->field_17F0[idx] = mark ? 21 : 18;
-        state->field_1804[idx] = response_val;
-        state->field_1818[idx] = offset + idx;
+        state->option_response_types[idx] = mark ? 21 : 18;
+        state->option_response_values[idx] = response_val;
+        state->option_response_extra_values[idx] = offset + idx;
     } else {
         // PC: "Forget it."
         dialog_copy_pc_generic_msg(state->options[idx], state, 800, 899);
-        sub_417590(response_val, &(state->field_17F0[idx]), &(state->field_1804[idx]));
+        dialog_response_decode(response_val, &(state->option_response_types[idx]), &(state->option_response_values[idx]));
     }
 
     state->num_options = idx + 1;
@@ -4034,7 +4063,7 @@ void dialog_ask_money_for_directions(int cost, int area, int response_val, Dialo
     int v1;
     int v2;
 
-    sub_417590(response_val, &v1, &v2);
+    dialog_response_decode(response_val, &v1, &v2);
     if (cost > 0) {
         dialog_ask_money(cost, 20, area, v1, v2, state);
     } else {
@@ -4072,8 +4101,8 @@ void dialog_give_directions(int area, int a2, int a3, DialogState* state)
 
     // PC: "Thank you."
     dialog_copy_pc_class_specific_msg(state->options[0], state, 1000);
-    state->field_17F0[0] = a2;
-    state->field_1804[0] = a3;
+    state->option_response_types[0] = a2;
+    state->option_response_values[0] = a3;
     state->actions[0] = NULL;
 
     state->num_options = 1;
@@ -4085,7 +4114,7 @@ void dialog_ask_money_for_mark_area(int cost, int area, int response_val, Dialog
     int v1;
     int v2;
 
-    sub_417590(response_val, &v1, &v2);
+    dialog_response_decode(response_val, &v1, &v2);
     if (cost > 0) {
         dialog_ask_money(cost, 23, area, v1, v2, state);
     } else {
@@ -4127,8 +4156,8 @@ void dialog_mark_area(int area, int a2, int a3, DialogState* state)
 
     // PC: "Thank you."
     dialog_copy_pc_class_specific_msg(state->options[0], state, 1000);
-    state->field_17F0[0] = a2;
-    state->field_1804[0] = a3;
+    state->option_response_types[0] = a2;
+    state->option_response_values[0] = a3;
     state->actions[0] = NULL;
 
     state->num_options = 1;
@@ -4144,7 +4173,7 @@ void dialog_check_story(int response_val, DialogState* state)
 
     // PC: "Thank you."
     dialog_copy_pc_class_specific_msg(state->options[0], state, 1000);
-    sub_417590(response_val, &(state->field_17F0[0]), &(state->field_1804[0]));
+    dialog_response_decode(response_val, &(state->option_response_types[0]), &(state->option_response_values[0]));
 
     state->actions[0] = NULL;
 
@@ -4177,7 +4206,7 @@ void dialog_copy_npc_story_msg(char* buffer, DialogState* state)
 
     mes_file_entry.num = stat_level_get(state->npc_obj, STAT_RACE) + 100 * story_state;
     mes_get_msg(dialog_mes_files[gd], &mes_file_entry);
-    sub_416B00(buffer, mes_file_entry.str, state);
+    dialog_expand_name_tokens(buffer, mes_file_entry.str, state);
     state->speech_id = -1;
 }
 
@@ -4189,23 +4218,23 @@ void dialog_ask_about_buying_newspapers(int response_val, DialogState* state)
 
     // PC: "I want to buy today's newspaper."
     dialog_copy_pc_generic_msg(state->options[0], state, 2200, 2299);
-    state->field_17F0[0] = 28;
-    state->field_1804[0] = newspaper_get(NEWSPAPER_CURRENT);
-    state->field_1818[0] = response_val;
+    state->option_response_types[0] = 28;
+    state->option_response_values[0] = newspaper_get(NEWSPAPER_CURRENT);
+    state->option_response_extra_values[0] = response_val;
 
     // PC: "What is the headline of today's paper?"
     dialog_copy_pc_generic_msg(state->options[1], state, 2000, 2099);
-    state->field_17F0[1] = 26;
-    state->field_1804[1] = response_val;
+    state->option_response_types[1] = 26;
+    state->option_response_values[1] = response_val;
 
     // PC: "I would like see some older newspapers."
     dialog_copy_pc_generic_msg(state->options[2], state, 2100, 2199);
-    state->field_17F0[2] = 27;
-    state->field_1804[2] = response_val;
+    state->option_response_types[2] = 27;
+    state->option_response_values[2] = response_val;
 
     // PC: "Forget it."
     dialog_copy_pc_generic_msg(state->options[3], state, 800, 899);
-    sub_417590(response_val, &(state->field_17F0[3]), &(state->field_1804[3]));
+    dialog_response_decode(response_val, &(state->option_response_types[3]), &(state->option_response_values[3]));
 
     state->actions[0] = NULL;
     state->actions[1] = NULL;
@@ -4241,13 +4270,13 @@ void dialog_offer_today_newspaper(int response_val, DialogState* state)
 
     // PC: "Yes."
     dialog_copy_pc_generic_msg(state->options[0], state, 1, 99);
-    state->field_17F0[0] = 28;
-    state->field_1804[0] = newspaper;
-    state->field_1818[0] = response_val;
+    state->option_response_types[0] = 28;
+    state->option_response_values[0] = newspaper;
+    state->option_response_extra_values[0] = response_val;
 
     // PC: "No."
     dialog_copy_pc_generic_msg(state->options[1], state, 100, 199);
-    sub_417590(response_val, &state->field_17F0[1], &state->field_1804[1]);
+    dialog_response_decode(response_val, &state->option_response_types[1], &state->option_response_values[1]);
 
     state->actions[0] = NULL;
     state->actions[1] = NULL;
@@ -4277,13 +4306,13 @@ void dialog_offer_older_newspaper(int response_val, DialogState* state)
         // PC: Each option is a newspaper headline.
         for (index = 0; index < cnt; index++) {
             ui_written_newspaper_headline(newspapers[index], state->options[index]);
-            state->field_17F0[index] = 28;
-            state->field_1804[index] = newspapers[index];
+            state->option_response_types[index] = 28;
+            state->option_response_values[index] = newspapers[index];
         }
 
         // PC: "Forget it."
         dialog_copy_pc_generic_msg(state->options[cnt], state, 800, 899);
-        sub_417590(response_val, &(state->field_17F0[cnt]), &(state->field_1804[cnt]));
+        dialog_response_decode(response_val, &(state->option_response_types[cnt]), &(state->option_response_values[cnt]));
 
         state->num_options = cnt + 1;
     } else {
@@ -4292,7 +4321,7 @@ void dialog_offer_older_newspaper(int response_val, DialogState* state)
 
         // PC: "[continue]"
         dialog_copy_pc_generic_msg(state->options[0], state, 600, 699);
-        sub_417590(response_val, &(state->field_17F0[0]), &(state->field_1804[0]));
+        dialog_response_decode(response_val, &(state->option_response_types[0]), &(state->option_response_values[0]));
 
         state->num_options = 1;
     }
@@ -4308,7 +4337,7 @@ void dialog_ask_money_for_newspaper(int newspaper, int response_val, DialogState
     int v1;
     int v2;
 
-    sub_417590(response_val, &v1, &v2);
+    dialog_response_decode(response_val, &v1, &v2);
     dialog_ask_money(2, 29, newspaper, v1, v2, state);
 }
 
@@ -4327,8 +4356,8 @@ void dialog_buy_newspaper(int newspaper, int a2, int a3, DialogState* state)
 
     // PC: "Thank you."
     dialog_copy_pc_class_specific_msg(state->options[0], state, 1000);
-    state->field_17F0[0] = a2;
-    state->field_1804[0] = a3;
+    state->option_response_types[0] = a2;
+    state->option_response_values[0] = a3;
 
     state->actions[0] = NULL;
 }

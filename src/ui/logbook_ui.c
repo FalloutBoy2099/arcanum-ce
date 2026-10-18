@@ -971,7 +971,7 @@ void logbook_ui_draw_panel(int border_art_num, bool preserve_page)
 
     // Reveal all tab buttons (they were hidden at creation time) and determine
     // which one is currently selected so we can restore it after the redraw.
-    selected_button_handle = sub_538730(logbook_ui_tab_buttons[0].button_handle);
+    selected_button_handle = tig_button_radio_selected_peer_get(logbook_ui_tab_buttons[0].button_handle);
     selected_button_index = 0;
 
     for (index = 0; index < LOGBOOK_UI_TAB_COUNT; index++) {
@@ -1267,6 +1267,32 @@ static void logbook_ui_clear_index_cache(void)
     logbook_ui_index_cache_valid = false;
 }
 
+// Indexing consumes text, not page layout. In particular, paginating Background
+// measures every successive word prefix and was repeated even on cache hits.
+static void logbook_ui_scan_index_tab(uint64_t* key, bool match)
+{
+    if (key != NULL) ui_cache_key_bytes(key, &logbook_ui_tab, sizeof(logbook_ui_tab));
+    if (logbook_ui_tab == LOGBOOK_UI_TAB_BACKGROUND) {
+        const char* body = background_description_get_body(background_text_get(logbook_ui_obj));
+        if (body == NULL) body = "";
+        int count = 1;
+        if (key != NULL) {
+            ui_cache_key_bytes(key, &count, sizeof(count));
+            ui_cache_key_string(key, body);
+        }
+        if (match) journal_index_match_mentions(&logbook_ui_index_workspace, body);
+        return;
+    }
+    logbook_ui_load_data();
+    if (key != NULL) ui_cache_key_bytes(key, &logbook_ui_entry_count, sizeof(logbook_ui_entry_count));
+    for (int i = 0; i < logbook_ui_entry_count; i++) {
+        char text[MAX_STRING] = { 0 };
+        logbook_ui_format_entry(text, sizeof(text), i);
+        if (key != NULL) ui_cache_key_string(key, text);
+        if (match) journal_index_match_mentions(&logbook_ui_index_workspace, text);
+    }
+}
+
 static void logbook_ui_load_index(void)
 {
     Uint64 perf_start = tig_performance_begin();
@@ -1336,19 +1362,11 @@ static void logbook_ui_load_index(void)
     }
     for (int id = 0; id <= 3; id++) ui_cache_key_string(&key, mes_localized_get("journal_index", id));
     // A cold opening has nothing to validate: fingerprint texts during the
-    // construction pass instead. In particular, do not paginate Background
-    // twice, since loading that tab already measures its text.
+    // construction pass instead. Neither pass needs display pagination.
     bool validated_texts = logbook_ui_index_cache_valid;
     for (int tab = 0; validated_texts && tab < LOGBOOK_UI_TAB_COUNT; tab++) {
         logbook_ui_tab = tab;
-        logbook_ui_load_data();
-        ui_cache_key_bytes(&key, &tab, sizeof(tab));
-        ui_cache_key_bytes(&key, &logbook_ui_entry_count, sizeof(logbook_ui_entry_count));
-        for (int i = 0; i < logbook_ui_entry_count; i++) {
-            char text[MAX_STRING] = { 0 };
-            logbook_ui_format_entry(text, sizeof(text), i);
-            ui_cache_key_string(&key, text);
-        }
+        logbook_ui_scan_index_tab(&key, false);
     }
     if (logbook_ui_index_cache_valid && logbook_ui_index_cache_key == key) {
         logbook_ui_tab = saved_tab;
@@ -1362,17 +1380,7 @@ static void logbook_ui_load_index(void)
     journal_index_prepare_mentions(&logbook_ui_index_workspace, count);
     for (int tab = 0; tab < LOGBOOK_UI_TAB_COUNT; tab++) {
         logbook_ui_tab = tab;
-        logbook_ui_load_data();
-        if (!validated_texts) {
-            ui_cache_key_bytes(&key, &tab, sizeof(tab));
-            ui_cache_key_bytes(&key, &logbook_ui_entry_count, sizeof(logbook_ui_entry_count));
-        }
-        for (int i = 0; i < logbook_ui_entry_count; i++) {
-            char text[MAX_STRING] = { 0 };
-            logbook_ui_format_entry(text, sizeof(text), i);
-            if (!validated_texts) ui_cache_key_string(&key, text);
-            journal_index_match_mentions(&logbook_ui_index_workspace, text);
-        }
+        logbook_ui_scan_index_tab(validated_texts ? NULL : &key, true);
     }
     logbook_ui_tab = saved_tab;
     logbook_ui_quotes_mode = saved_quotes;
@@ -2484,7 +2492,7 @@ void logbook_ui_check(void)
     TigRect rect;
 
     // Retrieve current in-game time.
-    logbook_ui_entry_datetimes[0] = sub_45A7C0();
+    logbook_ui_entry_datetimes[0] = game_time_get();
 
     // Note that the maximum number of rumors is 2000, but this check was
     // probably either future-proof, or was completed before rumor limit was

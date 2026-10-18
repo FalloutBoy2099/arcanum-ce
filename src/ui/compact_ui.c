@@ -35,12 +35,12 @@ typedef struct CompactUiComponent {
 } CompactUiComponent;
 
 static bool compact_ui_health_bar_init(CompactUiComponent* comp);
-static void sub_569050(void);
+static void compact_ui_health_bar_exit_stub(void);
 static bool compact_ui_health_bar_message_filter(TigMessage* msg);
 static void compact_ui_health_bar_draw(int a1);
-static void sub_569550(tig_window_handle_t window_handle, TigRect* rect, int color);
+static void compact_ui_rect_fill(tig_window_handle_t window_handle, TigRect* rect, int color);
 static bool compact_ui_hotkey_bar_init(CompactUiComponent* comp);
-static void sub_569580(void);
+static void compact_ui_hotkey_bar_exit_stub(void);
 static bool compact_ui_hotkey_bar_message_filter(TigMessage* msg);
 static void compact_ui_hotkey_bar_draw(int a1);
 
@@ -56,7 +56,7 @@ static CompactUiComponent compact_ui_components[MAX_COMPONENTS] = {
         "Health/Fatigue Bar",
         TIG_WINDOW_HANDLE_INVALID,
         compact_ui_health_bar_init,
-        sub_569050,
+        compact_ui_health_bar_exit_stub,
         compact_ui_health_bar_message_filter,
         compact_ui_health_bar_draw,
         { 751, 498, 49, 102 },
@@ -70,7 +70,7 @@ static CompactUiComponent compact_ui_components[MAX_COMPONENTS] = {
         "Hotkey Bar",
         TIG_WINDOW_HANDLE_INVALID,
         compact_ui_hotkey_bar_init,
-        sub_569580,
+        compact_ui_hotkey_bar_exit_stub,
         compact_ui_hotkey_bar_message_filter,
         compact_ui_hotkey_bar_draw,
         { 25, 25, 25, 25 },
@@ -305,14 +305,14 @@ bool compact_ui_health_bar_init(CompactUiComponent* comp)
 }
 
 // 0x569050
-void sub_569050(void)
+void compact_ui_health_bar_exit_stub(void)
 {
 }
 
 // 0x569060
 bool compact_ui_health_bar_message_filter(TigMessage* msg)
 {
-    return sub_54B5D0(msg);
+    return intgame_message_filter(msg);
 }
 
 // 0x569070
@@ -364,7 +364,7 @@ void compact_ui_health_bar_draw(int a1)
 
     poison = stat_level_get(pc_obj, STAT_POISON_LEVEL);
     if (poison > 0) {
-        sub_569550(compact_ui_components[0].window_handle,
+        compact_ui_rect_fill(compact_ui_components[0].window_handle,
             &rect1,
             tig_color_make(0, 255, 0));
 
@@ -381,7 +381,7 @@ void compact_ui_health_bar_draw(int a1)
         tig_font_pop();
         rect1.y -= 40;
     } else {
-        sub_569550(compact_ui_components[0].window_handle,
+        compact_ui_rect_fill(compact_ui_components[0].window_handle,
             &rect1,
             tig_color_make(255, 0, 0));
     }
@@ -404,7 +404,7 @@ void compact_ui_health_bar_draw(int a1)
         rect1.y = 100;
     }
     rect1.height = 100 - rect1.y;
-    sub_569550(compact_ui_components[0].window_handle,
+    compact_ui_rect_fill(compact_ui_components[0].window_handle,
         &rect1,
         tig_color_make(0, 0, 255));
 
@@ -423,7 +423,7 @@ void compact_ui_health_bar_draw(int a1)
 }
 
 // 0x569550
-void sub_569550(tig_window_handle_t window_handle, TigRect* rect, int color)
+void compact_ui_rect_fill(tig_window_handle_t window_handle, TigRect* rect, int color)
 {
     tig_window_fill(window_handle, rect, color);
 }
@@ -437,7 +437,7 @@ bool compact_ui_hotkey_bar_init(CompactUiComponent* comp)
 }
 
 // 0x569580
-void sub_569580(void)
+void compact_ui_hotkey_bar_exit_stub(void)
 {
 }
 

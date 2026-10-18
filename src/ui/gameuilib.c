@@ -106,7 +106,7 @@ static GameUiLibModule gameuilib_modules[] = {
     { "Roller-UI", roller_ui_init, NULL, NULL, NULL, roller_ui_exit, NULL, NULL, NULL },
     { "Slide-UI", NULL, NULL, slide_ui_mod_load, slide_ui_mod_unload, NULL, NULL, NULL, NULL },
     { "Compact-UI", compact_ui_init, compact_ui_reset, NULL, NULL, compact_ui_exit, NULL, NULL, NULL },
-    { "Benchmark-UI", benchmark_ui_init, benchmark_ui_exit, NULL, benchmark_ui_exit, benchmark_ui_exit, NULL, NULL, NULL },
+    { "Benchmark-UI", benchmark_ui_init, benchmark_ui_exit, NULL, benchmark_ui_exit, benchmark_ui_exit, NULL, NULL, benchmark_ui_resize },
 };
 
 #define MODULE_COUNT ((int)SDL_arraysize(gameuilib_modules))

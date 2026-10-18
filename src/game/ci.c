@@ -12,7 +12,7 @@ static TigRect ci_indicator_frame;
 static TigArtBlitInfo ci_indicator_blit_info;
 
 // 0x5FC3DC
-static int dword_5FC3DC;
+static int ci_counter;
 
 // 0x5FC3E0
 static TigVideoBuffer* ci_indicator_vb;
@@ -81,25 +81,25 @@ void ci_exit(void)
 }
 
 // 0x4BB8E0
-void sub_4BB8E0(void)
+void ci_counter_increment(void)
 {
-    dword_5FC3DC++;
+    ci_counter++;
 }
 
 // 0x4BB8F0
-void sub_4BB8F0(void)
+void ci_counter_decrement(void)
 {
-    dword_5FC3DC--;
+    ci_counter--;
 }
 
 // 0x4BB900
-int sub_4BB900(void)
+int ci_counter_get(void)
 {
-    return dword_5FC3DC;
+    return ci_counter;
 }
 
 // 0x4BB910
-void sub_4BB910(void)
+void ci_reserved_noop(void)
 {
 }
 

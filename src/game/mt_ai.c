@@ -11,27 +11,27 @@
 #define MAX_MT_AI 40
 #define MAX_MT_ENTRIES 200
 
-static bool sub_4CC240(void);
-static void sub_4CC270(void);
-static int sub_4CC2D0(const void* va, const void* vb);
-static int sub_4CC310(int spl);
-static bool sub_4CC350(int index, MagicTechAiActionList* list);
-static bool sub_4CC380(MagicTechAiActionList* list, const char* name);
-static void sub_4CC470(void);
+static bool mt_ai_action_lists_load(void);
+static void mt_ai_action_lists_free(void);
+static int mt_ai_action_score_compare_descending(const void* va, const void* vb);
+static int mt_ai_current_action_spell_score(int spl);
+static bool mt_ai_action_list_load(int index, MagicTechAiActionList* list);
+static bool mt_ai_current_action_candidates_build(MagicTechAiActionList* list, const char* name);
+static void mt_ai_cache_slots_reset(void);
 static void mt_ai_clear(void);
 static void mt_ai_create_internal(MagicTechAi* magictech_ai, int64_t obj, int action);
-static void sub_4CC520(int slot);
+static void mt_ai_cache_slot_free(int slot);
 static void mt_ai_populate(MagicTechAi* magictech_ai);
-static bool sub_4CC6F0(MagicTechAi* magictech_ai);
+static bool mt_ai_cached_actions_copy(MagicTechAi* magictech_ai);
 static void copy_actions(MagicTechAi* src, MagicTechAi* dst);
 static bool mt_ai_alloc(MagicTechAi** magictech_ai_ptr);
-static void sub_4CC810(MagicTechAi* magictech_ai);
+static void mt_ai_inventory_actions_collect(MagicTechAi* magictech_ai);
 static void magictech_build_ai_action_list(MagicTechAi* magictech_ai);
-static void sub_4CC930(MagicTechAi* magictech_ai, int64_t item_obj);
-static bool sub_4CCA30(int64_t item_obj, MagicTechAi* magictech_ai);
-static void sub_4CCAD0(int spell);
-static void sub_4CCB10(int spell, int64_t item_obj);
-static void sub_4CCB50(int64_t item_obj);
+static void mt_ai_item_actions_collect(MagicTechAi* magictech_ai, int64_t item_obj);
+static bool mt_ai_item_identification_check(int64_t item_obj, MagicTechAi* magictech_ai);
+static void mt_ai_candidate_spell_add(int spell);
+static void mt_ai_candidate_item_spell_add(int spell, int64_t item_obj);
+static void mt_ai_candidate_item_add(int64_t item_obj);
 static void flush_actions(MagicTechAi* magictech_ai, int action);
 
 // 0x5B7558
@@ -77,10 +77,10 @@ bool mt_ai_init(GameInitInfo* init_info)
 {
     (void)init_info;
 
-    sub_4CC470();
+    mt_ai_cache_slots_reset();
     mt_ai_initialized = true;
 
-    if (!sub_4CC240()) {
+    if (!mt_ai_action_lists_load()) {
         return false;
     }
 
@@ -97,19 +97,19 @@ void mt_ai_reset(void)
 void mt_ai_exit(void)
 {
     if (mt_ai_initialized) {
-        sub_4CC270();
+        mt_ai_action_lists_free();
         mt_ai_clear();
         mt_ai_initialized = false;
     }
 }
 
 // 0x4CC240
-bool sub_4CC240(void)
+bool mt_ai_action_lists_load(void)
 {
     int action;
 
     for (action = 0; action < MAGICTECH_AI_ACTION_COUNT; action++) {
-        if (!sub_4CC350(action, &(mt_ai_tmp_lists[action]))) {
+        if (!mt_ai_action_list_load(action, &(mt_ai_tmp_lists[action]))) {
             return false;
         }
     }
@@ -118,7 +118,7 @@ bool sub_4CC240(void)
 }
 
 // 0x4CC270
-void sub_4CC270(void)
+void mt_ai_action_lists_free(void)
 {
     int action;
 
@@ -131,7 +131,7 @@ void sub_4CC270(void)
 }
 
 // 0x4CC2A0
-int sub_4CC2A0(int spl)
+int mt_ai_secondary_defense_score_get(int spl)
 {
     if (mt_ai_initialized) {
         return magictech_spells[spl].defensive2;
@@ -141,15 +141,15 @@ int sub_4CC2A0(int spl)
 }
 
 // 0x4CC2D0
-int sub_4CC2D0(const void* va, const void* vb)
+int mt_ai_action_score_compare_descending(const void* va, const void* vb)
 {
     const MagicTechAiActionListEntry* a = (const MagicTechAiActionListEntry*)va;
     const MagicTechAiActionListEntry* b = (const MagicTechAiActionListEntry*)vb;
     int v1;
     int v2;
 
-    v1 = sub_4CC310(a->spell);
-    v2 = sub_4CC310(b->spell);
+    v1 = mt_ai_current_action_spell_score(a->spell);
+    v2 = mt_ai_current_action_spell_score(b->spell);
 
     if (v1 < v2) {
         return 1;
@@ -161,7 +161,7 @@ int sub_4CC2D0(const void* va, const void* vb)
 }
 
 // 0x4CC310
-int sub_4CC310(int spl)
+int mt_ai_current_action_spell_score(int spl)
 {
     return dword_5B7558 >= 0 && dword_5B7558 < MAGICTECH_AI_ACTION_COUNT && mt_ai_initialized
         ? magictech_spells[spl].ai.values[dword_5B7558]
@@ -169,18 +169,18 @@ int sub_4CC310(int spl)
 }
 
 // 0x4CC350
-bool sub_4CC350(int action, MagicTechAiActionList* list)
+bool mt_ai_action_list_load(int action, MagicTechAiActionList* list)
 {
     dword_5B7558 = action;
     if (action >= 0 && action < MAGICTECH_AI_ACTION_COUNT) {
-        return sub_4CC380(list, off_5B755C[action]);
+        return mt_ai_current_action_candidates_build(list, off_5B755C[action]);
     } else {
         return false;
     }
 }
 
 // 0x4CC380
-bool sub_4CC380(MagicTechAiActionList* list, const char* name)
+bool mt_ai_current_action_candidates_build(MagicTechAiActionList* list, const char* name)
 {
     int cnt;
     int spl;
@@ -189,7 +189,7 @@ bool sub_4CC380(MagicTechAiActionList* list, const char* name)
 
     cnt = 0;
     for (spl = 0; spl < MT_SPELL_COUNT; spl++) {
-        if (sub_4CC310(spl) != -1) {
+        if (mt_ai_current_action_spell_score(spl) != -1) {
             cnt++;
         }
     }
@@ -205,14 +205,14 @@ bool sub_4CC380(MagicTechAiActionList* list, const char* name)
 
         cnt = 0;
         for (spl = 0; spl < MT_SPELL_COUNT; spl++) {
-            if (sub_4CC310(spl) != -1) {
+            if (mt_ai_current_action_spell_score(spl) != -1) {
                 list->entries[cnt].spell = spl;
                 list->entries[cnt].item_obj = OBJ_HANDLE_NULL;
                 cnt++;
             }
         }
 
-        qsort(list->entries, list->cnt, sizeof(*list->entries), sub_4CC2D0);
+        qsort(list->entries, list->cnt, sizeof(*list->entries), mt_ai_action_score_compare_descending);
     } else {
         list->entries = NULL;
     }
@@ -221,7 +221,7 @@ bool sub_4CC380(MagicTechAiActionList* list, const char* name)
 }
 
 // 0x4CC470
-void sub_4CC470(void)
+void mt_ai_cache_slots_reset(void)
 {
     int slot;
     int action;
@@ -251,7 +251,7 @@ void mt_ai_clear(void)
     int slot;
 
     for (slot = 0; slot < MAX_MT_AI; slot++) {
-        sub_4CC520(slot);
+        mt_ai_cache_slot_free(slot);
     }
 
     mt_ai_active_cnt = 0;
@@ -270,7 +270,7 @@ void mt_ai_create_internal(MagicTechAi* magictech_ai, int64_t obj, int action)
 }
 
 // 0x4CC520
-void sub_4CC520(int slot)
+void mt_ai_cache_slot_free(int slot)
 {
     MagicTechAi* magictech_ai;
     int action;
@@ -302,7 +302,7 @@ void mt_ai_populate(MagicTechAi* magictech_ai)
         return;
     }
 
-    if (sub_4CC6F0(magictech_ai)) {
+    if (mt_ai_cached_actions_copy(magictech_ai)) {
         tmp = magictech_ai;
         if (magictech_ai->actions[magictech_ai->action].cnt > 0) {
             return;
@@ -324,14 +324,14 @@ void mt_ai_populate(MagicTechAi* magictech_ai)
 
     if (combat_critter_is_combat_mode_active(tmp->obj)
         && ai_critter_fatigue_ratio(tmp->obj) <= 50) {
-        sub_4CC810(tmp);
+        mt_ai_inventory_actions_collect(tmp);
         if (mt_ai_entries_cnt == 0) {
             magictech_build_ai_action_list(tmp);
         }
     } else {
         magictech_build_ai_action_list(tmp);
         if (mt_ai_entries_cnt == 0) {
-            sub_4CC810(tmp);
+            mt_ai_inventory_actions_collect(tmp);
         }
     }
 
@@ -345,7 +345,7 @@ void mt_ai_populate(MagicTechAi* magictech_ai)
 }
 
 // 0x4CC6F0
-bool sub_4CC6F0(MagicTechAi* magictech_ai)
+bool mt_ai_cached_actions_copy(MagicTechAi* magictech_ai)
 {
     int slot = 0;
 
@@ -387,7 +387,7 @@ bool mt_ai_alloc(MagicTechAi** magictech_ai_ptr)
     }
 
     *magictech_ai_ptr = &(mt_ai_cache[mt_id_next_idx]);
-    sub_4CC520(mt_id_next_idx);
+    mt_ai_cache_slot_free(mt_id_next_idx);
 
     if (++mt_id_next_idx >= MAX_MT_AI) {
         mt_id_next_idx = 0;
@@ -399,7 +399,7 @@ bool mt_ai_alloc(MagicTechAi** magictech_ai_ptr)
 }
 
 // 0x4CC810
-void sub_4CC810(MagicTechAi* magictech_ai)
+void mt_ai_inventory_actions_collect(MagicTechAi* magictech_ai)
 {
     int64_t item_obj;
     int cnt;
@@ -408,14 +408,14 @@ void sub_4CC810(MagicTechAi* magictech_ai)
     item_obj = item_wield_get(magictech_ai->obj, ITEM_INV_LOC_WEAPON);
     if (item_obj != OBJ_HANDLE_NULL
         && (obj_field_int32_get(item_obj, OBJ_F_ITEM_FLAGS) & OIF_HEXED) != 0) {
-        sub_4CC930(magictech_ai, item_obj);
+        mt_ai_item_actions_collect(magictech_ai, item_obj);
         return;
     }
 
     cnt = obj_field_int32_get(magictech_ai->obj, OBJ_F_CRITTER_INVENTORY_NUM);
     for (index = 0; index < cnt; index++) {
         item_obj = obj_arrayfield_handle_get(magictech_ai->obj, OBJ_F_CRITTER_INVENTORY_LIST_IDX, index);
-        sub_4CC930(magictech_ai, item_obj);
+        mt_ai_item_actions_collect(magictech_ai, item_obj);
     }
 }
 
@@ -441,14 +441,14 @@ void magictech_build_ai_action_list(MagicTechAi* magictech_ai)
     if (stat_level_get(magictech_ai->obj, STAT_MAGICK_POINTS) > 0) {
         for (index = 0; index < list->cnt; index++) {
             if (spell_is_known(magictech_ai->obj, list->entries[index].spell)) {
-                sub_4CCAD0(list->entries[index].spell);
+                mt_ai_candidate_spell_add(list->entries[index].spell);
             }
         }
     }
 }
 
 // 0x4CC930
-void sub_4CC930(MagicTechAi* magictech_ai, int64_t item_obj)
+void mt_ai_item_actions_collect(MagicTechAi* magictech_ai, int64_t item_obj)
 {
     int index;
     int spell;
@@ -457,25 +457,25 @@ void sub_4CC930(MagicTechAi* magictech_ai, int64_t item_obj)
     obj_field_int32_get(item_obj, OBJ_F_TYPE);
 
     if ((obj_field_int32_get(item_obj, OBJ_F_ITEM_SPELL_MANA_STORE)) != 0
-        && sub_4CCA30(item_obj, magictech_ai)) {
+        && mt_ai_item_identification_check(item_obj, magictech_ai)) {
         for (index = 0; index < 5; index++) {
             spell = obj_field_int32_get(item_obj, 100 + index);
             if (spell != 10000
                 && magictech_spells[spell].ai.values[dword_5B7558] != -1
-                && sub_456A10(magictech_ai->obj, magictech_ai->field_18, item_obj)) {
-                sub_4CCB10(spell, item_obj);
+                && magictech_item_effective_power_check(magictech_ai->obj, magictech_ai->field_18, item_obj)) {
+                mt_ai_candidate_item_spell_add(spell, item_obj);
             }
         }
     }
 
     if ((obj_field_int32_get(item_obj, OBJ_F_ITEM_FLAGS) & OIF_VALID_AI_ACTION) != 0
         && obj_field_int32_get(item_obj, OBJ_F_ITEM_AI_ACTION) == magictech_ai->action) {
-        sub_4CCB50(item_obj);
+        mt_ai_candidate_item_add(item_obj);
     }
 }
 
 // 0x4CCA30
-bool sub_4CCA30(int64_t item_obj, MagicTechAi* magictech_ai)
+bool mt_ai_item_identification_check(int64_t item_obj, MagicTechAi* magictech_ai)
 {
     int type;
 
@@ -500,7 +500,7 @@ void mt_ai_create(MagicTechAi* magictech_ai, int64_t obj, int action)
 }
 
 // 0x4CCAD0
-void sub_4CCAD0(int spell)
+void mt_ai_candidate_spell_add(int spell)
 {
     if (mt_ai_entries_cnt < MAX_MT_ENTRIES) {
         mt_ai_tmp_entries[mt_ai_entries_cnt].spell = spell;
@@ -510,7 +510,7 @@ void sub_4CCAD0(int spell)
 }
 
 // 0x4CCB10
-void sub_4CCB10(int spell, int64_t item_obj)
+void mt_ai_candidate_item_spell_add(int spell, int64_t item_obj)
 {
     if (mt_ai_entries_cnt < MAX_MT_ENTRIES) {
         mt_ai_tmp_entries[mt_ai_entries_cnt].spell = spell;
@@ -520,7 +520,7 @@ void sub_4CCB10(int spell, int64_t item_obj)
 }
 
 // 0x4CCB50
-void sub_4CCB50(int64_t item_obj)
+void mt_ai_candidate_item_add(int64_t item_obj)
 {
     if (mt_ai_entries_cnt < MAX_MT_ENTRIES) {
         mt_ai_tmp_entries[mt_ai_entries_cnt].spell = -1;
@@ -554,7 +554,7 @@ void mt_ai_notify_inventory_changed(int64_t obj)
 
     for (slot = 0; slot < MAX_MT_AI; slot++) {
         if (mt_ai_cache[slot].obj == obj) {
-            sub_4CC520(slot);
+            mt_ai_cache_slot_free(slot);
         }
     }
 }
@@ -583,7 +583,7 @@ void mt_ai_notify_item_exhausted(int64_t obj, int64_t item_obj)
     for (action = 0; action < MAGICTECH_AI_ACTION_COUNT; action++) {
         for (idx = 0; idx < mt_ai_cache[slot].actions[action].cnt; idx++) {
             if (mt_ai_cache[slot].actions[action].entries[idx].item_obj == item_obj) {
-                sub_4CC520(slot);
+                mt_ai_cache_slot_free(slot);
                 return;
             }
         }

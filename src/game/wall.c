@@ -4,11 +4,11 @@
 #include "game/obj_private.h"
 #include "game/object.h"
 
-static void sub_4E1C00(GameDrawInfo* draw_info);
-static void sub_4E1EB0(GameDrawInfo* draw_info);
-static void sub_4E20A0(int64_t obj);
-static void sub_4E25B0(int64_t obj);
-static void sub_4E2C50(int64_t obj);
+static void wall_topdown_segments_draw(GameDrawInfo* draw_info);
+static void wall_topdown_grid_markers_draw(GameDrawInfo* draw_info);
+static void wall_delete_piece_group_9_to_20_stub(int64_t obj);
+static void wall_delete_piece_group_21_to_33_stub(int64_t obj);
+static void wall_pieces_expand_along_neighbors(int64_t obj);
 
 // 0x603420
 static TigRect wall_iso_content_rect;
@@ -94,12 +94,12 @@ void wall_draw(GameDrawInfo* draw_info)
         return;
     }
 
-    sub_4E1C00(draw_info);
-    sub_4E1EB0(draw_info);
+    wall_topdown_segments_draw(draw_info);
+    wall_topdown_grid_markers_draw(draw_info);
 }
 
 // 0x4E1490
-void sub_4E1490(int64_t a1, int64_t a2)
+void wall_editor_pair_hook_stub(int64_t a1, int64_t a2)
 {
     if (!wall_editor) {
         return;
@@ -118,23 +118,23 @@ void wall_delete(int64_t obj, bool a2)
     p_piece = tig_art_wall_id_p_piece_get(art_id);
 
     if (p_piece >= 9 && p_piece <= 20) {
-        sub_4E20A0(obj);
+        wall_delete_piece_group_9_to_20_stub(obj);
     } else if (p_piece >= 21 && p_piece <= 33) {
-        sub_4E25B0(obj);
+        wall_delete_piece_group_21_to_33_stub(obj);
     } else if (p_piece >= 34 && p_piece <= 45) {
-        sub_4E2C50(obj);
+        wall_pieces_expand_along_neighbors(obj);
     }
 
     if (a2) {
         if (obj_handle_is_valid(obj)) {
-            sub_43CF70(obj);
+            object_sector_remove(obj);
             object_delete(obj);
         }
     }
 }
 
 // 0x4E1C00
-void sub_4E1C00(GameDrawInfo* draw_info)
+void wall_topdown_segments_draw(GameDrawInfo* draw_info)
 {
     LocRect* loc_rect;
     int64_t x;
@@ -203,7 +203,7 @@ void sub_4E1C00(GameDrawInfo* draw_info)
 }
 
 // 0x4E1EB0
-void sub_4E1EB0(GameDrawInfo* draw_info)
+void wall_topdown_grid_markers_draw(GameDrawInfo* draw_info)
 {
     LocRect loc_rect;
     TigRect rect;
@@ -263,19 +263,19 @@ void sub_4E1EB0(GameDrawInfo* draw_info)
 }
 
 // 0x4E20A0
-void sub_4E20A0(int64_t obj)
+void wall_delete_piece_group_9_to_20_stub(int64_t obj)
 {
     // TODO: Incomplete.
 }
 
 // 0x4E25B0
-void sub_4E25B0(int64_t obj)
+void wall_delete_piece_group_21_to_33_stub(int64_t obj)
 {
     // TODO: Incomplete.
 }
 
 // 0x4E2C50
-void sub_4E2C50(int64_t obj)
+void wall_pieces_expand_along_neighbors(int64_t obj)
 {
     tig_art_id_t art_id;
     int p_piece;

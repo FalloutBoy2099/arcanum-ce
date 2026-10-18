@@ -1,7 +1,7 @@
 #include "game/sector_block_list.h"
 
-static void sub_4F83A0(void);
-static void sub_4F83D0(void);
+static void sector_block_list_pool_refill(void);
+static void sector_block_list_pool_free(void);
 
 // 0x603DE4
 static SectorBlockListNode* sector_block_list_head;
@@ -79,14 +79,14 @@ bool sector_block_list_save_with_dif(SectorBlockList* list, TigFile* stream)
 }
 
 // 0x4F8330
-void sub_4F8330(void)
+void sector_block_list_setup_hook_stub(void)
 {
 }
 
 // 0x4F8340
-void sub_4F8340(void)
+void sector_block_list_pool_release(void)
 {
-    sub_4F83D0();
+    sector_block_list_pool_free();
 }
 
 // 0x4F8350
@@ -95,7 +95,7 @@ SectorBlockListNode* sector_block_list_node_create(void)
     SectorBlockListNode* node;
 
     if (sector_block_list_head == NULL) {
-        sub_4F83A0();
+        sector_block_list_pool_refill();
     }
 
     node = sector_block_list_head;
@@ -114,7 +114,7 @@ void sector_block_list_node_destroy(SectorBlockListNode* node)
 }
 
 // 0x4F83A0
-void sub_4F83A0(void)
+void sector_block_list_pool_refill(void)
 {
     int index;
     SectorBlockListNode* node;
@@ -129,7 +129,7 @@ void sub_4F83A0(void)
 }
 
 // 0x4F83D0
-void sub_4F83D0(void)
+void sector_block_list_pool_free(void)
 {
     SectorBlockListNode* next;
 

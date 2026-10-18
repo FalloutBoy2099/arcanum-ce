@@ -1,0 +1,12 @@
+// Benchmark button and result messages
+{0}{Benchmark}
+{1}{Benchmark complete. Measurements saved. Reload the save before resuming play or running another test.}
+{2}{Cannot start benchmark: load a save with a conscious character outside combat.}
+{3}{No accessible route. Move to an open area, then click Benchmark again.}
+{4}{Cannot create the benchmark measurement files.}
+{5}{Benchmark stopped: the character did not reach a destination before the timeout.}
+{6}{Benchmark stopped: a scenario action failed.}
+{7}{Benchmark interrupted (Escape, focus loss, menu, map change or combat). Measurements are incomplete.}
+{8}{Benchmark interrupted: the game lost focus. Keep it in the foreground until the completion message.}
+{9}{Benchmark interrupted by a request to quit the game.}
+{10}{Benchmark cancelled with Escape. Measurements are incomplete.}

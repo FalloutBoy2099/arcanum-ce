@@ -266,7 +266,7 @@ void rumor_known_set(int64_t obj, int rumor)
     DateTime datetime;
 
     // Get the current game time.
-    datetime = sub_45A7C0();
+    datetime = game_time_get();
 
     // Ensure the object is a player character.
     if (obj_field_int32_get(obj, OBJ_F_TYPE) != OBJ_TYPE_PC) {

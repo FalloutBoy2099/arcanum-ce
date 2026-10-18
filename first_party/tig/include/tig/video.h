@@ -139,8 +139,11 @@ int tig_video_buffer_unlock(TigVideoBuffer* video_buffer);
 int tig_video_buffer_outline(TigVideoBuffer* video_buffer, TigRect* rect, tig_color_t color);
 int tig_video_buffer_fill(TigVideoBuffer* video_buffer, TigRect* rect, tig_color_t color);
 int tig_video_buffer_line(TigVideoBuffer* video_buffer, TigLine* line, TigRect* a3, tig_color_t color);
-int sub_520FB0(TigVideoBuffer* video_buffer, unsigned int flags);
+int tig_video_buffer_render_target_check(TigVideoBuffer* video_buffer, unsigned int flags);
 int tig_video_buffer_blit(TigVideoBufferBlitInfo* blit_info);
+// Limited to opaque, unmodulated scaling. Unsupported cases return an error so
+// the caller can use the existing full-buffer blitter.
+int tig_video_buffer_scale_region(TigVideoBufferBlitInfo* blit_info, const TigRect* region);
 int tig_video_buffer_blit_sdl_surface(SDL_Surface* surface, TigRect* src_rect, TigVideoBuffer* dst_video_buffer, TigRect* dst_rect);
 int tig_video_buffer_get_pixel_color(TigVideoBuffer* video_buffer, int x, int y, unsigned int* color);
 int tig_video_buffer_blend_color(TigVideoBuffer* video_buffer, TigRect* rect, tig_color_t color, int alpha);

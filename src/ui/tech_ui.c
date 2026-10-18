@@ -1,4 +1,5 @@
 #include "ui/tech_ui.h"
+#include "game/activity_time.h"
 
 #include "game/player.h"
 #include "game/stat.h"
@@ -35,6 +36,7 @@ void tech_ui_inc_degree(int64_t obj, int tech)
         if (tech_degree_inc(obj, tech) > degree) {
             // Deduct cost from unspent points.
             stat_base_set(obj, STAT_UNSPENT_POINTS, points - cost);
+            activity_time_record(obj, ACTIVITY_TIME_TECH_POINTS, cost);
 
             // Update UI.
             if (charedit_is_created()) {
@@ -74,6 +76,7 @@ void tech_ui_dec_degree(int64_t obj, int tech)
     if (tech_degree_dec(obj, tech) < degree) {
         // Refund cost of the degree to unspent points.
         stat_base_set(obj, STAT_UNSPENT_POINTS, points + cost);
+        activity_time_record(obj, ACTIVITY_TIME_TECH_POINTS, -cost);
 
         // Update UI.
         if (charedit_is_created()) {

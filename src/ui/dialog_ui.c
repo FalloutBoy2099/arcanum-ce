@@ -30,7 +30,7 @@ typedef struct DialogUiEntry {
     /* 0000 */ int slot;
     /* 0004 */ int dlg;
     /* 0008 */ DialogState state;
-    /* 1850 */ int field_1850;
+    /* 1850 */ int active;
     /* 1854 */ int script_num;
     /* 1858 */ int script_line;
     /* 185C */ char field_185C;
@@ -39,8 +39,8 @@ typedef struct DialogUiEntry {
     /* 185F */ char field_185F;
 } DialogUiEntry;
 
-static DialogUiEntry* sub_567420(int64_t obj);
-static void sub_5679C0(DialogUiEntry* entry);
+static DialogUiEntry* dialog_ui_first_entry_get_stub(int64_t obj);
+static void dialog_ui_entry_release(DialogUiEntry* entry);
 static bool dialog_ui_process_option(DialogUiEntry* entry, int option);
 static bool dialog_ui_message_filter(TigMessage* msg);
 static void dialog_ui_execute_script(DialogUiEntry* entry, int line);
@@ -67,7 +67,7 @@ bool dialog_ui_init(GameInitInfo* init_info)
     (void)init_info;
 
     for (index = 0; index < MAX_ENTRIES; index++) {
-        stru_66DAB8[index].field_1850 = false;
+        stru_66DAB8[index].active = false;
         stru_66DAB8[index].slot = index;
     }
 
@@ -96,8 +96,8 @@ void dialog_ui_reset(void)
     }
 
     for (index = 0; index < MAX_ENTRIES; index++) {
-        if (stru_66DAB8[index].field_1850) {
-            sub_5679C0(&(stru_66DAB8[index]));
+        if (stru_66DAB8[index].active) {
+            dialog_ui_entry_release(&(stru_66DAB8[index]));
         }
     }
 }
@@ -105,11 +105,11 @@ void dialog_ui_reset(void)
 // 0x567400
 bool dialog_ui_is_in_dialog(int64_t obj)
 {
-    return sub_567420(obj)->field_1850;
+    return dialog_ui_first_entry_get_stub(obj)->active;
 }
 
 // 0x567420
-DialogUiEntry* sub_567420(int64_t obj)
+DialogUiEntry* dialog_ui_first_entry_get_stub(int64_t obj)
 {
     int index = 0;
 
@@ -146,7 +146,7 @@ void dialog_ui_start_dialog(int64_t pc_obj, int64_t npc_obj, int script_num, int
         combat_critter_deactivate_combat_mode(pc_obj);
     }
 
-    entry = sub_567420(pc_obj);
+    entry = dialog_ui_first_entry_get_stub(pc_obj);
 
     if (script_num != 0 && script_name_build_dlg_name(script_num, path, sizeof(path))) {
         if (!dialog_load(path, &(entry->dlg))) {
@@ -158,26 +158,26 @@ void dialog_ui_start_dialog(int64_t pc_obj, int64_t npc_obj, int script_num, int
         entry->state.npc_obj = npc_obj;
         entry->state.num = num;
         entry->state.script_num = script_num;
-        if (!sub_412FD0(&(entry->state))) {
+        if (!dialog_conversation_begin(&(entry->state))) {
             dialog_unload(entry->dlg);
             return;
         }
 
-        if (entry->state.field_17E8 == 4) {
+        if (entry->state.turn_status == 4) {
             dialog_ui_npc_say(entry->state.npc_obj,
                 entry->state.pc_obj,
                 TB_TYPE_WHITE,
                 TB_EXPIRE_DEFAULT,
                 entry->state.reply,
                 entry->state.speech_id);
-            sub_413280(&(entry->state));
+            dialog_conversation_end(&(entry->state));
             dialog_unload(entry->dlg);
             return;
         }
 
         if (player_is_local_pc_obj(pc_obj)) {
             if (!intgame_dialog_begin(dialog_ui_message_filter)) {
-                sub_413280(&(entry->state));
+                dialog_conversation_end(&(entry->state));
                 dialog_unload(entry->dlg);
                 return;
             }
@@ -185,13 +185,13 @@ void dialog_ui_start_dialog(int64_t pc_obj, int64_t npc_obj, int script_num, int
             dialog_ui_local_pc_dialog_active = true;
 
             if (!intgame_is_compact_interface()) {
-                sub_57CD60(pc_obj, npc_obj, str);
+                tb_ui_examine_text_build(pc_obj, npc_obj, str);
                 intgame_examine_object(pc_obj, npc_obj, str);
                 object_hover_obj_set(npc_obj);
             }
         }
 
-        sub_424070(pc_obj, 3, 0, true);
+        anim_object_interrupt_by_priority(pc_obj, 3, 0, true);
         anim_goal_rotate(pc_obj, object_rot(pc_obj, npc_obj));
 
         if (critter_is_concealed(pc_obj)) {
@@ -204,11 +204,11 @@ void dialog_ui_start_dialog(int64_t pc_obj, int64_t npc_obj, int script_num, int
 
         entry->script_num = script_num;
         entry->script_line = script_line;
-        entry->field_1850 = 1;
+        entry->active = 1;
 
         dialog_ui_display(entry);
     } else {
-        sub_5681C0(pc_obj, npc_obj);
+        dialog_ui_npc_greeting_float(pc_obj, npc_obj);
     }
 }
 
@@ -219,12 +219,12 @@ void dialog_ui_end_dialog(int64_t obj, int a2)
 
     (void)a2;
 
-    entry = sub_567420(obj);
-    if (!entry->field_1850) {
+    entry = dialog_ui_first_entry_get_stub(obj);
+    if (!entry->active) {
         return;
     }
 
-    entry->field_1850 = false;
+    entry->active = false;
 
     if (player_is_local_pc_obj(obj)) {
         intgame_dialog_end();
@@ -235,21 +235,21 @@ void dialog_ui_end_dialog(int64_t obj, int a2)
 
     tb_expire_in(entry->state.npc_obj, TB_EXPIRE_DEFAULT);
 
-    sub_413280(&(entry->state));
+    dialog_conversation_end(&(entry->state));
 }
 
 // 0x5679C0
-void sub_5679C0(DialogUiEntry* entry)
+void dialog_ui_entry_release(DialogUiEntry* entry)
 {
-    if (!entry->field_1850) {
+    if (!entry->active) {
         return;
     }
 
-    entry->field_1850 = false;
+    entry->active = false;
 
     dialog_unload(entry->dlg);
 
-    sub_413280(&(entry->state));
+    dialog_conversation_end(&(entry->state));
 }
 
 // 0x567A10
@@ -261,7 +261,7 @@ bool dialog_ui_is_local_pc_in_dialog(void)
 // 0x567A20
 void dialog_ui_notify_dialog_ended(int64_t obj)
 {
-    sub_567420(obj)->field_1850 = false;
+    dialog_ui_first_entry_get_stub(obj)->active = false;
     if (player_is_local_pc_obj(obj)) {
         intgame_dialog_end();
         dialog_ui_local_pc_dialog_active = false;
@@ -271,7 +271,7 @@ void dialog_ui_notify_dialog_ended(int64_t obj)
 // 0x567A60
 void dialog_ui_notify_dialog_started(int64_t obj)
 {
-    sub_567420(obj)->field_1850 = true;
+    dialog_ui_first_entry_get_stub(obj)->active = true;
     if (player_is_local_pc_obj(obj)) {
         if (intgame_dialog_begin(dialog_ui_message_filter)) {
             dialog_ui_local_pc_dialog_active = true;
@@ -292,9 +292,9 @@ bool dialog_ui_process_option(DialogUiEntry* entry, int option)
         entry->state.options[option]);
     tb_remove(entry->state.npc_obj);
     dialog_ui_speech_stop();
-    sub_413130(&(entry->state), option);
+    dialog_option_select(&(entry->state), option);
 
-    switch (entry->state.field_17E8) {
+    switch (entry->state.turn_status) {
     case 0:
         if (is_pc) {
             dialog_camera_start(entry->state.pc_obj, entry->state.npc_obj);
@@ -307,7 +307,7 @@ bool dialog_ui_process_option(DialogUiEntry* entry, int option)
         break;
     case 2:
         dialog_ui_end_dialog(entry->state.pc_obj, 0);
-        dialog_ui_execute_script(entry, entry->state.field_17EC);
+        dialog_ui_execute_script(entry, entry->state.response_value);
         break;
     case 3:
         if (is_pc) {
@@ -374,27 +374,27 @@ bool dialog_ui_message_filter(TigMessage* msg)
     DialogUiEntry* entry;
     int option;
 
-    entry = sub_567420(player_get_local_pc_obj());
+    entry = dialog_ui_first_entry_get_stub(player_get_local_pc_obj());
 
     option = intgame_dialog_get_option(msg);
     if (option == -1) {
-        sub_5517A0(msg);
+        intgame_mouse_message_is_over_window(msg);
         return true;
     }
 
     if (!dialog_ui_process_option(entry, option)) {
-        sub_5517A0(msg);
+        intgame_mouse_message_is_over_window(msg);
     }
 
     return true;
 }
 
 // 0x5681C0
-void sub_5681C0(int64_t pc_obj, int64_t npc_obj)
+void dialog_ui_npc_greeting_float(int64_t pc_obj, int64_t npc_obj)
 {
     char text[1000];
 
-    sub_4132A0(npc_obj, pc_obj, text);
+    dialog_copy_npc_greeting_msg(npc_obj, pc_obj, text);
     dialog_ui_npc_say(npc_obj, pc_obj, TB_TYPE_WHITE, TB_EXPIRE_DEFAULT, text, -1);
 }
 
@@ -445,8 +445,8 @@ void dialog_ui_npc_say(int64_t npc_obj, int64_t pc_obj, int type, int expires_in
 {
     if (pc_obj != OBJ_HANDLE_NULL
         && !critter_is_dead(npc_obj)
-        && !sub_423300(npc_obj, NULL)) {
-        sub_424070(npc_obj, 3, 0, 1);
+        && !anim_foreground_goal_find(npc_obj, NULL)) {
+        anim_object_interrupt_by_priority(npc_obj, 3, 0, 1);
         anim_goal_rotate(npc_obj, object_rot(npc_obj, pc_obj));
     }
 
@@ -463,12 +463,12 @@ void dialog_ui_pc_say(int64_t pc_obj, int64_t npc_obj, int type, int expires_in,
     if (player_is_local_pc_obj(pc_obj)) {
         char speaker[MAX_STRING] = "";
         object_examine(pc_obj, pc_obj, speaker);
-        conversation_history_add(speaker, str, sub_45A7C0());
+        conversation_history_add(speaker, str, game_time_get());
     }
     if (npc_obj != OBJ_HANDLE_NULL
         && !critter_is_dead(pc_obj)
-        && !sub_423300(pc_obj, NULL)) {
-        sub_424070(pc_obj, 3, 0, 1);
+        && !anim_foreground_goal_find(pc_obj, NULL)) {
+        anim_object_interrupt_by_priority(pc_obj, 3, 0, 1);
         anim_goal_rotate(pc_obj, object_rot(pc_obj, npc_obj));
     }
 
@@ -507,7 +507,7 @@ void dialog_ui_speech_start(int64_t npc_obj, int64_t pc_obj, int speech_id)
     }
 
     dialog_ui_speech_stop();
-    sub_418A00(speech_id, &v1, &v2);
+    dialog_speech_id_decode(speech_id, &v1, &v2);
 
     gender = stat_level_get(pc_obj, STAT_GENDER) != 0 ? 'm' : 'f';
     snprintf(path, sizeof(path),

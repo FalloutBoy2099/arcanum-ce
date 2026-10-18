@@ -493,7 +493,7 @@ bool roof_hit_test(int x, int y)
         && y >= rect.y
         && x < rect.x + rect.width
         && y < rect.y + rect.height
-        && sub_502FD0(aid, x - rect.x, y - rect.y) == TIG_OK) {
+        && tig_art_pixel_hit_test(aid, x - rect.x, y - rect.y) == TIG_OK) {
         return true;
     }
 

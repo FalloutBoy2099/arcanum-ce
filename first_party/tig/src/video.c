@@ -1,5 +1,6 @@
 #include "tig/video.h"
 #include "tig/video_upload.h"
+#include "tig/scale_region.h"
 #include "tig/performance.h"
 
 #include <limits.h>
@@ -43,7 +44,7 @@ typedef struct TigFadeState {
 
 static bool tig_video_window_create(TigInitInfo* init_info);
 static void tig_video_window_destroy(void);
-static bool sub_524830(void);
+static bool tig_video_surface_color_masks_apply(void);
 static int tig_video_screenshot_make_internal(int key);
 static int tig_video_buffer_data_to_bmp(SDL_Surface* surface, TigRect* rect, const char* file_name);
 
@@ -100,7 +101,7 @@ int tig_video_init(TigInitInfo* init_info)
         return TIG_ERR_GENERIC;
     }
 
-    if (!sub_524830()) {
+    if (!tig_video_surface_color_masks_apply()) {
         tig_video_window_destroy();
         return TIG_ERR_GENERIC;
     }
@@ -970,7 +971,7 @@ int tig_video_buffer_line(TigVideoBuffer* video_buffer, TigLine* line, TigRect* 
 }
 
 // 0x520FB0
-int sub_520FB0(TigVideoBuffer* video_buffer, unsigned int flags)
+int tig_video_buffer_render_target_check(TigVideoBuffer* video_buffer, unsigned int flags)
 {
     TigVideoBufferData data;
 
@@ -994,6 +995,20 @@ int sub_520FB0(TigVideoBuffer* video_buffer, unsigned int flags)
 }
 
 // 0x521000
+int tig_video_buffer_scale_region(TigVideoBufferBlitInfo* blit_info, const TigRect* region)
+{
+    if (blit_info == NULL || region == NULL || blit_info->src_video_buffer == NULL || blit_info->dst_video_buffer == NULL
+        || blit_info->src_rect == NULL || blit_info->dst_rect == NULL
+        || (blit_info->flags & ~TIG_VIDEO_BUFFER_BLIT_SCALE_LINEAR) != 0
+        || (blit_info->src_video_buffer->flags & TIG_VIDEO_BUFFER_COLOR_KEY) != 0) return TIG_ERR_INVALID_PARAM;
+    SDL_Rect source = { blit_info->src_rect->x, blit_info->src_rect->y, blit_info->src_rect->width, blit_info->src_rect->height };
+    SDL_Rect destination = { blit_info->dst_rect->x, blit_info->dst_rect->y, blit_info->dst_rect->width, blit_info->dst_rect->height };
+    SDL_Rect part = { region->x, region->y, region->width, region->height };
+    return tig_scale_region(blit_info->src_video_buffer->surface, source, blit_info->dst_video_buffer->surface,
+        destination, part, (blit_info->flags & TIG_VIDEO_BUFFER_BLIT_SCALE_LINEAR) ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST)
+        ? TIG_OK : TIG_ERR_GENERIC;
+}
+
 int tig_video_buffer_blit(TigVideoBufferBlitInfo* blit_info)
 {
     bool stretched;
@@ -1643,7 +1658,7 @@ void tig_video_window_destroy(void)
 }
 
 // 0x524830
-bool sub_524830(void)
+bool tig_video_surface_color_masks_apply(void)
 {
     int bpp;
     Uint32 r;

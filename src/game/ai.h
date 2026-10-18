@@ -6,7 +6,7 @@
 #include "game/timeevent.h"
 
 typedef void (*AiFloatLineFunc)(int64_t npc_obj, int64_t pc_obj, const char* str, int speech_id);
-typedef void (*Func5F848C)(int64_t, int);
+typedef void (*AiEndDialogCallback)(int64_t, int);
 
 typedef enum AiDangerSourceType {
     AI_DANGER_SOURCE_TYPE_NONE,
@@ -15,7 +15,7 @@ typedef enum AiDangerSourceType {
     AI_DANGER_SOURCE_TYPE_SURRENDER,
 } AiDangerSourceType;
 
-typedef enum AiSpeak {
+typedef enum AiSpeakResult {
     AI_SPEAK_OK,
     AI_SPEAK_DEAD,
     AI_SPEAK_COMBAT,
@@ -23,9 +23,9 @@ typedef enum AiSpeak {
     AI_SPEAK_REACTION,
     AI_SPEAK_CANNOT,
     AI_SPEAK_SLEEP_UNCONSCIOUS,
-} AiSpeak;
+} AiSpeakResult;
 
-typedef enum AiFollow {
+typedef enum AiFollowResult {
     AI_FOLLOW_OK,
 
     // The NPC will not follow the PC because the PC is too good.
@@ -51,49 +51,49 @@ typedef enum AiFollow {
 
     // The NPC is too high level for the PC to be a follower.
     AI_FOLLOW_LOW_LEVEL,
-} AiFollow;
+} AiFollowResult;
 
-typedef enum AiKos {
+typedef enum AiKillOnSightReason {
     AI_KOS_NO,
     AI_KOS_FACTION,
     AI_KOS_REACTION,
     AI_KOS_ALIGNMENT,
     AI_KOS_GUARD,
     AI_KOS_DECOY,
-} AiKos;
+} AiKillOnSightReason;
 
-typedef enum AiProtect {
+typedef enum AiProtectionReason {
     AI_PROTECT_NO,
     AI_PROTECT_FACTION,
     AI_PROTECT_ORIGIN,
     AI_PROTECT_GROUP,
     AI_PROTECT_SELF,
-} AiProtect;
+} AiProtectionReason;
 
-typedef enum AiUpsetAttacking {
+typedef enum AiAttackObjectionReason {
     AI_UPSET_ATTACKING_NONE,
     AI_UPSET_ATTACKING_GOOD,
     AI_UPSET_ATTACKING_ORIGIN,
     AI_UPSET_ATTACKING_FACTION,
     AI_UPSET_ATTACKING_PARTY,
-} AiUpsetAttacking;
+} AiAttackObjectionReason;
 
-typedef enum AiAttemptOpenPortal {
+typedef enum AiOpenPortalResult {
     AI_ATTEMPT_OPEN_PORTAL_OK,
     AI_ATTEMPT_OPEN_PORTAL_LOCKED,
     AI_ATTEMPT_OPEN_PORTAL_JAMMED,
     AI_ATTEMPT_OPEN_PORTAL_MAGICALLY_HELD,
     AI_ATTEMPT_OPEN_PORTAL_NOT_ALLOWED,
     AI_ATTEMPT_OPEN_PORTAL_NOT_CRITTER,
-} AiAttemptOpenPortal;
+} AiOpenPortalResult;
 
-typedef enum AiAttemptOpenContainer {
+typedef enum AiOpenContainerResult {
     AI_ATTEMPT_OPEN_CONTAINER_OK,
     AI_ATTEMPT_OPEN_CONTAINER_LOCKED,
     AI_ATTEMPT_OPEN_CONTAINER_JAMMED,
     AI_ATTEMPT_OPEN_CONTAINER_MAGICALLY_HELD,
     AI_ATTEMPT_OPEN_CONTAINER_NOT_ALLOWED,
-} AiAttemptOpenContainer;
+} AiOpenContainerResult;
 
 typedef struct AiRedirect {
     /* 0000 */ int64_t source_obj;
@@ -107,11 +107,11 @@ typedef enum AiNpcWitnessPcCritical {
     AI_NPC_WITNESS_PC_CRITICAL_MISS,
 } AiNpcWitnessPcCritical;
 
-typedef enum AiUseSkill {
+typedef enum AiUseSkillResult {
     AI_USE_SKILL_OK,
     AI_USE_SKILL_BAD_SOURCE,
     AI_USE_SKILL_BAD_TARGET,
-} AiUseSkill;
+} AiUseSkillResult;
 
 typedef enum AiActionType {
     AI_ACTION_TYPE_UNKNOWN,
@@ -124,31 +124,31 @@ bool ai_init(GameInitInfo* init_info);
 void ai_exit(void);
 bool ai_mod_load(void);
 void ai_mod_unload(void);
-void ai_set_callbacks(Func5F848C a1, AiFloatLineFunc float_line_func);
+void ai_set_callbacks(AiEndDialogCallback a1, AiFloatLineFunc float_line_func);
 void ai_process(int64_t obj);
 void ai_redirect_init(AiRedirect* ai_redirect, int64_t source_obj, int64_t target_obj);
 void ai_redirect_perform(AiRedirect* ai_redirect);
 void ai_attack(int64_t source_obj, int64_t target_obj, int loudness, unsigned int flags);
-void sub_4A9AD0(int64_t attacker_obj, int64_t target_obj);
+void ai_auto_attack_response(int64_t attacker_obj, int64_t target_obj);
 void ai_notify_explosion_dynamite(int64_t pc_obj);
 void ai_notify_killed(int64_t victim_obj, int64_t killer_obj);
-void sub_4AA300(int64_t a1, int64_t a2);
+void ai_hostility_end_against_group(int64_t a1, int64_t a2);
 void ai_stop_attacking(int64_t obj);
-void sub_4AA580(int64_t obj);
+void ai_group_attacks_enable(int64_t obj);
 void ai_npc_wait(int64_t obj);
 void ai_npc_unwait(int64_t obj, bool force);
 bool ai_npc_wait_here_timeevent_process(TimeEvent* timeevent);
 bool ai_is_fighting(int64_t obj);
 int ai_object_hp_ratio(int64_t obj);
 int ai_critter_fatigue_ratio(int64_t obj);
-int64_t sub_4ABBC0(int64_t obj);
+int64_t ai_combat_target_get_or_find(int64_t obj);
 bool ai_timeevent_process(TimeEvent* timeevent);
-void sub_4AD6E0(int64_t obj);
+void ai_schedule_default_delay(int64_t obj);
 void ai_timeevent_clear(int64_t obj);
 int ai_can_speak(int64_t npc_obj, int64_t pc_obj, bool a3);
 int ai_check_follow(int64_t npc_obj, int64_t pc_obj, bool ignore_charisma_limits);
-void sub_4AD790(int64_t obj, int a2);
-int sub_4ADE00(int64_t source_obj, int64_t target_loc, int64_t* block_obj_ptr);
+void ai_schedule_immediate(int64_t obj, int a2);
+int ai_straight_path_cost_to_location(int64_t source_obj, int64_t target_loc, int64_t* block_obj_ptr);
 void ai_switch_weapon(int64_t obj);
 void ai_calc_party_size_and_level(int64_t obj, int* cnt_ptr, int* lvl_ptr);
 int ai_check_kos(int64_t source_obj, int64_t target_obj);

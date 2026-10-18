@@ -134,9 +134,35 @@ static void benchmark_journal_mentions(void)
     printf("Synthetic journal matching (2000 candidates / 400 entries): before %.3f ms, after %.3f ms\n", old_ms, new_ms);
 }
 
+static void test_unpaginated_background(void)
+{
+    static JournalIndexWorkspace workspace;
+    char body[6000];
+    memset(body, ' ', sizeof(body));
+    memcpy(body, "Virgil", 6);
+    // A name that used to span a display-page boundary, and another beyond
+    // the ordinary per-entry buffer. Scanning the body must see both.
+    memcpy(body + 2045, "Tarant Nord", 11);
+    memcpy(body + 5800, "\xC9glise", 6);
+    body[sizeof(body) - 1] = 0;
+    journal_index_begin(&workspace);
+    const char* names[] = { "Virgil", "Tarant Nord", "\xE9glise", "Unknown place" };
+    for (int i = 0; i < 4; i++) workspace.candidates[i].name = names[i];
+    journal_index_prepare_mentions(&workspace, 4);
+    journal_index_match_mentions(&workspace, body);
+    CHECK(workspace.candidates[0].known && workspace.candidates[1].known && workspace.candidates[2].known);
+    CHECK(!workspace.candidates[3].known);
+    uint64_t before = UI_CACHE_KEY_INIT, after = UI_CACHE_KEY_INIT;
+    ui_cache_key_string(&before, body);
+    body[5800] = 'A';
+    ui_cache_key_string(&after, body);
+    CHECK(before != after);
+}
+
 int main(void)
 {
     test_journal_index();
+    test_unpaginated_background();
     benchmark_journal_mentions();
     test_filtered_pages();
     uint64_t left = UI_CACHE_KEY_INIT, right = UI_CACHE_KEY_INIT;

@@ -951,7 +951,7 @@ bool obj_data_write_file(ObjDataDescriptor* descr, TigFile* stream)
 }
 
 // 0x4E4990
-void obj_data_write_mem(ObjDataDescriptor* a1, WriteBuffer* wb)
+void obj_data_write_mem(ObjDataDescriptor* descriptor, WriteBuffer* wb)
 {
     // uint8_t presence;
     // int size;

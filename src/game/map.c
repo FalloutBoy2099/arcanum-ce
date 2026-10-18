@@ -100,7 +100,7 @@ static bool map_load_dynamic(const char* name);
 static void map_load_extension(const char* base_path);
 static void map_disable_objects(void);
 static void map_obfuscate_name(char* str);
-static bool sub_411880(char** str, char* token);
+static bool map_patch_next_token(char** str, char* token);
 static void map_apply_obj_patch(int64_t obj, char* str);
 
 // 0x59F058
@@ -235,7 +235,7 @@ void map_reset(void)
 
         tig_debug_printf("map_reset: clearing magictech...");
         tig_timer_now(&start);
-        sub_457100();
+        magictech_run_slots_reset_callback();
         tig_debug_printf("done. Time (ms): %d\n", tig_timer_elapsed(start));
 
         tig_debug_printf("map_reset: interrupting anims...");
@@ -836,8 +836,8 @@ bool map_open_in_game(int map, bool a2, bool a3)
         map_precache_sectors(map_starting_loc);
     }
 
-    sub_45C580();
-    sub_4605C0();
+    timeevent_map_nodes_restore();
+    ui_targeting_reset();
 
     if (!obj_validate_system(1)) {
         tig_debug_println("Object system validate failed post-load in map_open_in_game.");
@@ -872,7 +872,7 @@ void map_precache_sectors(int64_t loc)
 }
 
 // 0x40FED0
-void sub_40FED0(void)
+void map_game_entry_hook_stub(void)
 {
 }
 
@@ -1582,7 +1582,7 @@ void map_clear_objects(void)
         if (obj_inst_first(&obj, &iter)) {
             do {
                 if (!object_is_static(obj)) {
-                    sub_43CF70(obj);
+                    object_sector_remove(obj);
                     object_delete(obj);
                 }
             } while (obj_inst_next(&obj, &iter));
@@ -1688,8 +1688,9 @@ void map_obfuscate_name(char* str)
     SDL_strrev(str);
 }
 
+// Reads a whitespace-delimited patch token and advances the source cursor.
 // 0x411880
-bool sub_411880(char** str, char* token)
+bool map_patch_next_token(char** str, char* token)
 {
     if (token == NULL) {
         return false;
@@ -1737,21 +1738,21 @@ void map_apply_obj_patch(int64_t obj, char* str)
     // Consume semicolon.
     str++;
 
-    while (sub_411880(&str, key)) {
+    while (map_patch_next_token(&str, key)) {
         if (SDL_strcasecmp(key, "internal_name") == 0) {
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             obj_field_int32_set(obj, OBJ_F_NAME, atoi(value));
         } else if (SDL_strcasecmp(key, "known_name") == 0) {
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             obj_field_int32_set(obj, OBJ_F_DESCRIPTION, atoi(value));
         } else if (SDL_strcasecmp(key, "alignment") == 0) {
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             stat_base_set(obj, STAT_ALIGNMENT, atoi(value));
         } else if (SDL_strcasecmp(key, "origin") == 0) {
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             obj_field_int32_set(obj, OBJ_F_NPC_ORIGIN, atoi(value));
         } else if (SDL_strcasecmp(key, "notify_npc") == 0) {
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             switch (obj_field_int32_get(obj, OBJ_F_TYPE)) {
             case OBJ_TYPE_PORTAL:
                 obj_field_int32_set(obj, OBJ_F_PORTAL_NOTIFY_NPC, atoi(value));
@@ -1761,11 +1762,11 @@ void map_apply_obj_patch(int64_t obj, char* str)
                 break;
             }
         } else if (SDL_strcasecmp(key, "magic_hit_adjust") == 0) {
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             obj_field_int32_set(obj, OBJ_F_WEAPON_MAGIC_HIT_ADJ, atoi(value));
         } else if (SDL_strcasecmp(key, "obj_flag") == 0) {
             flags = obj_field_int32_get(obj, OBJ_F_FLAGS);
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             if (value[0] == '!') {
                 for (index = 0; index < OF_COUNT; index++) {
                     if (SDL_strcasecmp(&(value[1]), obj_flags_of[index]) == 0) {
@@ -1784,7 +1785,7 @@ void map_apply_obj_patch(int64_t obj, char* str)
             obj_field_int32_set(obj, OBJ_F_FLAGS, flags);
         } else if (SDL_strcasecmp(key, "portal_flag") == 0) {
             flags = obj_field_int32_get(obj, OBJ_F_PORTAL_FLAGS);
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             if (value[0] == '!') {
                 for (index = 0; index < OPF_COUNT; index++) {
                     if (SDL_strcasecmp(&(value[1]), obj_flags_opf[index]) == 0) {
@@ -1803,7 +1804,7 @@ void map_apply_obj_patch(int64_t obj, char* str)
             obj_field_int32_set(obj, OBJ_F_PORTAL_FLAGS, flags);
         } else if (SDL_strcasecmp(key, "item_flag") == 0) {
             flags = obj_field_int32_get(obj, OBJ_F_ITEM_FLAGS);
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             if (value[0] == '!') {
                 for (index = 0; index < OIF_COUNT; index++) {
                     if (SDL_strcasecmp(&(value[1]), obj_flags_oif[index]) == 0) {
@@ -1822,7 +1823,7 @@ void map_apply_obj_patch(int64_t obj, char* str)
             obj_field_int32_set(obj, OBJ_F_ITEM_FLAGS, flags);
         } else if (SDL_strcasecmp(key, "critter_flag") == 0) {
             flags = obj_field_int32_get(obj, OBJ_F_CRITTER_FLAGS);
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             if (value[0] == '!') {
                 for (index = 0; index < OCF_COUNT; index++) {
                     if (SDL_strcasecmp(&(value[1]), obj_flags_ocf[index]) == 0) {
@@ -1841,7 +1842,7 @@ void map_apply_obj_patch(int64_t obj, char* str)
             obj_field_int32_set(obj, OBJ_F_CRITTER_FLAGS, flags);
         } else if (SDL_strcasecmp(key, "npc_flag") == 0) {
             flags = obj_field_int32_get(obj, OBJ_F_NPC_FLAGS);
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             if (value[0] == '!') {
                 for (index = 0; index < ONF_COUNT; index++) {
                     if (SDL_strcasecmp(&(value[1]), obj_flags_onf[index]) == 0) {
@@ -1861,10 +1862,10 @@ void map_apply_obj_patch(int64_t obj, char* str)
         } else if (SDL_strcasecmp(key, "training") == 0) {
             int training;
 
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             for (training = 0; training < TRAINING_COUNT; training++) {
                 if (SDL_strcasecmp(value, training_lookup_keys_tbl[training]) == 0) {
-                    sub_411880(&str, value);
+                    map_patch_next_token(&str, value);
 
                     for (index = 0; index < BASIC_SKILL_COUNT; index++) {
                         if (SDL_strcasecmp(value, basic_skill_lookup_keys_tbl[index]) == 0) {
@@ -1883,10 +1884,10 @@ void map_apply_obj_patch(int64_t obj, char* str)
             Script scr;
             int sap;
 
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             sap = atoi(value);
 
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             scr.num = atoi(value);
 
             if (script_load_hdr(&scr)) {
@@ -1896,10 +1897,10 @@ void map_apply_obj_patch(int64_t obj, char* str)
             int64_t x;
             int64_t y;
 
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             x = SDL_strtoll(value, NULL, 10);
 
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             y = SDL_strtoll(value, NULL, 10);
 
             obj_field_int64_set(obj, OBJ_F_NPC_STANDPOINT_DAY, LOCATION_MAKE(x, y));
@@ -1907,21 +1908,21 @@ void map_apply_obj_patch(int64_t obj, char* str)
             int64_t x;
             int64_t y;
 
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             x = SDL_strtoll(value, NULL, 10);
 
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             y = SDL_strtoll(value, NULL, 10);
 
             obj_field_int64_set(obj, OBJ_F_NPC_STANDPOINT_NIGHT, LOCATION_MAKE(x, y));
         } else if (SDL_strcasecmp(key, "magic_tech_complexity") == 0) {
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             obj_field_int32_set(obj, OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY, atoi(value));
         } else if (SDL_strcasecmp(key, "level_scheme") == 0) {
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             obj_field_int32_set(obj, OBJ_F_CRITTER_AUTO_LEVEL_SCHEME, atoi(value));
         } else if (SDL_strcasecmp(key, "faction") == 0) {
-            sub_411880(&str, value);
+            map_patch_next_token(&str, value);
             obj_field_int32_set(obj, OBJ_F_NPC_FACTION, atoi(value));
         } else {
             tig_debug_printf("map_apply_obj_patch: Unknown attribute %s.\n", str);

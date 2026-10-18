@@ -455,7 +455,7 @@ void reputation_add(int64_t pc_obj, int reputation)
     // Append reputation and current time to the reputation field arrays.
     index = obj_arrayfield_length_get(pc_obj, OBJ_F_PC_REPUTATION_IDX);
     obj_arrayfield_uint32_set(pc_obj, OBJ_F_PC_REPUTATION_IDX, index, reputation);
-    obj_arrayfield_int64_set(pc_obj, OBJ_F_PC_REPUTATION_TS_IDX, index, sub_45A7C0().value);
+    obj_arrayfield_int64_set(pc_obj, OBJ_F_PC_REPUTATION_TS_IDX, index, game_time_get().value);
 
     // Highlight logbook button if this is a local PC.
     if (player_is_local_pc_obj(pc_obj)) {

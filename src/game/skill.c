@@ -958,9 +958,12 @@ int basic_skill_min_stat_level_required(int skill_level)
 }
 
 /**
+ * Returns the percentage of the melee damage range retained above its minimum.
+ * Currently fixed at 100, so the original maximum damage is preserved.
+ *
  * 0x4C6510
  */
-int sub_4C6510(int64_t obj)
+int skill_melee_damage_range_percent(int64_t obj)
 {
     (void)obj;
 
@@ -1483,9 +1486,9 @@ bool skill_disarm_trap(int64_t obj, int a2, int64_t target_obj)
 void skill_invocation_init(SkillInvocation* skill_invocation)
 {
     skill_invocation->flags = 0;
-    sub_4440E0(OBJ_HANDLE_NULL, &(skill_invocation->item));
-    sub_4440E0(OBJ_HANDLE_NULL, &(skill_invocation->source));
-    sub_4440E0(OBJ_HANDLE_NULL, &(skill_invocation->target));
+    object_handle_reference_init(OBJ_HANDLE_NULL, &(skill_invocation->item));
+    object_handle_reference_init(OBJ_HANDLE_NULL, &(skill_invocation->source));
+    object_handle_reference_init(OBJ_HANDLE_NULL, &(skill_invocation->target));
     skill_invocation->target_loc = 0;
     skill_invocation->modifier = 0;
     skill_invocation->skill = -1;
@@ -1498,9 +1501,9 @@ void skill_invocation_init(SkillInvocation* skill_invocation)
  */
 bool skill_invocation_recover(SkillInvocation* skill_invocation)
 {
-    return sub_444130(&(skill_invocation->source))
-        && sub_444130(&(skill_invocation->target))
-        && sub_444130(&(skill_invocation->item));
+    return object_handle_reference_recover_if_stale(&(skill_invocation->source))
+        && object_handle_reference_recover_if_stale(&(skill_invocation->target))
+        && object_handle_reference_recover_if_stale(&(skill_invocation->item));
 }
 
 /**
@@ -1664,7 +1667,7 @@ bool skill_invocation_run(SkillInvocation* skill_invocation)
 
                     if (moved) {
                         // Adjust alignment.
-                        sub_45DC90(source_obj, target_obj, false);
+                        critter_alignment_adjust_for_victim(source_obj, target_obj, false);
 
                         // Mark item as stolen.
                         unsigned int critter_flags2 = obj_field_int32_get(target_obj, OBJ_F_CRITTER_FLAGS2);
@@ -1791,7 +1794,7 @@ bool skill_invocation_run(SkillInvocation* skill_invocation)
         CombatContext combat;
 
         // Initialize combat invocation for healing.
-        sub_4B2210(source_obj, target_obj, &combat);
+        combat_context_init(source_obj, target_obj, &combat);
 
         if (is_success) {
             int heal;
@@ -2376,7 +2379,7 @@ int skill_invocation_difficulty(SkillInvocation* skill_invocation)
 
         // Check for obstructions between source and target.
         int64_t blocking_obj;
-        int v2 = sub_4ADE00(source_obj, skill_invocation->target_loc, &blocking_obj);
+        int v2 = ai_straight_path_cost_to_location(source_obj, skill_invocation->target_loc, &blocking_obj);
         if (blocking_obj != OBJ_HANDLE_NULL) {
             // Target is blocked.
             difficulty += 1000000;
@@ -2411,13 +2414,13 @@ int skill_invocation_difficulty(SkillInvocation* skill_invocation)
             int lum;
             if ((skill_invocation->flags & SKILL_INVOCATION_CHECK_SEEING) != 0) {
                 // Take light level of the source object.
-                lum = sub_4DCE10(source_obj) & 0xFF;
+                lum = light_object_luminance(source_obj) & 0xFF;
             } else if (target_obj != OBJ_HANDLE_NULL) {
                 // Take light level of the target object.
-                lum = sub_4DCE10(target_obj) & 0xFF;
+                lum = light_object_luminance(target_obj) & 0xFF;
             } else {
                 // Take luminance of a target location.
-                lum = sub_4D9240(skill_invocation->target_loc, 0, 0) & 0xFF;
+                lum = light_luminance_at_location(skill_invocation->target_loc, 0, 0) & 0xFF;
             }
 
             // Calculate lighting penalty based on darkness (where 255 being
@@ -2513,7 +2516,7 @@ int skill_invocation_difficulty(SkillInvocation* skill_invocation)
         if ((skill_invocation->flags & SKILL_INVOCATION_CHECK_SEEING) != 0) {
             // Check for blocking objects when hiding from a target.
             int64_t blocking_obj;
-            int v6 = sub_4ADE00(target_obj,
+            int v6 = ai_straight_path_cost_to_location(target_obj,
                 obj_field_int64_get(source_obj, OBJ_F_LOCATION),
                 &blocking_obj);
             if (blocking_obj != OBJ_HANDLE_NULL) {
@@ -2614,8 +2617,8 @@ void skill_perform_repair_service(int64_t item_obj, int64_t npc_obj, int64_t pc_
     skill_invocation_init(&skill_invocation);
     skill_invocation.flags |= SKILL_INVOCATION_FORCED;
     skill_invocation.skill = SKILL_REPAIR;
-    sub_4440E0(npc_obj, &(skill_invocation.source));
-    sub_4440E0(item_obj, &(skill_invocation.target));
+    object_handle_reference_init(npc_obj, &(skill_invocation.source));
+    object_handle_reference_init(item_obj, &(skill_invocation.target));
     skill_invocation_run(&skill_invocation);
 
     // Transfer the specified amount of money from the PC to the NPC as payment
@@ -2623,7 +2626,7 @@ void skill_perform_repair_service(int64_t item_obj, int64_t npc_obj, int64_t pc_
     item_gold_transfer(pc_obj, npc_obj, cost, OBJ_HANDLE_NULL);
 
     // Update examine item UI.
-    sub_4EE3A0(pc_obj, item_obj);
+    mp_ui_object_examine_request(pc_obj, item_obj);
 }
 
 /**
@@ -2690,7 +2693,7 @@ void skill_pick_best_follower(SkillInvocation* skill_invocation)
         while (node != NULL) {
             // Temporarily set the follower to be the source object of the
             // invocation. This is needed to calculate invocation's difficulty.
-            sub_4440E0(node->obj, &(skill_invocation->source));
+            object_handle_reference_init(node->obj, &(skill_invocation->source));
             effectiveness = tech_skill_effectiveness(skill_invocation->source.obj, GET_TECH_SKILL(skill_invocation->skill), skill_invocation->target.obj) - skill_invocation_difficulty(skill_invocation);
 
             // Update the best follower if this one has higher effectiveness.
@@ -2716,7 +2719,7 @@ void skill_pick_best_follower(SkillInvocation* skill_invocation)
         while (node != NULL) {
             // Temporarily set the follower to be the source object of the
             // invocation. This is needed to calculate invocation's difficulty.
-            sub_4440E0(node->obj, &(skill_invocation->source));
+            object_handle_reference_init(node->obj, &(skill_invocation->source));
             effectiveness = basic_skill_effectiveness(skill_invocation->source.obj, GET_BASIC_SKILL(skill_invocation->skill), skill_invocation->target.obj) - skill_invocation_difficulty(skill_invocation);
 
             // Update the best follower if this one has higher effectiveness.
@@ -2733,7 +2736,7 @@ void skill_pick_best_follower(SkillInvocation* skill_invocation)
     }
 
     // Update the skill invocation's source to the best follower.
-    sub_4440E0(best_follower_obj, &(skill_invocation->source));
+    object_handle_reference_init(best_follower_obj, &(skill_invocation->source));
 }
 
 /**

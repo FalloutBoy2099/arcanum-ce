@@ -160,7 +160,7 @@ bool mt_obj_node_save_list_node(MagicTechObjectNode* node, TigFile* stream)
         return false;
     }
 
-    if (!object_save_obj_handle_safe(&(node->obj), &(node->field_8), stream)) {
+    if (!object_save_obj_handle_safe(&(node->obj), &(node->reference), stream)) {
         return false;
     }
 
@@ -221,7 +221,7 @@ bool mt_obj_node_load_list_node(MagicTechObjectNode* node, TigFile* stream)
         return false;
     }
 
-    if (!object_load_obj_handle_safe(&(node->obj), &(node->field_8), stream)) {
+    if (!object_load_obj_handle_safe(&(node->obj), &(node->reference), stream)) {
         return false;
     }
 
@@ -253,7 +253,7 @@ bool mt_obj_node_save_detached(MagicTechObjectNode* node, TigFile* stream)
         return false;
     }
 
-    if (!object_save_obj_handle_safe(&(node->obj), &(node->field_8), stream)) {
+    if (!object_save_obj_handle_safe(&(node->obj), &(node->reference), stream)) {
         return false;
     }
 
@@ -283,7 +283,7 @@ bool mt_obj_node_load_detached(MagicTechObjectNode* node, TigFile* stream)
         return false;
     }
 
-    if (!object_load_obj_handle_safe(&(node->obj), &(node->field_8), stream)) {
+    if (!object_load_obj_handle_safe(&(node->obj), &(node->reference), stream)) {
         return false;
     }
 

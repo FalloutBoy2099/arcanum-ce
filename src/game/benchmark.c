@@ -1,6 +1,23 @@
 #include "game/benchmark.h"
 
 #include <stddef.h>
+#include <string.h>
+
+int benchmark_notice_id(const char* status)
+{
+    if (status == NULL || strcmp(status, "interrupted_shutdown") == 0 || strcmp(status, "starting") == 0) return 0;
+    if (strcmp(status, "finished") == 0) return 1;
+    if (strcmp(status, "requires_safe_save") == 0) return 2;
+    if (strcmp(status, "route_unavailable") == 0) return 3;
+    if (strcmp(status, "output_unavailable") == 0) return 4;
+    if (strcmp(status, "timeout") == 0) return 5;
+    if (strcmp(status, "action_failed") == 0) return 6;
+    if (strcmp(status, "interrupted_focus_lost") == 0) return 8;
+    if (strcmp(status, "interrupted_quit") == 0) return 9;
+    if (strcmp(status, "cancelled") == 0) return 10;
+    if (strcmp(status, "aborted") == 0 || strncmp(status, "interrupted_", 12) == 0) return 7;
+    return 0;
+}
 
 static const BenchmarkStep steps[] = {
     { "warmup", BENCHMARK_WARMUP, 0, 120, 120 },
@@ -16,6 +33,9 @@ static const BenchmarkStep steps[] = {
     { "conversations", BENCHMARK_CONVERSATIONS, 0, 180, 180 },
     { "quest_index", BENCHMARK_INDEX, 0, 180, 180 },
     { "schematics", BENCHMARK_SCHEMATICS, 0, 180, 180 },
+    { "quest_index_repeat", BENCHMARK_INDEX, 1, 180, 180 },
+    { "conversations_repeat", BENCHMARK_CONVERSATIONS, 1, 180, 180 },
+    { "schematics_repeat", BENCHMARK_SCHEMATICS, 1, 180, 180 },
 };
 
 const BenchmarkStep* benchmark_step(int index)

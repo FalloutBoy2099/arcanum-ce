@@ -11,6 +11,6 @@ void wallcheck_recalc(int64_t loc);
 void wallcheck_flush(void);
 void wallcheck_set_enabled(bool enabled);
 bool wallcheck_is_enabled(void);
-void sub_438530(int64_t obj);
+void wallcheck_player_location_notify(int64_t obj);
 
 #endif /* ARCANUM_GAME_WALLCHECK_H_ */

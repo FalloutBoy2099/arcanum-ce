@@ -6,7 +6,7 @@
 
 typedef struct MagicTechObjectNode {
     /* 0000 */ int64_t obj;
-    /* 0008 */ Ryan field_8;
+    /* 0008 */ ObjectReference reference;
     /* 0030 */ int field_30;
     /* 0034 */ int aptitude;
     /* 0038 */ int type;

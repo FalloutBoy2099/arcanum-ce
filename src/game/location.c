@@ -512,7 +512,7 @@ bool location_screen_rect_to_loc_rect(TigRect* rect, LocRect* loc_rect)
 }
 
 // 0x4B93F0
-void sub_4B93F0(int a1, int a2, int* a3, int* a4)
+void location_offsets_to_sort_axes(int a1, int a2, int* a3, int* a4)
 {
     int v1;
     int v2;
@@ -625,8 +625,9 @@ void convert_screen_to_world_coords(int64_t sx, int64_t sy, int64_t* wx, int64_t
     }
 }
 
+// Accepts the original empty tile or searches radius three for a reachable empty tile.
 // 0x4B99C0
-bool sub_4B99C0(int64_t from, int64_t* to)
+bool location_find_nearby_empty_tile(int64_t from, int64_t* to)
 {
     TargetParams target_params;
     PathCreateInfo path_create_info;
@@ -664,7 +665,7 @@ bool sub_4B99C0(int64_t from, int64_t* to)
                 path_create_info.to = targets.entries[idx].loc;
                 path_create_info.max_rotations = sizeof(byte_5FC2A8);
                 path_create_info.rotations = byte_5FC2A8;
-                path_create_info.flags = PATH_FLAG_0x0010 | PATH_FLAG_0x0004 | PATH_FLAG_0x0002;
+                path_create_info.flags = PATH_FLAG_IGNORE_CRITTERS | PATH_FLAG_WINDOWS_BLOCK | PATH_FLAG_PORTALS_BLOCK;
                 if (path_make(&path_create_info)) {
                     if (to != NULL) {
                         *to = targets.entries[idx].loc;

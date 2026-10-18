@@ -42,6 +42,8 @@ set(SRCS
     "src/game/background.c"
     "src/game/background.h"
     "src/game/benchmark.c"
+    "src/game/benchmark_data.c"
+    "src/game/benchmark_data.h"
     "src/game/benchmark.h"
     "src/game/benchmark_route.c"
     "src/game/bless.c"
@@ -186,6 +188,10 @@ set(SRCS
     "src/game/path_open_set.h"
     "src/game/movement_turn.c"
     "src/game/movement_turn.h"
+    "src/game/movement_route.c"
+    "src/game/movement_route.h"
+    "src/game/activity_time.c"
+    "src/game/activity_time.h"
     "src/game/follower_navigation.c"
     "src/game/follower_navigation.h"
     "src/game/path.h"
@@ -277,6 +283,8 @@ set(SRCS
     "src/game/timeevent_node.h"
     "src/game/timeevent_pool.c"
     "src/game/timeevent_pool.h"
+    "src/game/zoom_damage.c"
+    "src/game/zoom_damage.h"
     "src/game/timeevent.h"
     "src/game/townmap.c"
     "src/game/townmap.h"
@@ -297,6 +305,10 @@ set(SRCS
     "src/ui/anim_ui.h"
     "src/ui/benchmark_input.h"
     "src/ui/benchmark_ui.c"
+    "src/ui/benchmark_widget.c"
+    "src/ui/item_compare.c"
+    "src/ui/item_compare_reference.c"
+    "src/ui/benchmark_widget.h"
     "src/ui/benchmark_ui.h"
     "src/ui/broadcast_ui.c"
     "src/ui/broadcast_ui.h"
@@ -403,6 +415,7 @@ if(ARCANUM_BUILD_TESTS)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
         add_test(NAME automaton_gunner COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/automaton_gunner_test.py")
+        add_test(NAME benchmark_report COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmark_report_test.py")
     endif()
     add_executable(community_features_test
         tests/community_features_test.c
@@ -431,6 +444,15 @@ if(ARCANUM_BUILD_TESTS)
     target_include_directories(pathfinding_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(pathfinding_test PRIVATE ${TIG_LIBRARY})
     add_test(NAME pathfinding COMMAND pathfinding_test)
+    add_executable(movement_route_test tests/movement_route_test.c src/game/movement_route.c)
+    target_include_directories(movement_route_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    add_test(NAME movement_route COMMAND movement_route_test)
+    add_executable(activity_time_test tests/activity_time_test.c src/game/activity_time.c)
+    target_include_directories(activity_time_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(activity_time_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME activity_time COMMAND activity_time_test)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/activity-time-runtime")
+    set_tests_properties(activity_time PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/activity-time-runtime")
     add_executable(performance_test tests/performance_test.c)
     target_link_libraries(performance_test PRIVATE ${TIG_LIBRARY})
     add_test(NAME performance COMMAND performance_test)
@@ -441,6 +463,10 @@ if(ARCANUM_BUILD_TESTS)
     add_executable(benchmark_test tests/benchmark_test.c src/game/benchmark.c)
     target_include_directories(benchmark_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     add_test(NAME benchmark COMMAND benchmark_test)
+    add_executable(benchmark_data_test tests/benchmark_data_test.c src/game/benchmark_data.c)
+    target_include_directories(benchmark_data_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(benchmark_data_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME benchmark_data COMMAND benchmark_data_test)
     add_executable(benchmark_input_test tests/benchmark_input_test.c)
     target_include_directories(benchmark_input_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(benchmark_input_test PRIVATE ${TIG_LIBRARY})
@@ -459,13 +485,19 @@ if(ARCANUM_BUILD_TESTS)
     add_executable(video_upload_test tests/video_upload_test.c)
     target_link_libraries(video_upload_test PRIVATE ${TIG_LIBRARY})
     add_test(NAME video_upload COMMAND video_upload_test)
+    add_executable(scale_region_test tests/scale_region_test.c src/game/zoom_damage.c)
+    target_include_directories(scale_region_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(scale_region_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME scale_region COMMAND scale_region_test)
 
     add_executable(object_query_test tests/object_query_test.c tests/object_query_reference.c src/game/object_query.c)
+    target_compile_definitions(object_query_test PRIVATE TIG_DEBUG_MEMORY)
     target_include_directories(object_query_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(object_query_test PRIVATE ${TIG_LIBRARY})
     add_test(NAME object_query COMMAND object_query_test)
 
     add_executable(timeevent_pool_test tests/timeevent_pool_test.c src/game/timeevent_pool.c)
+    target_compile_definitions(timeevent_pool_test PRIVATE TIG_DEBUG_MEMORY)
     target_include_directories(timeevent_pool_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(timeevent_pool_test PRIVATE ${TIG_LIBRARY})
     add_test(NAME timeevent_pool COMMAND timeevent_pool_test)
@@ -482,6 +514,30 @@ if(ARCANUM_BUILD_TESTS)
         set(ARCANUM_TEST_FONT "" CACHE FILEPATH "TrueType font for headless rendering tests")
     endif()
     add_test(NAME community_features COMMAND community_features_test "${ARCANUM_TEST_FONT}" "${CMAKE_CURRENT_SOURCE_DIR}/art/interface" "${CMAKE_CURRENT_SOURCE_DIR}/resources/french/art/interface/NewTimes16Font.ART" "${CMAKE_CURRENT_SOURCE_DIR}/resources")
+    add_executable(benchmark_widget_test tests/benchmark_widget_test.c src/ui/benchmark_widget.c src/ui/search_bar.c)
+    target_include_directories(benchmark_widget_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(benchmark_widget_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME benchmark_widget COMMAND benchmark_widget_test "${ARCANUM_TEST_FONT}" "${CMAKE_CURRENT_SOURCE_DIR}/art/interface/OptionsMenuLeftBtn.art")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/benchmark-widget-runtime/art")
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/art/interface/OptionsMenuLeftBtn.art"
+        "${CMAKE_CURRENT_BINARY_DIR}/benchmark-widget-runtime/art/mouse.art" COPYONLY)
+    set_tests_properties(benchmark_widget PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/benchmark-widget-runtime")
+    add_executable(item_compare_test tests/item_compare_test.c src/ui/item_compare.c)
+    target_include_directories(item_compare_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(item_compare_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME item_compare COMMAND item_compare_test "${ARCANUM_TEST_FONT}")
+    add_executable(item_compare_reference_test tests/item_compare_reference_test.c src/ui/item_compare_reference.c)
+    target_include_directories(item_compare_reference_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(item_compare_reference_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME item_compare_reference COMMAND item_compare_reference_test)
+    add_executable(art_decode_test tests/art_decode_test.c)
+    target_link_libraries(art_decode_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME art_decode COMMAND art_decode_test
+        "${CMAKE_CURRENT_SOURCE_DIR}/art/interface/OptionsMenuLeftBtn.art"
+        "${CMAKE_CURRENT_SOURCE_DIR}/art/interface/PageTurn_U.ART"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/french/art/interface/NewTimes16Font.ART")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/art-decode-runtime")
+    set_tests_properties(art_decode PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/art-decode-runtime")
     set_tests_properties(community_features PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test-runtime")
 endif()
 

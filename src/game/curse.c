@@ -165,7 +165,7 @@ void curse_add(int64_t obj, int curse)
     // Append curse ID and current time to the curse field arrays.
     cnt = obj_arrayfield_length_get(obj, OBJ_F_PC_CURSE_IDX);
     obj_arrayfield_uint32_set(obj, OBJ_F_PC_CURSE_IDX, cnt, curse);
-    obj_arrayfield_int64_set(obj, OBJ_F_PC_CURSE_TS_IDX, cnt, sub_45A7C0().value);
+    obj_arrayfield_int64_set(obj, OBJ_F_PC_CURSE_TS_IDX, cnt, game_time_get().value);
 
     // Apply the associated effect.
     effect_add(obj, curse_get_effect(curse), EFFECT_CAUSE_CURSE);
@@ -177,7 +177,7 @@ void curse_add(int64_t obj, int curse)
         // Add UI message.
         ui_message.type = UI_MSG_TYPE_CURSE;
         ui_message.str = mes_file_entry.str;
-        ui_message.field_8 = curse;
+        ui_message.primary_value = curse;
         ui_display_msg(&ui_message);
 
         // Highlight logbook button.

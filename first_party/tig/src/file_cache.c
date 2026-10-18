@@ -32,9 +32,9 @@
 static void tig_file_cache_entry_remove(TigFileCache* cache, TigFileCacheItem* entry);
 static bool tig_file_cache_read_contents_into(const char* path, void** data, int* size);
 static bool tig_file_cache_prepare_item(TigFileCache* cache, TigFileCacheItem* item, const char* path);
-static TigFileCacheItem* sub_538D80(TigFileCache* cache);
-static TigFileCacheItem* sub_538D90(TigFileCache* cache);
-static TigFileCacheItem* sub_538E00(TigFileCache* cache);
+static TigFileCacheItem* tig_file_cache_slot_acquire(TigFileCache* cache);
+static TigFileCacheItem* tig_file_cache_slot_acquire_random(TigFileCache* cache);
+static TigFileCacheItem* tig_file_cache_slot_acquire_linear(TigFileCache* cache);
 static void tig_file_cache_shrink(TigFileCache* cache, int size);
 static TigFileCacheEntry* tig_file_cache_acquire_internal(TigFileCache* cache, TigFileCacheItem* item);
 static void tig_file_cache_release_internal(TigFileCache* cache, TigFileCacheItem* entry);
@@ -183,7 +183,7 @@ TigFileCacheEntry* tig_file_cache_acquire(TigFileCache* cache, const char* path)
     }
 
     if (new_item == NULL) {
-        new_item = sub_538D80(cache);
+        new_item = tig_file_cache_slot_acquire(cache);
         if (new_item == NULL) {
             return &null_entry;
         }
@@ -206,13 +206,13 @@ TigFileCacheEntry* tig_file_cache_acquire(TigFileCache* cache, const char* path)
 }
 
 // 0x538D80
-TigFileCacheItem* sub_538D80(TigFileCache* cache)
+TigFileCacheItem* tig_file_cache_slot_acquire(TigFileCache* cache)
 {
-    return sub_538D90(cache);
+    return tig_file_cache_slot_acquire_random(cache);
 }
 
 // 0x538D90
-TigFileCacheItem* sub_538D90(TigFileCache* cache)
+TigFileCacheItem* tig_file_cache_slot_acquire_random(TigFileCache* cache)
 {
     int attempt;
     int index;
@@ -231,11 +231,11 @@ TigFileCacheItem* sub_538D90(TigFileCache* cache)
         }
     }
 
-    return sub_538E00(cache);
+    return tig_file_cache_slot_acquire_linear(cache);
 }
 
 // 0x538E00
-TigFileCacheItem* sub_538E00(TigFileCache* cache)
+TigFileCacheItem* tig_file_cache_slot_acquire_linear(TigFileCache* cache)
 {
     int index;
     TigFileCacheItem* entry;
@@ -266,7 +266,7 @@ void tig_file_cache_shrink(TigFileCache* cache, int size)
         tig_file_cache_removed_bytes = 0;
 
         for (attempt = 0; attempt < 4 * cache->capacity; attempt++) {
-            sub_538D90(cache);
+            tig_file_cache_slot_acquire_random(cache);
             if (tig_file_cache_removed_bytes >= size) {
                 break;
             }

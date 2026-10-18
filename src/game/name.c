@@ -8,13 +8,13 @@
 static void name_missing_art_init(void);
 static bool name_missing_art_load(void);
 static bool name_missing_art_save(void);
-static int sub_41D390(void);
+static int name_critter_art_file_count(void);
 static void fix_missing_art(int num, int cnt, unsigned int* missing, int* anim_ptr, int* weapon_ptr);
-static tig_art_id_t sub_41DFC0(int type, int* extra);
-static tig_art_id_t sub_41E200(tig_art_id_t art_id);
-static int sub_41E960(int a1);
-static bool sub_41F190(TigMessage* msg);
-static void sub_41F240(void);
+static tig_art_id_t name_first_art_id_get(int type, int* extra);
+static tig_art_id_t name_next_art_id_get(tig_art_id_t art_id);
+static int name_previous_art_id_stub(int a1);
+static bool name_art_picker_message_filter(TigMessage* msg);
+static void name_art_picker_draw(void);
 
 // 0x5A1064
 static const char* off_5A1064 = "art";
@@ -373,7 +373,7 @@ bool name_init(GameInitInfo* init_info)
 
     name_initialized = true;
 
-    sub_4EBC40();
+    a_name_tile_variant_counts_init();
     name_missing_art_init();
 
     return true;
@@ -522,7 +522,7 @@ bool name_missing_art_load(void)
         return false;
     }
 
-    expected_cnt = sub_41D390();
+    expected_cnt = name_critter_art_file_count();
 
     if (tig_file_fread(&actual_cnt, sizeof(actual_cnt), 1, stream) != 1) {
         tig_file_fclose(stream);
@@ -560,7 +560,7 @@ bool name_missing_art_save(void)
     int cnt;
     TigFile* stream;
 
-    cnt = sub_41D390();
+    cnt = name_critter_art_file_count();
     tig_file_mkdir(off_5A1064);
 
     stream = tig_file_fopen(off_5A1068, "wb");
@@ -594,7 +594,7 @@ bool name_missing_art_save(void)
 }
 
 // 0x41D390
-int sub_41D390(void)
+int name_critter_art_file_count(void)
 {
     int cnt = 0;
     TigFileList dir_list;
@@ -730,9 +730,9 @@ tig_art_id_t name_normalize_aid(tig_art_id_t aid)
         break;
     case TIG_ART_TYPE_LIGHT:
         aid = tig_art_id_frame_set(aid, 0);
-        if (sub_504790(aid)) {
-            int v1 = sub_504700(aid);
-            aid = sub_504730(aid, v1 - v1 % 8);
+        if (tig_art_light_id_has_extended_rotation(aid)) {
+            int v1 = tig_art_light_id_rotation_get(aid);
+            aid = tig_art_light_id_rotation_set(aid, v1 - v1 % 8);
         } else {
             aid = tig_art_id_rotation_set(aid, 0);
         }
@@ -1071,7 +1071,7 @@ int name_resolve_path(tig_art_id_t aid, char* path, size_t maxlen)
 }
 
 // 0x41DFC0
-tig_art_id_t sub_41DFC0(int type, int* extra)
+tig_art_id_t name_first_art_id_get(int type, int* extra)
 {
     tig_art_id_t aid = TIG_ART_ID_INVALID;
 
@@ -1162,8 +1162,8 @@ tig_art_id_t sub_41DFC0(int type, int* extra)
     }
 
     if (aid != TIG_ART_ID_INVALID) {
-        if (tig_art_exists(aid) != TIG_OK || sub_502E00(aid) != TIG_OK) {
-            aid = sub_41E200(aid);
+        if (tig_art_exists(aid) != TIG_OK || tig_art_palette_check(aid) != TIG_OK) {
+            aid = name_next_art_id_get(aid);
         }
     }
 
@@ -1171,7 +1171,7 @@ tig_art_id_t sub_41DFC0(int type, int* extra)
 }
 
 // 0x41E200
-tig_art_id_t sub_41E200(tig_art_id_t art_id)
+tig_art_id_t name_next_art_id_get(tig_art_id_t art_id)
 {
     if (art_id == TIG_ART_ID_INVALID) {
         return TIG_ART_ID_INVALID;
@@ -1436,7 +1436,7 @@ tig_art_id_t sub_41E200(tig_art_id_t art_id)
         }
 
         if (tig_art_exists(art_id) == TIG_OK
-            && sub_502E00(art_id) == TIG_OK) {
+            && tig_art_palette_check(art_id) == TIG_OK) {
             return art_id;
         }
 
@@ -1447,13 +1447,13 @@ tig_art_id_t sub_41E200(tig_art_id_t art_id)
 }
 
 // 0x41E960
-int sub_41E960(int a1)
+int name_previous_art_id_stub(int a1)
 {
     // TODO: Incomplete.
 }
 
 // 0x41F090
-bool sub_41F090(int a1, int* a2, int* a3)
+bool name_art_picker_open(int a1, int* a2, int* a3)
 {
     TigWindowData window_data;
 
@@ -1466,14 +1466,14 @@ bool sub_41F090(int a1, int* a2, int* a3)
     window_data.rect.width = 100;
     window_data.rect.height = 100;
     window_data.flags = TIG_WINDOW_ALWAYS_ON_TOP | TIG_WINDOW_MODAL | TIG_WINDOW_MESSAGE_FILTER;
-    window_data.message_filter = sub_41F190;
+    window_data.message_filter = name_art_picker_message_filter;
     window_data.background_color = tig_color_make(30, 30, 30);
 
     if (tig_window_create(&window_data, &dword_739E48) != TIG_OK) {
         return false;
     }
 
-    sub_41F240();
+    name_art_picker_draw();
 
     dword_739E4C = 0;
     while (dword_739E4C == 0) {
@@ -1493,7 +1493,7 @@ bool sub_41F090(int a1, int* a2, int* a3)
 }
 
 // 0x41F190
-bool sub_41F190(TigMessage* msg)
+bool name_art_picker_message_filter(TigMessage* msg)
 {
     int v1;
 
@@ -1502,20 +1502,20 @@ bool sub_41F190(TigMessage* msg)
         switch (msg->data.keyboard.key) {
         case SDLK_A:
             if (dword_739E54 != -1) {
-                dword_739E54 = sub_41E960(dword_739E54);
-                sub_41F240();
+                dword_739E54 = name_previous_art_id_stub(dword_739E54);
+                name_art_picker_draw();
             }
             break;
         case SDLK_Z:
             if (dword_739E54 == -1) {
-                dword_739E54 = sub_41DFC0(dword_739E58, dword_739E50);
-                sub_41F240();
+                dword_739E54 = name_first_art_id_get(dword_739E58, dword_739E50);
+                name_art_picker_draw();
             } else {
-                v1 = sub_41E200(dword_739E54);
+                v1 = name_next_art_id_get(dword_739E54);
                 if (v1 != -1) {
                     dword_739E54 = v1;
                 }
-                sub_41F240();
+                name_art_picker_draw();
             }
             break;
         case SDLK_ESCAPE:
@@ -1531,7 +1531,7 @@ bool sub_41F190(TigMessage* msg)
 }
 
 // 0x41F240
-void sub_41F240(void)
+void name_art_picker_draw(void)
 {
     TigRect dst_rect;
     TigRect src_rect;

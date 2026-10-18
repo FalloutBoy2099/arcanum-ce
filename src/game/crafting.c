@@ -50,7 +50,7 @@ static int crafting_items(int64_t crafter, CraftingItem* items, int capacity)
             int64_t prototype = obj_field_handle_get(obj, OBJ_F_PROTOTYPE_HANDLE);
             if (prototype == OBJ_HANDLE_NULL || obj_field_int32_get(obj, OBJ_F_DESCRIPTION) != obj_field_int32_get(prototype, OBJ_F_DESCRIPTION)) continue;
             int field;
-            sub_462410(obj, &field);
+            item_stack_counter_field(obj, &field);
             int units = field != -1 ? obj_field_int32_get(obj, field) : 1;
             if (units > 0) items[count++] = (CraftingItem){ obj, owners[owner], prototype, units };
         }
@@ -63,7 +63,7 @@ static CraftingAlternatives crafting_resolve(const int alternatives[3])
 {
     CraftingAlternatives resolved = { 0 };
     for (int i = 0; i < 3; i++) {
-        if (alternatives[i] > 0) resolved.prototypes[i] = sub_4685A0(alternatives[i]);
+        if (alternatives[i] > 0) resolved.prototypes[i] = proto_handle_get(alternatives[i]);
     }
     return resolved;
 }
@@ -181,7 +181,7 @@ void crafting_preview(int64_t crafter, const SchematicInfo* schematic, CraftingP
     preview->pair_available = crafting_pair_from_items(items, count, resolved, pair);
     int alternative = preview->pair_available
         ? (pair[0].alternative != 0 ? pair[0].alternative : pair[1].alternative) : 0;
-    int64_t product = sub_4685A0(schematic->prod[alternative]);
+    int64_t product = proto_handle_get(schematic->prod[alternative]);
     if (product != OBJ_HANDLE_NULL && schematic->qty >= 1 && schematic->qty <= 100) {
         int type = obj_field_int32_get(product, OBJ_F_TYPE);
         int units = type == OBJ_TYPE_AMMO ? obj_field_int32_get(product, OBJ_F_AMMO_QUANTITY)
@@ -198,13 +198,13 @@ bool crafting_process(int64_t crafter, const SchematicInfo* schematic)
     CraftingIngredient ingredients[2];
     if (schematic->qty < 1 || schematic->qty > 100 || !crafting_find_pair(crafter, schematic, ingredients)) return false;
     for (int i = 0; i < 2; i++) {
-        int64_t prototype = sub_4685A0(i == 0 ? schematic->item1[ingredients[0].alternative] : schematic->item2[ingredients[1].alternative]);
+        int64_t prototype = proto_handle_get(i == 0 ? schematic->item1[ingredients[0].alternative] : schematic->item2[ingredients[1].alternative]);
         int tech = obj_field_int32_get(prototype, OBJ_F_ITEM_DISCIPLINE);
         int required = -obj_field_int32_get(prototype, OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY);
         if (tech_degree_level_get(crafter, tech) < required) return false;
     }
     int alternative = ingredients[0].alternative != 0 ? ingredients[0].alternative : ingredients[1].alternative;
-    int64_t prototype = sub_4685A0(schematic->prod[alternative]);
+    int64_t prototype = proto_handle_get(schematic->prod[alternative]);
     if (prototype == OBJ_HANDLE_NULL) return false;
     int64_t products[100];
     int64_t loc = obj_field_int64_get(crafter, OBJ_F_LOCATION);

@@ -19,6 +19,8 @@ static int failures;
 static unsigned char grid[64][64];
 static unsigned int random_state = 12345;
 static int actor_type = OBJ_TYPE_PC;
+static struct { int type; int flags; bool dead; } destination_objects[3];
+static int destination_count;
 static const int dx[8] = { -1, -1, -1, 0, 1, 1, 1, 0 };
 static const int dy[8] = { -1, 0, 1, 1, 1, 0, -1, -1 };
 int reference_astar(PathCreateInfo* path);
@@ -26,15 +28,27 @@ int path_test_astar(PathCreateInfo* path);
 
 static unsigned int next_random(void) { random_state = random_state * 1664525U + 1013904223U; return random_state; }
 static int cell(int64_t loc) { return grid[(int)LOCATION_GET_X(loc)][(int)LOCATION_GET_Y(loc)]; }
-int obj_field_int32_get(int64_t obj, int field) { (void)obj; return field == OBJ_F_TYPE ? actor_type : 0; }
-bool critter_is_dead(int64_t obj) { (void)obj; return false; }
+int obj_field_int32_get(int64_t obj, int field)
+{
+    if (obj >= 100 && obj < 103) return field == OBJ_F_TYPE ? destination_objects[obj - 100].type : destination_objects[obj - 100].flags;
+    return field == OBJ_F_TYPE ? actor_type : 0;
+}
+bool critter_is_dead(int64_t obj) { return obj >= 100 && obj < 103 && destination_objects[obj - 100].dead; }
+int64_t object_find_first_at_location(int64_t loc, unsigned int flags, ObjectQueryPredicate predicate, void* context)
+{
+    (void)loc;
+    for (int i = 0; i < destination_count; i++) {
+        if ((flags & (1U << destination_objects[i].type)) != 0 && (predicate == NULL || predicate(100 + i, context))) return 100 + i;
+    }
+    return OBJ_HANDLE_NULL;
+}
 void object_list_location(int64_t loc, unsigned int flags, ObjectList* list) { (void)loc; (void)flags; memset(list, 0, sizeof(*list)); }
 void object_list_destroy(ObjectList* list) { (void)list; }
 bool tile_is_blocking(int64_t loc, bool ignored) { (void)ignored; return cell(loc) == 1; }
 int64_t get_trap_at_location(int64_t loc) { return cell(loc) == 2 ? 2 : 0; }
 int64_t get_fire_at_location(int64_t loc) { return cell(loc) == 3 ? 3 : 0; }
 bool trap_is_spotted(int64_t actor, int64_t trap) { (void)actor; (void)trap; return true; }
-tig_color_t sub_4D9240(int64_t loc, int x, int y) { (void)x; (void)y; return (tig_color_t)((LOCATION_GET_X(loc) % 4) * 50); }
+tig_color_t light_luminance_at_location(int64_t loc, int x, int y) { (void)x; (void)y; return (tig_color_t)((LOCATION_GET_X(loc) % 4) * 50); }
 int64_t location_dist(int64_t a, int64_t b) { return SDL_max(llabs((int64_t)LOCATION_GET_X(a) - LOCATION_GET_X(b)), llabs((int64_t)LOCATION_GET_Y(a) - LOCATION_GET_Y(b))); }
 bool location_in_dir(int64_t loc, int direction, int64_t* next)
 {
@@ -129,9 +143,9 @@ static void test_paths(void)
         PathCreateInfo path = { 0 };
         path.obj = 1; path.from = from; path.to = to;
         path.max_rotations = trial % 5 == 0 ? 8 : 100;
-        path.flags = (trial % 2 ? PATH_FLAG_0x0400 : 0) | (trial % 3 ? PATH_FLAG_0x0002 : 0)
-            | (trial % 4 ? PATH_FLAG_0x0004 : 0) | (trial % 7 == 0 ? PATH_FLAG_0x0200 : 0)
-            | (trial % 11 == 0 ? PATH_FLAG_0x0001 : 0);
+        path.flags = (trial % 2 ? PATH_FLAG_AVOID_FIRE : 0) | (trial % 3 ? PATH_FLAG_PORTALS_BLOCK : 0)
+            | (trial % 4 ? PATH_FLAG_WINDOWS_BLOCK : 0) | (trial % 7 == 0 ? PATH_FLAG_AVOID_SPOTTED_TRAPS : 0)
+            | (trial % 11 == 0 ? PATH_FLAG_STOP_BEFORE_DESTINATION : 0);
         path.rotations = old_path;
         Uint64 count = tig_performance_counter(TIG_PERF_PATH_SCANNED_CELLS);
         Uint64 start = SDL_GetPerformanceCounter();
@@ -177,6 +191,42 @@ static void test_turns(void)
     }
 }
 
+static void test_destination_blockers(void)
+{
+    memset(grid, 0, sizeof(grid));
+    int8_t rotations[100];
+    PathCreateInfo path = { 0 };
+    path.obj = 1; path.from = location_make(20, 20); path.to = location_make(21, 21);
+    path.rotations = rotations; path.max_rotations = 100;
+    destination_count = 1;
+    destination_objects[0].type = OBJ_TYPE_NPC;
+    CHECK(path_make(&path) == 0);
+    destination_objects[0].dead = true;
+    CHECK(path_make(&path) == 1);
+    destination_objects[0].dead = false;
+    destination_objects[0].flags = OF_NO_BLOCK;
+    CHECK(path_make(&path) == 1);
+    destination_objects[0].flags = 0;
+    destination_objects[0].type = OBJ_TYPE_SCENERY;
+    CHECK(path_make(&path) == 0);
+    destination_objects[0].type = OBJ_TYPE_CONTAINER;
+    CHECK(path_make(&path) == 0);
+    destination_objects[0].flags = OF_NO_BLOCK;
+    destination_count = 2;
+    destination_objects[1].type = OBJ_TYPE_PC;
+    CHECK(path_make(&path) == 0); // Continue past a nonblocking first object.
+    destination_objects[1].dead = true;
+    CHECK(path_make(&path) == 1);
+    destination_objects[1].dead = false;
+    path.flags = PATH_FLAG_STOP_BEFORE_DESTINATION;
+    CHECK(path_make(&path) == 0); // Stop adjacent to the occupied destination.
+    path.flags = PATH_FLAG_IGNORE_BLOCKERS;
+    CHECK(path_make(&path) == 1); // Explicitly unchecked paths preserve their flags.
+    path.flags = 0;
+    destination_count = 0;
+    CHECK(path_make(&path) == 1); // State changes are seen on the next request.
+}
+
 static void test_limits_and_public_paths(void)
 {
     memset(grid, 0, sizeof(grid));
@@ -187,9 +237,9 @@ static void test_limits_and_public_paths(void)
     CHECK(path_make(&path) == 8); // Existing segment-length contract.
     grid[21][21] = 1;
     CHECK(path_make(&path) == 8); // Detour through the actual heap-backed solver.
-    path.flags = PATH_FLAG_0x0020;
+    path.flags = PATH_FLAG_DIRECT_ONLY;
     CHECK(path_make(&path) == 0); // Formation probing cannot start an expensive detour.
-    path.flags = PATH_FLAG_0x1000;
+    path.flags = PATH_FLAG_LONG_RANGE_FALLBACK;
     CHECK(path_make(&path) == 8); // Previously unfinished branch now returns a valid length.
     memset(grid, 0, sizeof(grid));
     path.flags = 0; path.to = location_make(21, 21);
@@ -250,12 +300,69 @@ static void test_replaced_follow_goal_and_pivot_scheduler(void)
     CHECK((run.flags & 0x10) != 0);
     follower_navigation_turn_flags(&run, false); // Normal tile completion resumes.
     CHECK(run.flags == 0x20);
+    run.path.curr = 3; run.path.max = 7; run.path.flags = 0x0A;
+    run.flags = 0x430; run.extra_target_tile = 123;
+    follower_navigation_blocked_step(&run);
+    CHECK(run.path.curr == 3 && run.path.max == 7);
+    CHECK((run.path.flags & 0x07) == 0x05 && (run.path.flags & 0x08) != 0);
+    CHECK(run.flags == 0x400 && run.extra_target_tile == 0);
+}
+
+static void test_transient_occupancy_wait(void)
+{
+    AnimRunInfo run = { 0 };
+    FollowerNavigationWait wait = { 0 };
+    run.id.unique_id = 17;
+    run.current_goal = 1;
+    run.goals[0].type = AG_RUN_TO_TILE;
+    run.goals[0].params[AGDATA_TARGET_TILE].loc = 999;
+    run.path.curr = 3; run.path.max = 7; run.path.flags = 0x02;
+    run.flags = 0x421;
+    run.pause_time.milliseconds = 65;
+    run.extra_target_tile = 456;
+
+    CHECK(follower_navigation_wait_for_tile(&wait, &run, 123, 456, 1000));
+    CHECK(follower_navigation_wait_for_tile(&wait, &run, 123, 456, 2199));
+    CHECK(wait.started == 1000 && wait.active);
+    CHECK((run.flags & 0x10) != 0 && run.pause_time.milliseconds == 100);
+    CHECK(run.path.curr == 3 && run.path.max == 7 && run.path.flags == 0x02);
+    CHECK(run.goals[0].params[AGDATA_TARGET_TILE].loc == 999);
+    // Occupant leaves: recover the original animation cadence and path.
+    follower_navigation_clear_wait(&wait, &run);
+    CHECK(!wait.active && run.pause_time.milliseconds == 65);
+    CHECK(run.path.curr == 3 && run.path.flags == 0x02);
+
+    CHECK(follower_navigation_wait_for_tile(&wait, &run, 123, 456, 3000));
+    CHECK(!follower_navigation_wait_for_tile(&wait, &run, 123, 456, 4200));
+    CHECK(!wait.active && run.pause_time.milliseconds == 65);
+    CHECK((run.path.flags & 0x07) == 0x05 && (run.flags & 0x430) == 0);
+    CHECK(run.extra_target_tile == 0 && run.path.curr == 3 && run.path.max == 7);
+    CHECK(run.current_goal == 1 && run.goals[0].params[AGDATA_TARGET_TILE].loc == 999);
+
+    // A recycled slot/new goal/new tile must not inherit the old deadline.
+    CHECK(follower_navigation_wait_for_tile(&wait, &run, 123, 456, 5000));
+    run.id.unique_id++;
+    run.pause_time.milliseconds = 70;
+    CHECK(follower_navigation_wait_for_tile(&wait, &run, 123, 456, 7000));
+    CHECK(wait.started == 7000 && wait.pause_ms == 70);
+    run.current_goal++;
+    CHECK(follower_navigation_wait_for_tile(&wait, &run, 123, 456, 9000));
+    CHECK(wait.started == 9000);
+    CHECK(follower_navigation_wait_for_tile(&wait, &run, 456, 789, 11000));
+    CHECK(wait.started == 11000);
+    follower_navigation_clear_wait(&wait, &run);
+
+    // The millisecond timer wraps; neither immediate expiry nor infinite wait.
+    CHECK(follower_navigation_wait_for_tile(&wait, &run, 123, 456, 0xFFFFFF00U));
+    CHECK(follower_navigation_wait_for_tile(&wait, &run, 123, 456, 0x00000050U));
+    CHECK(!follower_navigation_wait_for_tile(&wait, &run, 123, 456, 0x00000400U));
 }
 
 int main(void)
 {
     CHECK(SDL_Init(0));
-    test_heap(); test_paths(); test_turns(); test_limits_and_public_paths(); test_replaced_follow_goal_and_pivot_scheduler();
+    test_heap(); test_paths(); test_turns(); test_destination_blockers(); test_limits_and_public_paths(); test_replaced_follow_goal_and_pivot_scheduler();
+    test_transient_occupancy_wait();
     SDL_Quit();
     printf("Pathfinding and pivots: %s\n", failures == 0 ? "PASS" : "FAIL");
     return failures != 0;

@@ -27,6 +27,14 @@ typedef enum TigPerformanceMetric {
     TIG_PERF_OBJECTS,
     TIG_PERF_COLLISION,
     TIG_PERF_EVENTS,
+    TIG_PERF_OBJECT_SORT,
+    TIG_PERF_ART_EVICTION,
+    TIG_PERF_ART_LOAD,
+    TIG_PERF_ART_PREPARE,
+    TIG_PERF_ART_BLIT,
+    TIG_PERF_ART_FILE_OPEN,
+    TIG_PERF_ART_METADATA,
+    TIG_PERF_ART_PIXELS,
     TIG_PERF_METRIC_COUNT,
 } TigPerformanceMetric;
 
@@ -46,6 +54,11 @@ typedef enum TigPerformanceCounter {
     TIG_PERF_EVENT_NODES_NEW,
     TIG_PERF_EVENT_NODES_REUSED,
     TIG_PERF_EVENT_INSERT_STEPS,
+    TIG_PERF_OBJECT_SECTOR_LOADS,
+    TIG_PERF_OBJECT_BLITS,
+    TIG_PERF_ART_EVICTIONS,
+    TIG_PERF_ZOOM_SCALED_PIXELS,
+    TIG_PERF_ZOOM_FULL_COPIES,
     TIG_PERF_COUNTER_COUNT,
 } TigPerformanceCounter;
 
@@ -68,6 +81,10 @@ Uint64 tig_performance_session(void);
 unsigned int tig_performance_interval(void);
 Uint64 tig_performance_begin(void);
 void tig_performance_end(TigPerformanceMetric metric, Uint64 start);
+// Also identifies operations >= 5 ms in <capture>.details.csv. Detail logging
+// is best-effort and includes only resource paths, never game text.
+void tig_performance_end_detail(TigPerformanceMetric metric, Uint64 start, const char* detail);
+void tig_performance_record_detail(TigPerformanceMetric metric, double milliseconds, const char* detail);
 void tig_performance_record(TigPerformanceMetric metric, double milliseconds);
 void tig_performance_count(TigPerformanceCounter counter, Uint64 value);
 bool tig_performance_summary(TigPerformanceMetric metric, TigPerformanceSummary* summary);

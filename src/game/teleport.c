@@ -36,10 +36,10 @@ typedef struct TeleportObjectNode {
 
 static bool teleport_process(TeleportData* teleport_data);
 static bool schedule_teleport_obj_recursively(int64_t obj, int64_t loc);
-static bool sub_4D39A0(TeleportData* teleport_data);
-static void sub_4D3D60(int64_t obj);
-static void sub_4D3E20(int64_t obj);
-static void sub_4D3E80(void);
+static bool teleport_pending_objects_transfer(TeleportData* teleport_data);
+static void teleport_object_state_prepare(int64_t obj);
+static void teleport_object_detach_from_map(int64_t obj);
+static void teleport_pending_object_nodes_free(void);
 static TeleportObjectNode* teleport_obj_node_create(void);
 static void teleport_obj_node_destroy(TeleportObjectNode* node);
 static void teleport_obj_node_reserve(void);
@@ -192,7 +192,7 @@ bool teleport_process(TeleportData* teleport_data)
     if ((teleport_data->flags & TELEPORT_TIME) != 0) {
         DateTime datetime;
 
-        sub_45A950(&datetime, 1000 * teleport_data->time);
+        datetime_init(&datetime, 1000 * teleport_data->time);
         timeevent_inc_datetime(&datetime);
     }
 
@@ -224,12 +224,12 @@ bool teleport_process(TeleportData* teleport_data)
     }
 
     if (teleport_data->map != map && player_is_pc_obj(teleport_data->obj)) {
-        sub_459F50();
-        sub_437980();
+        magictech_ai_reset();
+        anim_map_change_hook_stub();
         timeevent_notify_pc_teleported(teleport_data->map);
     }
 
-    if (!sub_4D39A0(teleport_data)) {
+    if (!teleport_pending_objects_transfer(teleport_data)) {
         return false;
     }
 
@@ -252,7 +252,7 @@ bool teleport_process(TeleportData* teleport_data)
             }
 
             location_origin_set(teleport_data->loc);
-            sub_40D860();
+            player_local_pc_handle_refresh();
         }
 
         if (oid.type != OID_TYPE_NULL) {
@@ -374,7 +374,7 @@ bool schedule_teleport_obj_recursively(int64_t obj, int64_t loc)
 }
 
 // 0x4D39A0
-bool sub_4D39A0(TeleportData* teleport_data)
+bool teleport_pending_objects_transfer(TeleportData* teleport_data)
 {
     int curr_map;
     char* curr_map_name;
@@ -407,7 +407,7 @@ bool sub_4D39A0(TeleportData* teleport_data)
 
         node = teleport_obj_node_head;
         while (node != NULL) {
-            sub_4D3E20(node->obj);
+            teleport_object_detach_from_map(node->obj);
             node = node->next;
         }
 
@@ -454,14 +454,14 @@ bool sub_4D39A0(TeleportData* teleport_data)
             node = node->next;
         }
 
-        sub_4D3E80();
+        teleport_pending_object_nodes_free();
         return true;
     }
 
     node = teleport_obj_node_head;
     while (node != NULL) {
         if ((obj_field_int32_get(node->obj, OBJ_F_FLAGS) & OF_INVENTORY) == 0) {
-            sub_4D3D60(node->obj);
+            teleport_object_state_prepare(node->obj);
 
             if (player_is_local_pc_obj(node->obj)) {
                 wallcheck_flush();
@@ -472,28 +472,28 @@ bool sub_4D39A0(TeleportData* teleport_data)
                 location_origin_set(node->loc);
             }
 
-            sub_43E770(node->obj, node->loc, 0, 0);
+            object_move_to_location(node->obj, node->loc, 0, 0);
         }
         node = node->next;
     }
 
-    sub_4D3E80();
+    teleport_pending_object_nodes_free();
 
     return true;
 }
 
 // 0x4D3D60
-void sub_4D3D60(int64_t obj)
+void teleport_object_state_prepare(int64_t obj)
 {
     int type;
 
     type = obj_field_int32_get(obj, OBJ_F_TYPE);
-    sub_424070(obj, 5, 0, 1);
+    anim_object_interrupt_by_priority(obj, 5, 0, 1);
 
     // NOTE: Conditions looks odd, check (note fallthrough from npc block).
     switch (type) {
     case OBJ_TYPE_NPC:
-        sub_45F710(obj);
+        critter_teleport_map_refresh(obj);
         obj_field_handle_set(obj, OBJ_F_NPC_COMBAT_FOCUS, OBJ_HANDLE_NULL);
         obj_field_handle_set(obj, OBJ_F_NPC_WHO_HIT_ME_LAST, OBJ_HANDLE_NULL);
         obj_field_reset(obj, OBJ_F_NPC_SHIT_LIST_IDX);
@@ -501,29 +501,29 @@ void sub_4D3D60(int64_t obj)
     case OBJ_TYPE_PC:
         obj_field_handle_set(obj, OBJ_F_CRITTER_FLEEING_FROM, OBJ_HANDLE_NULL);
         if (player_is_local_pc_obj(obj)) {
-            sub_460B20();
+            ui_inventory_drag_cancel();
         }
     }
 
-    sub_4D9990(obj);
-    sub_4D9A90(obj);
+    light_object_fields_sync_from_handles(obj);
+    light_object_render_lights_clear(obj);
 }
 
 // 0x4D3E20
-void sub_4D3E20(int64_t obj)
+void teleport_object_detach_from_map(int64_t obj)
 {
-    sub_4D3D60(obj);
+    teleport_object_state_prepare(obj);
     combat_critter_deactivate_combat_mode(obj);
     if (obj_field_int32_get(obj, OBJ_F_TYPE) == OBJ_TYPE_NPC) {
-        sub_45F710(obj);
+        critter_teleport_map_refresh(obj);
     }
     ai_timeevent_clear(obj);
-    sub_4601D0(obj);
-    sub_43CF70(obj);
+    ui_object_destroyed_notify(obj);
+    object_sector_remove(obj);
 }
 
 // 0x4D3E80
-void sub_4D3E80(void)
+void teleport_pending_object_nodes_free(void)
 {
     TeleportObjectNode* next;
 

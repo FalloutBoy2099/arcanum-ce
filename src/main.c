@@ -151,7 +151,7 @@ int main(int argc, char** argv)
         wmap_rnd_disable();
     }
 
-    sub_549A70();
+    mainmenu_ui_pregen_probe_reset();
 
     // NOTE: These were original switches to set cheat level. They were removed
     // from Arcanum release version.
@@ -380,7 +380,7 @@ void main_loop(void)
 
     pc_obj = player_get_local_pc_obj();
     location = obj_field_int64_get(pc_obj, OBJ_F_LOCATION);
-    sub_43E770(pc_obj, location, 0, 0);
+    object_move_to_location(pc_obj, location, 0, 0);
     location_origin_set(location);
 
     art_id = obj_field_int32_get(pc_obj, OBJ_F_CURRENT_AID);
@@ -389,7 +389,7 @@ void main_loop(void)
     object_set_current_aid(pc_obj, art_id);
 
     object_flags_unset(pc_obj, OF_OFF);
-    sub_430460();
+    anim_fidget_event_schedule();
     iso_interface_refresh();
     intgame_draw_bar(INTGAME_BAR_HEALTH);
     intgame_draw_bar(INTGAME_BAR_FATIGUE);
@@ -561,7 +561,7 @@ void main_loop(void)
                             break;
                         }
                         mainmenu_ui_feedback_loading();
-                        sub_543220();
+                        mainmenu_ui_last_save_load();
                         mainmenu_ui_feedback_loading_completed();
                         break;
                     case SDL_SCANCODE_S:
@@ -604,7 +604,7 @@ void main_loop(void)
                             && tig_kb_get_modifier(SDL_KMOD_CTRL | SDL_KMOD_GUI)
                             && !tig_kb_get_modifier(SDL_KMOD_SHIFT)) {
                             mainmenu_ui_feedback_loading();
-                            sub_543220();
+                            mainmenu_ui_last_save_load();
                             mainmenu_ui_feedback_loading_completed();
                         }
                         break;
@@ -682,12 +682,12 @@ void main_loop(void)
                                     ui_display_msg(&ui_message);
 
                                     int64_t gold_obj;
-                                    object_create(sub_4685A0(BP_GOLD),
+                                    object_create(proto_handle_get(BP_GOLD),
                                         obj_field_int64_get(pc_obj, OBJ_F_LOCATION),
                                         &gold_obj);
                                     obj_field_int32_set(gold_obj, OBJ_F_GOLD_QUANTITY, 1000);
                                     item_transfer(gold_obj, pc_obj);
-                                    sub_4605D0();
+                                    ui_counters_refresh();
                                 }
                                 break;
                             default:

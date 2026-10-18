@@ -49,6 +49,6 @@ void broadcast_msg_client(int64_t pc_obj, Broadcast* bcast);
 // Portrait-menu orders use typed commands, independent of translated labels.
 bool broadcast_order_follower(int64_t pc_obj, int64_t follower_obj,
     BroadcastCommandType command, int64_t loc, int64_t target_obj, const char* label);
-void sub_4C3BE0(unsigned int a1, int64_t loc);
+void broadcast_follower_shortcut_execute(unsigned int a1, int64_t loc);
 
 #endif /* ARCANUM_GAME_BROADCAST_H_ */

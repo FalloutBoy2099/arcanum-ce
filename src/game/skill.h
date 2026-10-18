@@ -120,10 +120,10 @@ typedef struct SkillCallbacks {
     | SKILL_INVOCATION_MAGIC_TECH_PENALTY)
 
 typedef struct SkillInvocation {
-    /* 0000 */ FollowerInfo source;
-    /* 0030 */ FollowerInfo target;
+    /* 0000 */ ObjectHandleReference source;
+    /* 0030 */ ObjectHandleReference target;
     /* 0060 */ int64_t target_loc;
-    /* 0068 */ FollowerInfo item;
+    /* 0068 */ ObjectHandleReference item;
     /* 0098 */ unsigned int flags;
     /* 009C */ int skill;
     /* 00A0 */ int modifier;
@@ -154,7 +154,7 @@ int basic_skill_cost_inc(int64_t obj, int bs);
 int basic_skill_cost_dec(int64_t obj, int bs);
 int basic_skill_stat(int bs);
 int basic_skill_min_stat_level_required(int skill_level);
-int sub_4C6510(int64_t obj);
+int skill_melee_damage_range_percent(int64_t obj);
 int skill_gambling_max_item_cost(int64_t obj);
 int tech_skill_base(int64_t obj, int ts);
 int tech_skill_level(int64_t obj, int ts);

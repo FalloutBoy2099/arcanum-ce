@@ -433,7 +433,7 @@ int quest_state_set_internal(int64_t pc_obj, int num, int state, int64_t npc_obj
         pc_quest_state.state = state;
     }
 
-    pc_quest_state.datetime = sub_45A7C0();
+    pc_quest_state.datetime = game_time_get();
     obj_arrayfield_pc_quest_set(pc_obj, OBJ_F_PC_QUEST_IDX, num, &pc_quest_state);
 
     // Apply alignment adjustment.
@@ -498,7 +498,7 @@ int quest_unbotch(int64_t obj, int num)
     // returning quest to it's previous state.
     obj_arrayfield_pc_quest_get(obj, OBJ_F_PC_QUEST_IDX, num, &pc_quest_state);
     pc_quest_state.state &= ~QUEST_BOTCHED_MODIFIER;
-    pc_quest_state.datetime = sub_45A7C0();
+    pc_quest_state.datetime = game_time_get();
     obj_arrayfield_pc_quest_set(obj, OBJ_F_PC_QUEST_IDX, num, &pc_quest_state);
 
     if (player_is_local_pc_obj(obj)) {

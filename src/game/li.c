@@ -12,7 +12,7 @@ static TigRect li_indicator_frame;
 static TigArtBlitInfo li_indicator_blit_info;
 
 // 0x5FC43C
-static int dword_5FC43C;
+static int li_visibility_suppress_count_value;
 
 // 0x5FC440
 static TigVideoBuffer* li_indicator_vb;
@@ -107,27 +107,27 @@ void li_resize(GameResizeInfo* resize_info)
 }
 
 // 0x4BBC00
-void sub_4BBC00(void)
+void li_visibility_suppress_push(void)
 {
-    dword_5FC43C++;
+    li_visibility_suppress_count_value++;
 }
 
 // 0x4BBC10
-void sub_4BBC10(void)
+void li_visibility_suppress_pop(void)
 {
-    dword_5FC43C--;
+    li_visibility_suppress_count_value--;
 }
 
 // 0x4BBC20
-int sub_4BBC20(void)
+int li_visibility_suppress_count(void)
 {
-    return dword_5FC43C;
+    return li_visibility_suppress_count_value;
 }
 
 // 0x4BBC30
 void li_update(void)
 {
-    if (dword_5FC43C <= 0) {
+    if (li_visibility_suppress_count_value <= 0) {
         tig_video_blit(li_indicator_vb, &li_indicator_bounds, &li_indicator_frame);
         li_indicator_art_id = tig_art_id_frame_inc(li_indicator_art_id);
         li_blit();

@@ -17,12 +17,12 @@ typedef enum EffectType {
     EFFECT_TYPE_COUNT,
 } EffectType;
 
-static bool sub_4CD9C0(AnimFxListEntry* entry, int64_t obj);
-static void sub_4CDCD0(AnimFxList* list);
+static bool animfx_matching_overlays_remove(AnimFxListEntry* entry, int64_t obj);
+static void animfx_list_capacity_count(AnimFxList* list);
 static bool animfx_list_load_internal(AnimFxList* list);
 static void animfx_build_eye_candy_effect(int index, char* str);
-static bool sub_4CE1A0(tig_art_id_t art_id, unsigned int flags, int index, const char* str);
-static void sub_4CE2A0(int index);
+static bool animfx_overlay_art_validate(tig_art_id_t art_id, unsigned int flags, int index, const char* str);
+static void animfx_current_list_entry_init(int index);
 
 // 0x5B7658
 const char* animfx_play_flags_lookup_tbl_keys[ANIMFX_PLAY_COUNT] = {
@@ -129,7 +129,7 @@ static_assert(SDL_arraysize(dword_5B772C) == SCALE_COUNT, "wrong size");
 static AnimID stru_601700;
 
 // 0x60170C
-static AnimFxList* dword_60170C[ANIMFX_LIST_CAPACITY];
+static AnimFxList* animfx_lists[ANIMFX_LIST_CAPACITY];
 
 // 0x601734
 static mes_file_handle_t dword_601734;
@@ -162,7 +162,7 @@ void animfx_exit(void)
 }
 
 // 0x4CCD20
-void sub_4CCD20(AnimFxList* list, AnimFxNode* node, int64_t obj, int mt_id, int fx_id)
+void animfx_node_init(AnimFxList* list, AnimFxNode* node, int64_t obj, int mt_id, int fx_id)
 {
     node->list = list;
     node->obj = obj;
@@ -620,7 +620,7 @@ bool animfx_add(AnimFxNode* node)
                 }
             }
 
-            if (sub_44D500(&goal_data, node->obj, goal_type)) {
+            if (anim_goal_data_init_without_interrupt(&goal_data, node->obj, goal_type)) {
                 goal_data.params[AGDATA_ANIM_ID].data = eye_candy_art_id;
                 if ((node->flags & ANIMFX_PLAY_NO_ID) != 0) {
                     goal_data.params[AGDATA_SPELL_DATA].data = -1;
@@ -672,7 +672,7 @@ bool animfx_add(AnimFxNode* node)
                 }
 
                 if ((node->flags & ANIMFX_PLAY_DESTROY) != 0) {
-                    if (sub_44D500(&goal_data, node->obj, AG_DESTROY_OBJ)) {
+                    if (anim_goal_data_init_without_interrupt(&goal_data, node->obj, AG_DESTROY_OBJ)) {
 
                         // __FILE__: "C:\Troika\Code\Game\GameLibX\AnimFX.c"
                         // __LINE__: 798
@@ -717,7 +717,7 @@ bool animfx_add(AnimFxNode* node)
 }
 
 // 0x4CD7A0
-bool sub_4CD7A0(AnimFxNode* node)
+bool animfx_overlay_slots_select(AnimFxNode* node)
 {
     AnimFxListEntry* entry;
     int overlay_fore_index = -1;
@@ -819,12 +819,12 @@ void animfx_remove(AnimFxList* list, int64_t obj, int fx_id, int mt_id)
     if ((list->entries[fx_id].flags & ANIMFX_LIST_ENTRY_ANIMATES) != 0) {
         anim_eye_candy_interrupt(obj, list->entries[fx_id].eye_candy_art_id, mt_id);
     } else {
-        sub_4CD9C0(&(list->entries[fx_id]), obj);
+        animfx_matching_overlays_remove(&(list->entries[fx_id]), obj);
     }
 }
 
 // 0x4CD9C0
-bool sub_4CD9C0(AnimFxListEntry* entry, int64_t obj)
+bool animfx_matching_overlays_remove(AnimFxListEntry* entry, int64_t obj)
 {
     unsigned int num;
     int index;
@@ -945,7 +945,7 @@ bool animfx_list_load(AnimFxList* list)
         return false;
     }
 
-    sub_4CDCD0(list);
+    animfx_list_capacity_count(list);
 
     if (list->capacity > 0) {
         list->entries = (AnimFxListEntry*)MALLOC(sizeof(AnimFxListEntry) * list->capacity);
@@ -956,7 +956,7 @@ bool animfx_list_load(AnimFxList* list)
     if (animfx_list_load_internal(list)) {
         success = true;
         list->flags |= ANIMFX_LIST_LOADED;
-        dword_60170C[dword_60173C++] = list;
+        animfx_lists[dword_60173C++] = list;
     }
 
     mes_unload(dword_601734);
@@ -971,7 +971,7 @@ int animfx_list_find(AnimFxList* list)
     int index;
 
     for (index = 0; index < ANIMFX_LIST_CAPACITY; index++) {
-        if (dword_60170C[index] == list) {
+        if (animfx_lists[index] == list) {
             return index;
         }
     }
@@ -983,7 +983,7 @@ int animfx_list_find(AnimFxList* list)
 AnimFxList* animfx_list_get(int index)
 {
     if (index < ANIMFX_LIST_CAPACITY) {
-        return dword_60170C[index];
+        return animfx_lists[index];
     } else {
         return NULL;
     }
@@ -996,8 +996,8 @@ void animfx_list_exit(AnimFxList* list)
 
     if ((list->flags & ANIMFX_LIST_LOADED) != 0) {
         for (index = 0; index < ANIMFX_LIST_CAPACITY; index++) {
-            if (dword_60170C[index] == list) {
-                dword_60170C[index] = NULL;
+            if (animfx_lists[index] == list) {
+                animfx_lists[index] = NULL;
                 dword_60173C--;
                 break;
             }
@@ -1011,7 +1011,7 @@ void animfx_list_exit(AnimFxList* list)
 }
 
 // 0x4CDCD0
-void sub_4CDCD0(AnimFxList* list)
+void animfx_list_capacity_count(AnimFxList* list)
 {
     int count = 0;
     MesFileEntry mes_file_entry;
@@ -1040,7 +1040,7 @@ bool animfx_list_load_internal(AnimFxList* list)
 
     while (list->num_effects < list->size) {
         for (index = 0; index < list->num_fields; index++) {
-            sub_4CE2A0(list->num_effects);
+            animfx_current_list_entry_init(list->num_effects);
 
             if (mes_search(dword_601734, &mes_file_entry)) {
                 mes_get_msg(dword_601734, &mes_file_entry);
@@ -1144,7 +1144,7 @@ void animfx_build_eye_candy_effect(int index, char* str)
         tig_art_id_t eye_candy_art_id;
         if (tig_art_eye_candy_id_create(art, 0, 0, (entry->flags & ANIMFX_LIST_ENTRY_TRANSLUCENCY) != 0 ? 1 : 0, type, palette, scale, &eye_candy_art_id) == TIG_OK) {
             entry->eye_candy_art_id = eye_candy_art_id;
-            if (!sub_4CE1A0(entry->eye_candy_art_id, entry->flags, index, str)) {
+            if (!animfx_overlay_art_validate(entry->eye_candy_art_id, entry->flags, index, str)) {
                 entry->eye_candy_art_id = TIG_ART_ID_INVALID;
                 entry->flags = 0;
             }
@@ -1196,7 +1196,7 @@ void animfx_build_eye_candy_effect(int index, char* str)
 }
 
 // 0x4CE1A0
-bool sub_4CE1A0(tig_art_id_t art_id, unsigned int flags, int index, const char* str)
+bool animfx_overlay_art_validate(tig_art_id_t art_id, unsigned int flags, int index, const char* str)
 {
     if ((flags & ANIMFX_LIST_ENTRY_FOREGROUND_OVERLAY) != 0) {
         art_id = tig_art_eye_candy_id_type_set(art_id, 0);
@@ -1241,7 +1241,7 @@ bool sub_4CE1A0(tig_art_id_t art_id, unsigned int flags, int index, const char* 
 }
 
 // 0x4CE2A0
-void sub_4CE2A0(int index)
+void animfx_current_list_entry_init(int index)
 {
     AnimFxListEntry* entry;
 

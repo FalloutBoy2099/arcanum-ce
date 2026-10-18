@@ -36,13 +36,13 @@ bool terrain_map_new(MapNewInfo* new_map_info);
 bool terrain_open(const char* base_path, const char* save_path);
 void terrain_map_close(void);
 void terrain_sector_path(int64_t sector_id, char* path);
-int sub_4E8DC0(uint16_t a1);
-int sub_4E8DD0(uint16_t a1);
-int sub_4E8DE0(uint16_t a1);
-int sub_4E8DF0(uint16_t a1);
+int terrain_primary_type_get(uint16_t a1);
+int terrain_secondary_type_get(uint16_t a1);
+int terrain_transition_mask_get(uint16_t a1);
+int terrain_variant_get(uint16_t a1);
 bool terrain_is_blocked(int64_t sec);
 void terrain_fill(Sector* sector);
 bool terrain_flush(void);
-uint16_t sub_4E87F0(int64_t sec);
+uint16_t terrain_sector_tile_get(int64_t sec);
 
 #endif /* ARCANUM_GAME_TERRAIN_H_ */

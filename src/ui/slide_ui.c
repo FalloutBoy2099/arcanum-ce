@@ -224,7 +224,7 @@ bool slide_ui_do_slide(tig_window_handle_t window_handle, int slide)
             tig_video_buffer_destroy(video_buffer);
 
             // Refresh screen.
-            sub_51E850(window_handle);
+            tig_window_restack(window_handle);
             tig_window_display();
 
             // Perform fade-in effect.

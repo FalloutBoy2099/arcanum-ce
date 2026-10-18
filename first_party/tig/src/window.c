@@ -443,7 +443,7 @@ static int tig_window_display_impl(void)
         while (node != NULL) {
             tig_window_dirty_rects = node->next;
 
-            sub_51D050(&(node->rect), NULL, 0, 0, TIG_WINDOW_TOP);
+            tig_window_region_composite(&(node->rect), NULL, 0, 0, TIG_WINDOW_TOP);
             tig_rect_node_destroy(node);
 
             node = tig_window_dirty_rects;
@@ -462,7 +462,7 @@ static int tig_window_display_impl(void)
 }
 
 // 0x51D050
-void sub_51D050(TigRect* src_rect, TigVideoBuffer* dst_video_buffer, int dx, int dy, int top_window_index)
+void tig_window_region_composite(TigRect* src_rect, TigVideoBuffer* dst_video_buffer, int dx, int dy, int top_window_index)
 {
     TigVideoBufferBlitInfo vb_blit_info;
     TigRectListNode* head;
@@ -540,7 +540,7 @@ void sub_51D050(TigRect* src_rect, TigVideoBuffer* dst_video_buffer, int dx, int
                     if ((win->flags & TIG_WINDOW_TRANSPARENT) == 0) {
                         cont = true;
                     } else if ((tig_window_ctx_flags & TIG_INITIALIZE_SCRATCH_BUFFER) != 0) {
-                        sub_51D050(&dirty_rect,
+                        tig_window_region_composite(&dirty_rect,
                             win->secondary_video_buffer,
                             dirty_rect.x - win->frame.x,
                             dirty_rect.y - win->frame.y,
@@ -1150,7 +1150,7 @@ int tig_window_copy_from_vbuffer(tig_window_handle_t dst_window_handle, TigRect*
 // NOTE: The purpose of this alias is unclear. Not used.
 //
 // 0x51DF60
-int sub_51DF60(tig_window_handle_t dst_window_handle, TigRect* dst_rect, TigVideoBuffer* src_video_buffer, TigRect* src_rect)
+int tig_window_copy_from_vbuffer_legacy(tig_window_handle_t dst_window_handle, TigRect* dst_rect, TigVideoBuffer* src_video_buffer, TigRect* src_rect)
 {
     return tig_window_copy_from_vbuffer(dst_window_handle, dst_rect, src_video_buffer, src_rect);
 }
@@ -1573,7 +1573,7 @@ bool tig_window_filter_message(TigMessage* msg)
 }
 
 // 0x51E850
-int sub_51E850(tig_window_handle_t window_handle)
+int tig_window_restack(tig_window_handle_t window_handle)
 {
     int window_index;
 

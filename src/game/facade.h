@@ -9,6 +9,6 @@ void facade_exit(void);
 void facade_resize(GameResizeInfo* resize_info);
 void facade_update_view(ViewOptions* view_options);
 void facade_draw(GameDrawInfo* draw_info);
-bool sub_4CA6B0(LocRect* loc_rect, int* a2, int* a3);
+bool facade_location_rect_clip(LocRect* loc_rect, int* a2, int* a3);
 
 #endif /* ARCANUM_GAME_FACADE_H_ */

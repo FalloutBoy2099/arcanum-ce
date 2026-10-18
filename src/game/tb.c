@@ -659,7 +659,7 @@ void tb_add(int64_t obj, int type, const char* str)
         && tig_rect_intersection(&dirty_rect, &tb_iso_content_rect, &visible) == TIG_OK) {
         char speaker[MAX_STRING] = "";
         object_examine(obj, pc, speaker);
-        conversation_history_add(speaker, str, sub_45A7C0());
+        conversation_history_add(speaker, str, game_time_get());
     }
 }
 

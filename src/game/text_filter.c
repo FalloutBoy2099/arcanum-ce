@@ -86,13 +86,13 @@ bool text_filter_process(int64_t obj, const char* src, char** dst)
 }
 
 // 0x4F6920
-void sub_4F6920(void)
+void text_filter_reserved_hook_1_stub(void)
 {
     // TODO: Incomplete.
 }
 
 // 0x4F69B0
-void sub_4F69B0(void)
+void text_filter_reserved_hook_2_stub(void)
 {
     // TODO: Incomplete.
 }

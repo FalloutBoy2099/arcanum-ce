@@ -30,13 +30,13 @@ int location_rot(int64_t a, int64_t b);
 bool location_in_dir(int64_t loc, int dir, int64_t* new_loc_ptr);
 bool location_in_range(int64_t loc, int dir, int range, int64_t* new_loc_ptr);
 bool location_screen_rect_to_loc_rect(TigRect* rect, LocRect* loc_rect);
-void sub_4B93F0(int a1, int a2, int* a3, int* a4);
+void location_offsets_to_sort_axes(int a1, int a2, int* a3, int* a4);
 bool location_normalize(int64_t* loc, int* offset_x, int* offset_y);
 int64_t location_dist(int64_t a, int64_t b);
 bool location_limits_set(int64_t x, int64_t y);
 void location_limits_get(int64_t* x, int64_t* y);
 int64_t location_center_get(void);
-bool sub_4B99C0(int64_t from, int64_t* to);
+bool location_find_nearby_empty_tile(int64_t from, int64_t* to);
 
 #define LOCATION_GET_X(l) ((l) & 0xFFFFFFFF)
 #define LOCATION_GET_Y(l) (((l) >> 32) & 0xFFFFFFFF)

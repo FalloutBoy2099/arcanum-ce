@@ -79,14 +79,14 @@ static bool tig_file_close_internal(TigFile* stream);
 static int tig_file_open_internal_native(const char* path, const char* mode, TigFile* stream);
 static void tig_file_process_attribs(SDL_PathType type, unsigned int* flags);
 static void tig_file_list_add(TigFileList* list, TigFileInfo* info);
-static bool sub_5310C0(const char* filename, const void* owner, size_t size);
+static bool tig_file_owner_check_legacy(const char* filename, const void* owner, size_t size);
 static unsigned int tig_file_ignored(const char* path);
 static bool tig_file_copy_native(const char* src, const char* dst);
 static bool tig_file_copy_internal(TigFile* dst, TigFile* src);
 static int tig_file_rmdir_recursively_native(const char* path);
 
 // 0x62B2A8
-static TigFileIgnore* off_62B2A8;
+static TigFileIgnore* tig_file_ignore_iterator;
 
 // 0x62B2AC
 static TigFileRepository* tig_file_repositories_head;
@@ -1678,7 +1678,7 @@ bool tig_file_locked_by(const char* filename, const void* owner, size_t size)
         SDL_snprintf(path, sizeof(path), "%s\\%s", repo->path, filename);
     }
 
-    return sub_5310C0(path, owner, size);
+    return tig_file_owner_check_legacy(path, owner, size);
 }
 
 // 0x530BD0
@@ -1847,7 +1847,7 @@ void tig_file_list_add(TigFileList* list, TigFileInfo* info)
 }
 
 // 0x5310C0
-bool sub_5310C0(const char* filename, const void* owner, size_t size)
+bool tig_file_owner_check_legacy(const char* filename, const void* owner, size_t size)
 {
     FILE* stream;
     uint8_t file_owner[1024];
@@ -1883,12 +1883,12 @@ unsigned int tig_file_ignored(const char* path)
         return 0;
     }
 
-    off_62B2A8 = tig_file_ignore_head;
-    while (off_62B2A8 != NULL) {
-        if (fpattern_matchn(off_62B2A8->path, path)) {
-            return off_62B2A8->flags;
+    tig_file_ignore_iterator = tig_file_ignore_head;
+    while (tig_file_ignore_iterator != NULL) {
+        if (fpattern_matchn(tig_file_ignore_iterator->path, path)) {
+            return tig_file_ignore_iterator->flags;
         }
-        off_62B2A8 = off_62B2A8->next;
+        tig_file_ignore_iterator = tig_file_ignore_iterator->next;
     }
 
     return 0;

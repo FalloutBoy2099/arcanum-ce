@@ -135,6 +135,11 @@ additional translations.
 
 ## English fallback resources
 
+`english/mes/benchmark_ui.mes` and `french/mes/benchmark_ui.mes` provide the
+manual Benchmark button and completion/error notices. Install the matching
+language catalog as `mes/benchmark_ui.mes`, and the English catalog as
+`mes/ce_fallback/benchmark_ui.mes` in the common data pack.
+
 The English pack also includes `mes/ce_fallback/` with English versions of the
 six catalogs. A missing translated entry is looked up there, rather than in
 hardcoded C text. If both entries are missing, a neutral `?` is displayed.
@@ -164,3 +169,8 @@ Use `tools/install_automaton_gunner.py` to merge the text into existing catalogs
 and back up replaced resources. See [CE integration instructions](automaton_gunner/CE-INTEGRATION.md).
 The original executable patcher targets the classic engine and must not be
 applied to CE.
+
+`english/mes/item_compare_ui.mes` and `french/mes/item_compare_ui.mes` contain
+alternate weapon labels for barter comparisons of fixed effect descriptions.
+Install English into the common pack and its `mes/ce_fallback/` directory,
+and French into the French pack, like the other localized CE catalogs.

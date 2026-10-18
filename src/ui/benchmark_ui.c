@@ -1,11 +1,13 @@
 #include "ui/benchmark_ui.h"
 #include "ui/benchmark_input.h"
+#include "ui/benchmark_widget.h"
 
 #include <stdio.h>
 #include <tig/performance.h>
 
 #include "game/anim.h"
 #include "game/benchmark.h"
+#include "game/benchmark_data.h"
 #include "game/camera_follow.h"
 #include "game/combat.h"
 #include "game/conversation_history.h"
@@ -14,6 +16,8 @@
 #include "game/iso_zoom.h"
 #include "game/location.h"
 #include "game/map.h"
+#include "game/mes.h"
+#include "game/modern_font.h"
 #include "game/object.h"
 #include "game/obj_pool.h"
 #include "game/path.h"
@@ -36,6 +40,8 @@ static float saved_zoom;
 static int64_t saved_origin_x, saved_origin_y;
 static BenchmarkRun run;
 static bool attempted;
+static bool waiting_for_route;
+static tig_timestamp_t route_attempt_time;
 static bool active;
 static bool abort_requested;
 static bool previous_logging;
@@ -45,6 +51,46 @@ static int64_t route[4];
 static FILE* trace;
 static Uint64 session;
 static unsigned int first_interval;
+static tig_window_handle_t world_window = TIG_WINDOW_HANDLE_INVALID;
+static tig_font_handle_t widget_font = TIG_FONT_HANDLE_INVALID;
+static char widget_font_path[TIG_MAX_PATH];
+static int notice_id;
+
+static void show_notice(const char* status)
+{
+    notice_id = benchmark_notice_id(status);
+    if (notice_id == 0) return;
+    UiMessage message = { 0 };
+    message.type = UI_MSG_TYPE_FEEDBACK;
+    message.str = (char*)mes_localized_get("benchmark_ui", notice_id);
+    intgame_message_window_display_msg(&message);
+}
+
+static void update_widget(void)
+{
+    TigWindowData world;
+    bool visible = tig_get_active() && !active && !mainmenu_ui_is_active() && intgame_mode_get() == INTGAME_MODE_MAIN
+        && gamelib_loaded_save_name()[0] != '\0' && player_get_local_pc_obj() != OBJ_HANDLE_NULL
+        && obj_handle_is_valid(player_get_local_pc_obj()) && tig_window_data(world_window, &world) == TIG_OK;
+    if (visible && widget_font == TIG_FONT_HANDLE_INVALID) {
+        TigFont font = { 0 };
+        font.flags = TIG_FONT_SHADOW | TIG_FONT_CENTERED;
+        font.color = tig_color_make(245, 235, 205);
+        font.modern_shadow_opacity = 220;
+        font.modern_shadow_distance = 1;
+        tig_art_misc_id_create(TIG_ART_SYSTEM_FONT, 0, &font.art_id);
+        if (modern_font_enabled() && modern_font_path() != NULL) {
+            SDL_strlcpy(widget_font_path, modern_font_path(), sizeof(widget_font_path));
+            font.flags |= TIG_FONT_MODERN;
+            font.modern_font_path = widget_font_path;
+            font.modern_font_size = 14;
+        }
+        tig_font_create(&font, &widget_font);
+    }
+    TigRect bounds = visible ? world.rect : (TigRect){ 0 };
+    benchmark_widget_update(bounds, visible, widget_font, mes_localized_get("benchmark_ui", 0),
+        notice_id != 0 ? mes_localized_get("benchmark_ui", notice_id) : "");
+}
 
 static void write_status(const char* status)
 {
@@ -54,19 +100,12 @@ static void write_status(const char* status)
 
 static void write_file_fingerprint(FILE* metadata, const char* path)
 {
-    FILE* file = fopen(path, "rb");
-    if (file == NULL) { fprintf(metadata, "file.%s=missing\n", path); return; }
-    unsigned char buffer[8192];
-    size_t bytes;
-    Uint32 crc = 0;
-    Uint64 length = 0;
-    while ((bytes = fread(buffer, 1, sizeof(buffer), file)) != 0) {
-        crc = SDL_crc32(crc, buffer, bytes);
-        length += bytes;
-    }
-    fprintf(metadata, "file.%s=%s:%08x:%llu\n", path, ferror(file) ? "error" : "crc32",
+    Uint32 crc;
+    Uint64 length;
+    BenchmarkFingerprintStatus status = benchmark_fingerprint(path, &crc, &length);
+    if (status == BENCHMARK_FINGERPRINT_MISSING) { fprintf(metadata, "file.%s=missing\n", path); return; }
+    fprintf(metadata, "file.%s=%s:%08x:%llu\n", path, status == BENCHMARK_FINGERPRINT_ERROR ? "error" : "crc32",
         (unsigned int)crc, (unsigned long long)length);
-    fclose(file);
 }
 
 static void close_panels(void)
@@ -107,6 +146,7 @@ static void finish(const char* status)
     iso_interface_refresh();
     if (previous_logging) tig_performance_set_enabled(true, NULL);
     tig_debug_printf("Automatic benchmark: %s. See benchmark-phases.csv.\n", status);
+    show_notice(status);
 }
 
 static bool input_filter(const SDL_Event* event)
@@ -136,6 +176,10 @@ static bool enter_step(const BenchmarkStep* step)
 {
     write_status(step->name);
     first_interval = tig_performance_interval();
+    if (step->argument == 1 && (step->action == BENCHMARK_INDEX || step->action == BENCHMARK_CONVERSATIONS)) {
+        close_panels();
+        logbook_ui_open(pc);
+    }
     switch (step->action) {
     case BENCHMARK_WARMUP:
         close_panels();
@@ -178,7 +222,7 @@ static bool enter_step(const BenchmarkStep* step)
     return true;
 }
 
-static void start(void)
+static void start(bool manual)
 {
     attempted = true;
     write_status("starting");
@@ -188,15 +232,21 @@ static void start(void)
         || combat_critter_is_combat_mode_active(pc) || combat_turn_based_is_active()) {
         tig_debug_printf("Automatic benchmark: requires a conscious character outside combat.\n");
         write_status("requires_safe_save");
+        show_notice("requires_safe_save");
         return;
     }
     if (!benchmark_route_find(pc, route)) {
-        tig_debug_printf("Automatic benchmark: no reachable four-tile square; choose an outdoor save.\n");
+        tig_debug_printf("Automatic benchmark: no reachable route; move to an open area. Retrying in 3 seconds.\n");
         write_status("route_unavailable");
+        attempted = manual;
+        waiting_for_route = !manual;
+        tig_timer_now(&route_attempt_time);
+        show_notice("route_unavailable");
         return;
     }
+    waiting_for_route = false;
     trace = fopen("benchmark-phases.csv", "a+");
-    if (trace == NULL) { write_status("output_unavailable"); return; }
+    if (trace == NULL) { write_status("output_unavailable"); show_notice("output_unavailable"); return; }
     fseek(trace, 0, SEEK_END);
     if (ftell(trace) == 0) fputs("run,phase,status,first_interval,last_interval,frames,map,x,y\n", trace);
     previous_logging = tig_performance_is_enabled();
@@ -205,6 +255,7 @@ static void start(void)
         fclose(trace); trace = NULL;
         if (previous_logging) tig_performance_set_enabled(true, NULL);
         write_status("output_unavailable");
+        show_notice("output_unavailable");
         return;
     }
     session = tig_performance_session();
@@ -218,8 +269,8 @@ static void start(void)
     }
     FILE* metadata = fopen("benchmark-runs.txt", "a");
     if (metadata != NULL) {
-        fprintf(metadata, "run=%llu\nscenario=1\nsave=%s\nmap=%d\nseed=0xCE2026\nplatform=%s\nconversations=%d\n",
-            (unsigned long long)session, gamelib_loaded_save_name(), map, SDL_GetPlatform(), conversation_history_count());
+        fprintf(metadata, "run=%llu\nscenario=%d\nsave=%s\nmap=%d\nseed=0xCE2026\nplatform=%s\nconversations=%d\n",
+            (unsigned long long)session, BENCHMARK_SCENARIO_VERSION, gamelib_loaded_save_name(), map, SDL_GetPlatform(), conversation_history_count());
         for (SettingsEntry* entry = settings.entries; entry != NULL; entry = entry->next) {
             fprintf(metadata, "setting.%s=%s\n", entry->key, entry->value);
         }
@@ -250,20 +301,44 @@ static void start(void)
 
 bool benchmark_ui_init(GameInitInfo* info)
 {
-    (void)info;
+    world_window = info->iso_window_handle;
     attempted = false;
+    waiting_for_route = false;
+    notice_id = 0;
     return true;
 }
 
 bool benchmark_ui_is_active(void) { return active; }
 
-void benchmark_ui_exit(void) { finish("interrupted_shutdown"); }
+void benchmark_ui_exit(void)
+{
+    finish("interrupted_shutdown");
+    benchmark_widget_close();
+    if (widget_font != TIG_FONT_HANDLE_INVALID) tig_font_destroy(widget_font);
+    widget_font = TIG_FONT_HANDLE_INVALID;
+    notice_id = 0;
+}
+
+void benchmark_ui_resize(GameResizeInfo* info)
+{
+    benchmark_widget_close();
+    world_window = info->window_handle;
+}
 
 void benchmark_ui_begin_frame(void)
 {
+    if (benchmark_widget_take_request() && !active) {
+        notice_id = 0;
+        waiting_for_route = false;
+        if (!mainmenu_ui_is_active() && intgame_mode_get() == INTGAME_MODE_MAIN
+            && gamelib_loaded_save_name()[0] != '\0' && player_get_local_pc_obj() != OBJ_HANDLE_NULL
+            && obj_handle_is_valid(player_get_local_pc_obj())) start(true);
+    }
     if (!active && !attempted && settings_get_value(&settings, BENCHMARK_AUTORUN_KEY)
+        && (!waiting_for_route || tig_timer_elapsed(route_attempt_time) >= 3000)
         && gamelib_loaded_save_name()[0] != '\0' && !mainmenu_ui_is_active()
-        && player_get_local_pc_obj() != OBJ_HANDLE_NULL && obj_handle_is_valid(player_get_local_pc_obj())) start();
+        && player_get_local_pc_obj() != OBJ_HANDLE_NULL && obj_handle_is_valid(player_get_local_pc_obj())) start(false);
+    update_widget();
     if (!active) return;
     IntgameMode mode = intgame_mode_get();
     if (abort_requested || player_get_local_pc_obj() != pc || !obj_handle_is_valid(pc)
@@ -271,7 +346,7 @@ void benchmark_ui_begin_frame(void)
         || combat_critter_is_combat_mode_active(pc) || combat_turn_based_is_active()
         || mainmenu_ui_is_active()
         || (mode != INTGAME_MODE_MAIN && mode != INTGAME_MODE_LOGBOOK && mode != INTGAME_MODE_SCHEMATIC)) {
-        finish("aborted"); return;
+        finish(abort_requested ? "cancelled" : "aborted"); return;
     }
     if (benchmark_run_enter(&run) && !enter_step(benchmark_step(run.step))) finish("action_failed");
 }

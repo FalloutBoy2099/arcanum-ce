@@ -715,8 +715,8 @@ bool wmap_rnd_terrain_clear(uint16_t tid)
     int base_terrain_type;
     int comp_terrain_type;
 
-    base_terrain_type = sub_4E8DC0(tid);
-    comp_terrain_type = sub_4E8DD0(tid);
+    base_terrain_type = terrain_primary_type_get(tid);
+    comp_terrain_type = terrain_secondary_type_get(tid);
     if (!TERRAIN_TYPE_IS_VALID(base_terrain_type) || !TERRAIN_TYPE_IS_VALID(comp_terrain_type)) {
         tig_debug_println("Error:  Unknown terrain encountered in wmap_rnd_terrain_clear");
         return false;
@@ -1095,12 +1095,12 @@ int wmap_rnd_determine_terrain(int64_t loc)
     int terrain_base_type;
 
     sec = sector_id_from_loc(loc);
-    tid = sub_4E87F0(sec);
+    tid = terrain_sector_tile_get(sec);
     if (!wmap_rnd_terrain_clear(tid)) {
         return WMAP_TERRAIN_TYPE_INVALID;
     }
 
-    terrain_base_type = sub_4E8DC0(tid);
+    terrain_base_type = terrain_primary_type_get(tid);
     if (terrain_base_type < 0 || terrain_base_type >= 19) {
         tig_debug_println("Error:  Unknown terrain base encountered inwmap_rnd_determine_terrain");
         return WMAP_TERRAIN_TYPE_INVALID;
@@ -1205,7 +1205,7 @@ static bool wmap_rnd_encounter_is_trivial(WmapRndEncounterTableEntry* entry)
 
     for (int slot = 0; slot < 5 && entry->critter_basic_prototype[slot] != 0; slot++) {
         if (wmap_rnd_critter_spawn_counts[slot] <= 0) continue;
-        int64_t proto = sub_4685A0(entry->critter_basic_prototype[slot]);
+        int64_t proto = proto_handle_get(entry->critter_basic_prototype[slot]);
         if (proto == OBJ_HANDLE_NULL || obj_field_int32_get(proto, OBJ_F_TYPE) != OBJ_TYPE_NPC) return false;
         unsigned int flags = obj_field_int32_get(proto, OBJ_F_NPC_FLAGS);
         // Only plain hostile groups are filtered. Scripted and non-hostile
@@ -1376,7 +1376,7 @@ void wmap_rnd_encounter_spawn(WmapRndEncounterTableEntry* entry)
                     object_destroy(obj);
                     obj = OBJ_HANDLE_NULL;
                 } else {
-                    sub_43E770(obj, loc, 0, 0);
+                    object_move_to_location(obj, loc, 0, 0);
                 }
             }
 
@@ -1443,7 +1443,7 @@ void wmap_rnd_encounter_build_object(int name, int64_t loc, int64_t* obj_ptr)
     int64_t proto_obj;
     int64_t obj;
 
-    proto_obj = sub_4685A0(name);
+    proto_obj = proto_handle_get(name);
     if (!object_create(proto_obj, loc, &obj)) {
         tig_debug_printf("wmap_rnd_encounter_build_object: ERROR: object_create failed!\n");
         exit(EXIT_FAILURE);
@@ -1504,6 +1504,6 @@ void wmap_rnd_schedule(void)
     DateTime datetime;
 
     timeevent.type = TIMEEVENT_TYPE_RANDOM_ENCOUNTER;
-    sub_45A950(&datetime, 60000 * random_between(300, 700));
+    datetime_init(&datetime, 60000 * random_between(300, 700));
     timeevent_add_delay(&timeevent, &datetime);
 }

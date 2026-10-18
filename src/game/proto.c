@@ -60,34 +60,34 @@ typedef enum ProtoField {
     PROTO_F_COUNT,
 } ProtoField;
 
-static ObjectType sub_4685D0(int description);
-static int sub_468600(ObjectType object_type);
-static void sub_468660(bool* rescan_ptr);
-static int sub_468720(ObjectType object_type);
-static void sub_468800(void);
+static ObjectType proto_object_type_from_number(int description);
+static int proto_type_first_number_get(ObjectType object_type);
+static void proto_missing_defaults_create(bool* rescan_ptr);
+static int proto_default_name_number_get(ObjectType object_type);
+static void proto_numbered_objects_unload(void);
 static bool proto_save(int64_t obj);
-static ObjectID sub_468860(int a1);
-static void sub_468890(int description);
-static void sub_468930(int64_t obj, int description);
-static void sub_49AFF0(int64_t obj, int description);
-static void sub_49B010(int64_t obj, int description);
-static void sub_49B220(int64_t obj, int description);
-static void sub_49B240(int64_t obj, int f, int percent);
-static void sub_49B2E0(int64_t obj);
-static void sub_49B340(int64_t obj, int description);
-static int sub_49B5A0(TigFile* stream, int64_t obj, int type);
-static void sub_49BB40(int64_t obj, int a2);
-static bool sub_49BB70(const char* str, int* fld_ptr, int* a3, int* a4, int* a5);
-static int sub_49BF10(const char* str, const char** identifiers, int size);
-static void sub_49C060(int64_t obj, TigFile* stream, int type);
-static void sub_49C610(TigFile* stream, const char* name, int value, const char** identifiers, int size);
+static ObjectID proto_object_id_from_number(int a1);
+static void proto_default_create_and_save(int description);
+static void proto_builtin_defaults_apply(int64_t obj, int description);
+static void proto_monster_text_defaults_apply(int64_t obj, int description);
+static void proto_basic_npc_defaults_apply(int64_t obj, int description);
+static void proto_unique_npc_text_defaults_apply(int64_t obj, int description);
+static void proto_int32_field_adjust_percent(int64_t obj, int f, int percent);
+static void proto_magic_complexity_worth_adjust(int64_t obj);
+static void proto_critter_text_defaults_apply(int64_t obj, int description);
+static int proto_critter_text_entry_read(TigFile* stream, int64_t obj, int type);
+static void proto_max_hit_points_set(int64_t obj, int a2);
+static bool proto_critter_text_field_parse(const char* str, int* fld_ptr, int* a3, int* a4, int* a5);
+static int proto_flag_from_identifier(const char* str, const char** identifiers, int size);
+static void proto_critter_text_entry_write(int64_t obj, TigFile* stream, int type);
+static void proto_flags_write_text(TigFile* stream, const char* name, int value, const char** identifiers, int size);
 static void proto_id_list_create(int** proto_ids_ptr, int* cnt_ptr);
 static int proto_id_list_sort(const void* va, const void* vb);
 static bool proto_id_list_check(int* proto_ids, int cnt, int id);
 static void proto_id_list_destroy(int* proto_ids);
 
 // 0x5B37FC
-static int dword_5B37FC[OBJ_TYPE_COUNT] = {
+static int proto_first_number_by_type[OBJ_TYPE_COUNT] = {
     /*          OBJ_TYPE_WALL */ 1000,
     /*        OBJ_TYPE_PORTAL */ 2008,
     /*     OBJ_TYPE_CONTAINER */ 3023,
@@ -244,11 +244,11 @@ bool proto_init(GameInitInfo* init_info)
     tig_file_mkdir("proto");
 
     for (index = 0; index < OBJ_TYPE_COUNT; index++) {
-        dword_5E882C[index] = sub_468860(sub_468600(index));
+        dword_5E882C[index] = proto_object_id_from_number(proto_type_first_number_get(index));
     }
 
     rescan = false;
-    sub_468660(&rescan);
+    proto_missing_defaults_create(&rescan);
 
     if (rescan) {
         obj_exit();
@@ -277,7 +277,7 @@ bool proto_init(GameInitInfo* init_info)
 // 0x468310
 void proto_exit(void)
 {
-    sub_468800();
+    proto_numbered_objects_unload();
     FREE(dword_5E882C);
     initialized = false;
 }
@@ -317,24 +317,24 @@ bool proto_save(int64_t obj)
 }
 
 // 0x468570
-int64_t sub_468570(ObjectType object_type)
+int64_t proto_default_for_type_get(ObjectType object_type)
 {
     return obj_pool_perm_lookup(dword_5E882C[object_type]);
 }
 
 // 0x4685A0
-int64_t sub_4685A0(int a1)
+int64_t proto_handle_get(int a1)
 {
-    return obj_pool_perm_lookup(sub_468860(a1));
+    return obj_pool_perm_lookup(proto_object_id_from_number(a1));
 }
 
 // 0x4685D0
-ObjectType sub_4685D0(int description)
+ObjectType proto_object_type_from_number(int description)
 {
     ObjectType object_type;
 
     for (object_type = OBJ_TYPE_WALL; object_type < OBJ_TYPE_MONSTER; object_type++) {
-        if (description < dword_5B37FC[object_type + 1]) {
+        if (description < proto_first_number_by_type[object_type + 1]) {
             break;
         }
     }
@@ -347,9 +347,9 @@ ObjectType sub_4685D0(int description)
 }
 
 // 0x468600
-int sub_468600(ObjectType object_type)
+int proto_type_first_number_get(ObjectType object_type)
 {
-    return dword_5B37FC[object_type];
+    return proto_first_number_by_type[object_type];
 }
 
 // 0x468610
@@ -357,7 +357,7 @@ bool proto_is_valid(int description)
 {
     ObjectType object_type;
 
-    object_type = sub_4685D0(description);
+    object_type = proto_object_type_from_number(description);
     if (object_type == OBJ_TYPE_NPC) {
         if (description >= 28310) {
             object_type = OBJ_TYPE_UNIQUE_NPC;
@@ -366,11 +366,11 @@ bool proto_is_valid(int description)
         }
     }
 
-    return description >= dword_5B37FC[object_type] && description < dword_5B384C[object_type];
+    return description >= proto_first_number_by_type[object_type] && description < dword_5B384C[object_type];
 }
 
 // 0x468660
-void sub_468660(bool* rescan_ptr)
+void proto_missing_defaults_create(bool* rescan_ptr)
 {
     int type;
     int oname;
@@ -401,10 +401,10 @@ void sub_468660(bool* rescan_ptr)
     proto_id_list_create(&proto_ids, &proto_ids_cnt);
 
     for (type = 0; type < 20; type++) {
-        for (oname = dword_5B37FC[type]; oname < dword_5B384C[type]; oname++) {
-            oid = sub_468860(oname);
+        for (oname = proto_first_number_by_type[type]; oname < dword_5B384C[type]; oname++) {
+            oid = proto_object_id_from_number(oname);
             if (!proto_id_list_check(proto_ids, proto_ids_cnt, oid.d.a)) {
-                sub_468890(oname);
+                proto_default_create_and_save(oname);
                 *rescan_ptr = true;
             }
         }
@@ -416,7 +416,7 @@ void sub_468660(bool* rescan_ptr)
 }
 
 // 0x468720
-int sub_468720(ObjectType object_type)
+int proto_default_name_number_get(ObjectType object_type)
 {
     switch (object_type) {
     case OBJ_TYPE_WALL:
@@ -465,35 +465,35 @@ int sub_468720(ObjectType object_type)
 }
 
 // 0x468800
-void sub_468800(void)
+void proto_numbered_objects_unload(void)
 {
     ObjectType object_type;
     int description;
 
     for (object_type = 0; object_type < OBJ_TYPE_COUNT; object_type++) {
-        for (description = dword_5B37FC[object_type]; description < dword_5B384C[object_type]; description++) {
-            obj_deallocate(obj_pool_perm_lookup(sub_468860(description)));
+        for (description = proto_first_number_by_type[object_type]; description < dword_5B384C[object_type]; description++) {
+            obj_deallocate(obj_pool_perm_lookup(proto_object_id_from_number(description)));
         }
     }
 }
 
 // 0x468860
-ObjectID sub_468860(int a1)
+ObjectID proto_object_id_from_number(int a1)
 {
-    return sub_4E6540(a1 + 20);
+    return objid_make_a(a1 + 20);
 }
 
 // 0x468890
-void sub_468890(int description)
+void proto_default_create_and_save(int description)
 {
     ObjectType object_type;
     int64_t obj;
 
-    object_type = sub_4685D0(description);
+    object_type = proto_object_type_from_number(description);
     obj_create_proto(object_type, &obj);
-    obj_field_int32_set(obj, OBJ_F_NAME, sub_468720(object_type));
-    sub_408020(obj, description + 20);
-    sub_468930(obj, description);
+    obj_field_int32_set(obj, OBJ_F_NAME, proto_default_name_number_get(object_type));
+    obj_id_a_replace(obj, description + 20);
+    proto_builtin_defaults_apply(obj, description);
     in_proto_save = true;
     proto_save(obj);
     in_proto_save = false;
@@ -501,7 +501,7 @@ void sub_468890(int description)
 }
 
 // 0x468930
-void sub_468930(int64_t obj, int description)
+void proto_builtin_defaults_apply(int64_t obj, int description)
 {
     Script scr;
     tig_art_id_t art_id;
@@ -513,11 +513,11 @@ void sub_468930(int64_t obj, int description)
     scr.hdr.flags = 0;
     scr.hdr.counters = 0;
 
-    switch (sub_4685D0(description)) {
+    switch (proto_object_type_from_number(description)) {
     case OBJ_TYPE_WALL:
         switch (description) {
         case BP_RED_BRICK_WALL:
-            sub_49B240(obj, OBJ_F_HP_PTS, -30);
+            proto_int32_field_adjust_percent(obj, OBJ_F_HP_PTS, -30);
             obj_field_int32_set(obj, OBJ_F_MATERIAL, MATERIAL_BRICK);
             break;
         case BP_GREY_BRICK_WALL:
@@ -528,19 +528,19 @@ void sub_468930(int64_t obj, int description)
             obj_field_int32_set(obj, OBJ_F_FLAGS, obj_field_int32_get(obj, OBJ_F_FLAGS) | 0x400000);
             break;
         case BP_LIGHT_WOOD_WALL:
-            sub_49B240(obj, OBJ_F_HP_PTS, -50);
+            proto_int32_field_adjust_percent(obj, OBJ_F_HP_PTS, -50);
             obj_field_int32_set(obj, OBJ_F_MATERIAL, MATERIAL_WOOD);
             break;
         case BP_HEAVY_WOOD_WALL:
             obj_field_int32_set(obj, OBJ_F_MATERIAL, MATERIAL_WOOD);
             break;
         case BP_WOOD_FENCE:
-            sub_49B240(obj, OBJ_F_HP_PTS, -60);
+            proto_int32_field_adjust_percent(obj, OBJ_F_HP_PTS, -60);
             obj_field_int32_set(obj, OBJ_F_MATERIAL, MATERIAL_WOOD);
             obj_field_int32_set(obj, OBJ_F_FLAGS, obj_field_int32_get(obj, OBJ_F_FLAGS) | 0x30);
             break;
         case BP_METAL_FENCE:
-            sub_49B240(obj, OBJ_F_HP_PTS, -30);
+            proto_int32_field_adjust_percent(obj, OBJ_F_HP_PTS, -30);
             obj_field_int32_set(obj, OBJ_F_MATERIAL, MATERIAL_METAL);
             obj_field_int32_set(obj, OBJ_F_FLAGS, obj_field_int32_get(obj, OBJ_F_FLAGS) | 0x30);
             break;
@@ -555,7 +555,7 @@ void sub_468930(int64_t obj, int description)
         obj_field_int32_set(obj, OBJ_F_PORTAL_FLAGS, 9);
         switch (description) {
         case BP_LIGHT_WOOD_DOOR:
-            sub_49B240(obj, OBJ_F_HP_PTS, -30);
+            proto_int32_field_adjust_percent(obj, OBJ_F_HP_PTS, -30);
             obj_field_int32_set(obj, OBJ_F_MATERIAL, MATERIAL_WOOD);
             obj_field_int32_set(obj, OBJ_F_SOUND_EFFECT, 8060);
             break;
@@ -574,7 +574,7 @@ void sub_468930(int64_t obj, int description)
             obj_field_int32_set(obj, OBJ_F_SOUND_EFFECT, 8075);
             break;
         case BP_GLASS_DOOR:
-            sub_49B240(obj, OBJ_F_HP_PTS, -70);
+            proto_int32_field_adjust_percent(obj, OBJ_F_HP_PTS, -70);
             obj_field_int32_set(obj, OBJ_F_MATERIAL, MATERIAL_GLASS);
             obj_field_int32_set(obj, OBJ_F_FLAGS, obj_field_int32_get(obj, OBJ_F_FLAGS) | 0x10);
             obj_field_int32_set(obj, OBJ_F_FLAGS, obj_field_int32_get(obj, OBJ_F_FLAGS) & ~0x4000);
@@ -590,14 +590,14 @@ void sub_468930(int64_t obj, int description)
             obj_field_int32_set(obj, OBJ_F_SOUND_EFFECT, 8070);
             break;
         case BP_WINDOW:
-            sub_49B240(obj, OBJ_F_HP_PTS, -70);
+            proto_int32_field_adjust_percent(obj, OBJ_F_HP_PTS, -70);
             obj_field_int32_set(obj, OBJ_F_MATERIAL, MATERIAL_GLASS);
             obj_field_int32_set(obj, OBJ_F_FLAGS, obj_field_int32_get(obj, OBJ_F_FLAGS) | 0x10);
             obj_field_int32_set(obj, OBJ_F_FLAGS, obj_field_int32_get(obj, OBJ_F_FLAGS) & ~0x4000);
             obj_field_int32_set(obj, OBJ_F_SOUND_EFFECT, 8100);
             break;
         case BP_NON_OPENING_WINDOW:
-            sub_49B240(obj, OBJ_F_HP_PTS, -70);
+            proto_int32_field_adjust_percent(obj, OBJ_F_HP_PTS, -70);
             obj_field_int32_set(obj, OBJ_F_MATERIAL, MATERIAL_GLASS);
             obj_field_int32_set(obj, OBJ_F_FLAGS, obj_field_int32_get(obj, OBJ_F_FLAGS) | 0x10);
             obj_field_int32_set(obj, OBJ_F_FLAGS, obj_field_int32_get(obj, OBJ_F_FLAGS) & ~0x4000);
@@ -605,7 +605,7 @@ void sub_468930(int64_t obj, int description)
             obj_field_int32_set(obj, OBJ_F_SOUND_EFFECT, 8100);
             break;
         case BP_CURTAINS:
-            sub_49B240(obj, OBJ_F_HP_PTS, -90);
+            proto_int32_field_adjust_percent(obj, OBJ_F_HP_PTS, -90);
             obj_field_int32_set(obj, OBJ_F_MATERIAL, MATERIAL_CLOTH);
             obj_field_int32_set(obj, OBJ_F_FLAGS, obj_field_int32_get(obj, OBJ_F_FLAGS) | 0x420);
             obj_field_int32_set(obj, OBJ_F_FLAGS, obj_field_int32_get(obj, OBJ_F_FLAGS) & ~0x4000);
@@ -619,7 +619,7 @@ void sub_468930(int64_t obj, int description)
             obj_field_int32_set(obj, OBJ_F_SOUND_EFFECT, 8100);
             break;
         case BP_WOODEN_SHUTTERS:
-            sub_49B240(obj, OBJ_F_HP_PTS, -30);
+            proto_int32_field_adjust_percent(obj, OBJ_F_HP_PTS, -30);
             obj_field_int32_set(obj, OBJ_F_MATERIAL, MATERIAL_WOOD);
             obj_field_int32_set(obj, OBJ_F_SOUND_EFFECT, 8110);
             break;
@@ -628,7 +628,7 @@ void sub_468930(int64_t obj, int description)
             obj_field_int32_set(obj, OBJ_F_SOUND_EFFECT, 8105);
             break;
         case BP_STAINED_GLASS:
-            sub_49B240(obj, OBJ_F_HP_PTS, -50);
+            proto_int32_field_adjust_percent(obj, OBJ_F_HP_PTS, -50);
             obj_field_int32_set(obj, OBJ_F_MATERIAL, MATERIAL_GLASS);
             obj_field_int32_set(obj, OBJ_F_PORTAL_FLAGS, 2);
             obj_field_int32_set(obj, OBJ_F_SOUND_EFFECT, 8100);
@@ -6293,7 +6293,7 @@ void sub_468930(int64_t obj, int description)
             obj_field_int32_set(obj, OBJ_F_CATEGORY, 1);
             break;
         }
-        sub_49B2E0(obj);
+        proto_magic_complexity_worth_adjust(obj);
         if (obj_field_int32_get(obj, OBJ_F_SOUND_EFFECT) == 0) {
             obj_field_int32_set(obj, OBJ_F_SOUND_EFFECT, 2 * (5 * (tig_art_item_id_subtype_get(obj_field_int32_get(obj, OBJ_F_ITEM_INV_AID)) - 2) + 2000));
         }
@@ -11267,7 +11267,7 @@ void sub_468930(int64_t obj, int description)
             obj_field_int32_set(obj, OBJ_F_CATEGORY, 8);
             break;
         }
-        sub_49B2E0(obj);
+        proto_magic_complexity_worth_adjust(obj);
         break;
     case OBJ_TYPE_GOLD:
         obj_field_int32_set(obj, OBJ_F_ITEM_DESCRIPTION_UNKNOWN, description);
@@ -15881,11 +15881,11 @@ void sub_468930(int64_t obj, int description)
         break;
     case OBJ_TYPE_NPC:
         if (description >= BP_UNIQUE_NPC_BEGIN && description < BP_UNIQUE_NPC_END) {
-            sub_49B010(obj, description);
+            proto_basic_npc_defaults_apply(obj, description);
         } else if (description >= BP_MONSTER_BEGIN && description < BP_MONSTER_END) {
-            sub_49B220(obj, description);
+            proto_unique_npc_text_defaults_apply(obj, description);
         } else {
-            sub_49AFF0(obj, description);
+            proto_monster_text_defaults_apply(obj, description);
         }
         break;
     case OBJ_TYPE_TRAP:
@@ -15981,13 +15981,13 @@ void sub_468930(int64_t obj, int description)
 }
 
 // 0x49AFF0
-void sub_49AFF0(int64_t obj, int description)
+void proto_monster_text_defaults_apply(int64_t obj, int description)
 {
-    sub_49B340(obj, description);
+    proto_critter_text_defaults_apply(obj, description);
 }
 
 // 0x49B010
-void sub_49B010(int64_t obj, int description)
+void proto_basic_npc_defaults_apply(int64_t obj, int description)
 {
     tig_art_id_t art_id;
     Script scr;
@@ -15997,21 +15997,21 @@ void sub_49B010(int64_t obj, int description)
 
     switch (description) {
     case BP_BASIC_FEMALE_NPC:
-        sub_49AFF0(obj, 17081);
+        proto_monster_text_defaults_apply(obj, 17081);
         obj_field_int32_set(obj, OBJ_F_CRITTER_DESCRIPTION_UNKNOWN, 27309);
         tig_art_unique_npc_id_create(11, 0, 0, 4, 0, 0, 0, &art_id);
         obj_field_int32_set(obj, OBJ_F_AID, art_id);
         obj_field_int32_set(obj, OBJ_F_CURRENT_AID, art_id);
         break;
     case BP_BASIC_MALE_NPC:
-        sub_49AFF0(obj, 17082);
+        proto_monster_text_defaults_apply(obj, 17082);
         obj_field_int32_set(obj, OBJ_F_CRITTER_DESCRIPTION_UNKNOWN, 27310);
         tig_art_unique_npc_id_create(2, 0, 0, 4, 0, 0, 0, &art_id);
         obj_field_int32_set(obj, OBJ_F_AID, art_id);
         obj_field_int32_set(obj, OBJ_F_CURRENT_AID, art_id);
         break;
     case BP_PAPERBOY:
-        sub_49AFF0(obj, 17082);
+        proto_monster_text_defaults_apply(obj, 17082);
         obj_field_int32_set(obj, OBJ_F_CRITTER_DESCRIPTION_UNKNOWN, 27311);
         scr.num = 1498;
         obj_arrayfield_script_set(obj, OBJ_F_SCRIPTS_IDX, SAP_DIALOG, &scr);
@@ -16019,21 +16019,21 @@ void sub_49B010(int64_t obj, int description)
         obj_arrayfield_script_set(obj, OBJ_F_SCRIPTS_IDX, SAP_FIRST_HEARTBEAT, &scr);
         break;
     case BP_SOUL_SLAVE:
-        sub_49AFF0(obj, 17082);
+        proto_monster_text_defaults_apply(obj, 17082);
         scr.num = 30117;
         obj_arrayfield_script_set(obj, OBJ_F_SCRIPTS_IDX, SAP_HEARTBEAT, &scr);
         scr.num = 30118;
         obj_arrayfield_script_set(obj, OBJ_F_SCRIPTS_IDX, SAP_DYING, &scr);
         break;
     case BP_PALADIN_SLAVE:
-        sub_49AFF0(obj, 17082);
+        proto_monster_text_defaults_apply(obj, 17082);
         scr.num = 30119;
         obj_arrayfield_script_set(obj, OBJ_F_SCRIPTS_IDX, SAP_HEARTBEAT, &scr);
         scr.num = 30120;
         obj_arrayfield_script_set(obj, OBJ_F_SCRIPTS_IDX, SAP_DYING, &scr);
         break;
     default:
-        sub_49B220(obj, description);
+        proto_unique_npc_text_defaults_apply(obj, description);
         break;
     }
 
@@ -16044,13 +16044,13 @@ void sub_49B010(int64_t obj, int description)
 }
 
 // 0x49B220
-void sub_49B220(int64_t obj, int description)
+void proto_unique_npc_text_defaults_apply(int64_t obj, int description)
 {
-    sub_49B340(obj, description);
+    proto_critter_text_defaults_apply(obj, description);
 }
 
 // 0x49B240
-void sub_49B240(int64_t obj, int f, int percent)
+void proto_int32_field_adjust_percent(int64_t obj, int f, int percent)
 {
     int value;
 
@@ -16059,7 +16059,7 @@ void sub_49B240(int64_t obj, int f, int percent)
 }
 
 // 0x49B290
-int sub_49B290(int64_t obj)
+int proto_number_from_instance(int64_t obj)
 {
     int64_t prototype_handle;
     ObjectID oid;
@@ -16071,7 +16071,7 @@ int sub_49B290(int64_t obj)
 }
 
 // 0x49B2E0
-void sub_49B2E0(int64_t obj)
+void proto_magic_complexity_worth_adjust(int64_t obj)
 {
     int complexity;
     int worth;
@@ -16084,7 +16084,7 @@ void sub_49B2E0(int64_t obj)
 }
 
 // 0x49B340
-void sub_49B340(int64_t obj, int description)
+void proto_critter_text_defaults_apply(int64_t obj, int description)
 {
     TigFile* stream;
     int type;
@@ -16112,15 +16112,15 @@ void sub_49B340(int64_t obj, int description)
         return;
     }
 
-    v1 = sub_49B5A0(stream, 0, type);
+    v1 = proto_critter_text_entry_read(stream, 0, type);
     while (v1 != description && v1 != -1) {
-        v1 = sub_49B5A0(stream, 0, type);
+        v1 = proto_critter_text_entry_read(stream, 0, type);
     }
 
     if (v1 != -1) {
         obj_field_int32_set(obj, OBJ_F_DESCRIPTION, description);
         obj_field_int32_set(obj, OBJ_F_CRITTER_DESCRIPTION_UNKNOWN, description);
-        sub_49B5A0(stream, obj, type);
+        proto_critter_text_entry_read(stream, obj, type);
 
         exp = critter_xp_worth(obj);
         obj_field_int32_set(obj, OBJ_F_NPC_EXPERIENCE_WORTH, exp);
@@ -16156,7 +16156,7 @@ void sub_49B340(int64_t obj, int description)
 }
 
 // 0x49B5A0
-int sub_49B5A0(TigFile* stream, int64_t obj, int type)
+int proto_critter_text_entry_read(TigFile* stream, int64_t obj, int type)
 {
     tig_art_id_t art_id;
     char str[1000];
@@ -16177,7 +16177,7 @@ int sub_49B5A0(TigFile* stream, int64_t obj, int type)
     }
 
     while (tig_file_fgets(str, sizeof(str), stream) != NULL) {
-        if (sub_49BB70(str, &fld, &v2, &v3, &v4)) {
+        if (proto_critter_text_field_parse(str, &fld, &v2, &v3, &v4)) {
             if (fld == PROTO_F_DESCRIPTION) {
                 return v2;
             }
@@ -16244,7 +16244,7 @@ int sub_49B5A0(TigFile* stream, int64_t obj, int type)
                     obj_field_int32_set(obj, OBJ_F_MATERIAL, v2);
                     break;
                 case PROTO_F_HIT_POINTS:
-                    sub_49BB40(obj, v2);
+                    proto_max_hit_points_set(obj, v2);
                     break;
                 case PROTO_F_SCRIPT:
                     scr.num = v3;
@@ -16319,13 +16319,13 @@ int sub_49B5A0(TigFile* stream, int64_t obj, int type)
 }
 
 // 0x49BB40
-void sub_49BB40(int64_t obj, int a2)
+void proto_max_hit_points_set(int64_t obj, int a2)
 {
     object_hp_adj_set(obj, object_hp_adj_get(obj) + a2 - object_hp_max(obj));
 }
 
 // 0x49BB70
-bool sub_49BB70(const char* str, int* fld_ptr, int* a3, int* a4, int* a5)
+bool proto_critter_text_field_parse(const char* str, int* fld_ptr, int* a3, int* a4, int* a5)
 {
     int fld;
     size_t pos;
@@ -16370,16 +16370,16 @@ bool sub_49BB70(const char* str, int* fld_ptr, int* a3, int* a4, int* a5)
         sscanf(str, "%d %d", a3, a4);
         return true;
     case PROTO_F_CRITTER_FLAG:
-        *a3 = sub_49BF10(str, obj_flags_ocf, OCF_COUNT);
+        *a3 = proto_flag_from_identifier(str, obj_flags_ocf, OCF_COUNT);
         return true;
     case PROTO_F_CRITTER2_FLAG:
-        *a3 = sub_49BF10(str, obj_flags_ocf2, OCF2_COUNT);
+        *a3 = proto_flag_from_identifier(str, obj_flags_ocf2, OCF2_COUNT);
         return true;
     case PROTO_F_NPC_FLAG:
-        *a3 = sub_49BF10(str, obj_flags_onf, ONF_COUNT);
+        *a3 = proto_flag_from_identifier(str, obj_flags_onf, ONF_COUNT);
         return true;
     case PROTO_F_BLIT_FLAG:
-        *a3 = sub_49BF10(str, off_5B395C, sizeof(off_5B395C) / sizeof(off_5B395C[0]));
+        *a3 = proto_flag_from_identifier(str, off_5B395C, sizeof(off_5B395C) / sizeof(off_5B395C[0]));
         return true;
     case PROTO_F_BASIC_STAT:
         for (stat = STAT_STRENGTH; stat <= STAT_CHARISMA; stat++) {
@@ -16419,7 +16419,7 @@ bool sub_49BB70(const char* str, int* fld_ptr, int* a3, int* a4, int* a5)
         *a5 = v1 | (v2 << 8) | (v3 << 16) | (v4 << 24);
         return true;
     case PROTO_F_OBJECT_FLAG:
-        *a3 = sub_49BF10(str, obj_flags_of, OF_COUNT);
+        *a3 = proto_flag_from_identifier(str, obj_flags_of, OF_COUNT);
         return true;
     default:
         *a3 = atoi(str);
@@ -16428,7 +16428,7 @@ bool sub_49BB70(const char* str, int* fld_ptr, int* a3, int* a4, int* a5)
 }
 
 // 0x49BF10
-int sub_49BF10(const char* str, const char** identifiers, int size)
+int proto_flag_from_identifier(const char* str, const char** identifiers, int size)
 {
     int index;
 
@@ -16443,7 +16443,7 @@ int sub_49BF10(const char* str, const char** identifiers, int size)
 }
 
 // 0x49C060
-void sub_49C060(int64_t obj, TigFile* stream, int type)
+void proto_critter_text_entry_write(int64_t obj, TigFile* stream, int type)
 {
     char description[2000];
     int value;
@@ -16514,31 +16514,31 @@ void sub_49C060(int64_t obj, TigFile* stream, int type)
             value);
     }
 
-    sub_49C610(stream,
+    proto_flags_write_text(stream,
         off_5B38C8[PROTO_F_CRITTER_FLAG],
         obj_field_int32_get(obj, OBJ_F_CRITTER_FLAGS),
         obj_flags_ocf,
         OCF_COUNT);
 
-    sub_49C610(stream,
+    proto_flags_write_text(stream,
         off_5B38C8[PROTO_F_CRITTER2_FLAG],
         obj_field_int32_get(obj, OBJ_F_CRITTER_FLAGS2),
         obj_flags_ocf2,
         OCF2_COUNT);
 
-    sub_49C610(stream,
+    proto_flags_write_text(stream,
         off_5B38C8[PROTO_F_NPC_FLAG],
         obj_field_int32_get(obj, OBJ_F_NPC_FLAGS),
         obj_flags_onf,
         ONF_COUNT);
 
-    sub_49C610(stream,
+    proto_flags_write_text(stream,
         off_5B38C8[PROTO_F_BLIT_FLAG],
         obj_field_int32_get(obj, OBJ_F_BLIT_FLAGS),
         off_5B395C,
         sizeof(off_5B395C) / sizeof(off_5B395C[0]));
 
-    sub_49C610(stream,
+    proto_flags_write_text(stream,
         off_5B38C8[PROTO_F_SPELL_FLAG],
         obj_field_int32_get(obj, OBJ_F_SPELL_FLAGS),
         obj_flags_ofs,
@@ -16646,7 +16646,7 @@ void sub_49C060(int64_t obj, TigFile* stream, int type)
         off_5B38C8[PROTO_F_SOCIAL_CLASS],
         critter_social_class_get(obj));
 
-    sub_49C610(stream,
+    proto_flags_write_text(stream,
         off_5B38C8[PROTO_F_OBJECT_FLAG],
         obj_field_int32_get(obj, OBJ_F_FLAGS),
         obj_flags_of,
@@ -16668,7 +16668,7 @@ void sub_49C060(int64_t obj, TigFile* stream, int type)
 }
 
 // 0x49C610
-void sub_49C610(TigFile* stream, const char* name, int value, const char** identifiers, int size)
+void proto_flags_write_text(TigFile* stream, const char* name, int value, const char** identifiers, int size)
 {
     int index;
 

@@ -159,9 +159,9 @@ int reference_astar(PathCreateInfo* path_create_info)
             }
 
             bool is_window = false;
-            if ((path_create_info->flags & PATH_FLAG_0x0040) == 0) {
+            if ((path_create_info->flags & PATH_FLAG_IGNORE_BLOCKERS) == 0) {
                 if (adjacent_loc != path_create_info->to
-                    || (path_create_info->flags & PATH_FLAG_0x0001) == 0) {
+                    || (path_create_info->flags & PATH_FLAG_STOP_BEFORE_DESTINATION) == 0) {
                     if ((path_create_info->flags & PATH_FLAG_0x0008) == 0
                         && tile_is_blocking(adjacent_loc, v1)) {
                         path_cost_tbl[neighbor_index] = -32768;
@@ -199,15 +199,15 @@ int reference_astar(PathCreateInfo* path_create_info)
             }
 
             // Evade fire.
-            if ((path_create_info->flags & PATH_FLAG_0x0400) != 0
+            if ((path_create_info->flags & PATH_FLAG_AVOID_FIRE) != 0
                 && get_fire_at_location(adjacent_loc) != OBJ_HANDLE_NULL) {
                 cost += 80;
             }
 
             // Evade differently lit areas.
-            if ((path_create_info->flags & PATH_FLAG_0x0200) != 0) {
-                uint8_t src_lum = sub_4D9240(loc, 0, 0);
-                uint8_t dst_lum = sub_4D9240(adjacent_loc, 0, 0);
+            if ((path_create_info->flags & PATH_FLAG_AVOID_SPOTTED_TRAPS) != 0) {
+                uint8_t src_lum = light_luminance_at_location(loc, 0, 0);
+                uint8_t dst_lum = light_luminance_at_location(adjacent_loc, 0, 0);
                 if (dst_lum > src_lum) {
                     if (dst_lum - src_lum > 20) {
                         cost += 40;
@@ -266,7 +266,7 @@ int reference_astar(PathCreateInfo* path_create_info)
         target_index = path_backtrack_tbl[target_index];
     }
 
-    if ((path_create_info->flags & PATH_FLAG_0x0001) != 0) {
+    if ((path_create_info->flags & PATH_FLAG_STOP_BEFORE_DESTINATION) != 0) {
         step--;
     }
 

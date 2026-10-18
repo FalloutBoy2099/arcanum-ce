@@ -1,6 +1,7 @@
 #include "game/object.h"
 #include "game/obj_find.h"
 #include "game/sector.h"
+#include <tig/performance.h>
 #include <stdio.h>
 
 static int failures;
@@ -17,7 +18,7 @@ struct FindNode { int index; };
 static FindNode find_nodes[65];
 static bool loaded, lock_success;
 static int64_t sector_id;
-static int locks, unlocks, allocations, count;
+static int locks, unlocks, allocations, count, reads;
 
 int64_t sector_id_from_loc(int64_t loc) { (void)loc; return sector_id; }
 void sector_limits_get(int64_t* x, int64_t* y) { *x = 8; *y = 8; }
@@ -25,9 +26,9 @@ bool sector_loaded(int64_t id) { (void)id; return loaded; }
 bool sector_lock(int64_t id, Sector** sector) { (void)id; locks++; *sector = &fixture; return lock_success; }
 bool sector_unlock(int64_t id) { (void)id; unlocks++; return true; }
 int tile_id_from_loc(int64_t loc) { (void)loc; return 7; }
-int obj_field_int32_get(int64_t obj, int field) { return field == OBJ_F_FLAGS ? objects[obj].flags : objects[obj].type; }
+int obj_field_int32_get(int64_t obj, int field) { reads++; return field == OBJ_F_FLAGS ? objects[obj].flags : objects[obj].type; }
 int64_t obj_field_int64_get(int64_t obj, int field) { CHECK(field == OBJ_F_LOCATION); return objects[obj].loc; }
-bool sub_43D940(int64_t obj) { return objects[obj].hidden; }
+bool object_type_is_sector_static(int64_t obj) { return objects[obj].hidden; }
 bool obj_find_walk_first(int64_t id, int64_t* obj, FindNode** iter)
 {
     (void)id;
@@ -101,6 +102,43 @@ int main(void)
         CHECK(actual == expected);
         CHECK(locks == old_locks && unlocks == old_unlocks);
         CHECK(allocations == 0);
+    }
+    // A trap query stops on the first match instead of inspecting/copying all
+    // other objects. Both the lock and its release are still required.
+    count = 64; loaded = false; lock_success = true;
+    sector_id = SECTOR_MAKE((int64_t)2, (int64_t)3);
+    reference_excluded_flags = 0;
+    fixture.objects.heads[7] = nodes;
+    for (int i = 1; i <= count; i++) {
+        objects[i].type = OBJ_TYPE_TRAP;
+        objects[i].flags = 0;
+        nodes[i - 1].obj = i;
+        nodes[i - 1].next = i < count ? &nodes[i] : NULL;
+    }
+    reads = allocations = 0;
+    CHECK(reference(100, OBJ_TM_TRAP, NULL, NULL) == 1);
+    CHECK(allocations == 64 && reads == 128);
+    CHECK(tig_performance_set_enabled(true, "object-query-test.csv"));
+    reads = allocations = locks = unlocks = 0;
+    CHECK(object_query_first(100, OBJ_TM_TRAP, 0, NULL, NULL) == 1);
+    CHECK(reads == 2 && allocations == 0 && locks == 1 && unlocks == 1);
+    CHECK(tig_performance_counter(TIG_PERF_OBJECT_QUERIES) == 1);
+    CHECK(tig_performance_counter(TIG_PERF_OBJECT_QUERY_VISITS) == 1);
+    tig_performance_set_enabled(false, NULL);
+    remove("object-query-test.csv");
+    // Restore paths previously discarded an ALL-types list after loading its
+    // sector. Preserve locking behavior, including failures and map bounds.
+    for (int mode = 0; mode < 4; mode++) {
+        sector_id = SECTOR_MAKE((int64_t)(mode == 3 ? 9 : 2), (int64_t)3);
+        lock_success = mode != 2;
+        loaded = mode == 0;
+        locks = unlocks = reads = allocations = 0;
+        reference(100, OBJ_TM_ALL, NULL, NULL);
+        int expected_locks = locks, expected_unlocks = unlocks;
+        locks = unlocks = reads = allocations = 0;
+        CHECK(object_query_load_sector(100) == (mode < 2));
+        CHECK(locks == expected_locks && unlocks == expected_unlocks);
+        CHECK(reads == 0 && allocations == 0);
     }
     TigMemoryStatistics memory;
     tig_memory_statistics(&memory);

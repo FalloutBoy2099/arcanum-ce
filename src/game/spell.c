@@ -519,7 +519,7 @@ bool spell_add(int64_t obj, int spell, bool force)
 
     // Update UI.
     if (player_is_local_pc_obj(obj)) {
-        sub_4601C0();
+        ui_character_panels_refresh();
     }
 
     return true;

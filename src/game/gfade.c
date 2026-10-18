@@ -81,7 +81,7 @@ bool gfade_timeevent_process(TimeEvent* timeevent)
         gfade_iso_invalidate_rect(NULL);
         gfade_iso_draw();
         tig_window_display();
-        sub_4BBC00();
+        li_visibility_suppress_push();
     }
 
     // Execute the fade effect.

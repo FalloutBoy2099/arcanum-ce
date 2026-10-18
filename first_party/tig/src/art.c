@@ -1,4 +1,7 @@
+#include "tig/art_decode.h"
+#include <limits.h>
 #include "tig/art.h"
+#include "tig/performance.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -158,10 +161,10 @@ typedef struct TigArtCacheEntry {
 } TigArtCacheEntry;
 
 static int art_get_video_buffer(int cache_entry_index, tig_art_id_t art_id, TigVideoBuffer** video_buffer_ptr);
-static int sub_505940(unsigned int art_blt_flags, unsigned int* vb_blt_flags_ptr);
-static int sub_5059F0(int cache_entry_index, TigArtBlitInfo* blit_info);
+static int tig_art_blit_flags_to_video_flags(unsigned int art_blt_flags, unsigned int* vb_blt_flags_ptr);
+static int tig_art_frame_blit_software(int cache_entry_index, TigArtBlitInfo* blit_info);
 static int art_blit(int cache_entry_index, TigArtBlitInfo* blit_info);
-static int sub_51AA90(tig_art_id_t art_id);
+static int tig_art_cache_entry_get_or_load(tig_art_id_t art_id);
 static void tig_art_cache_check_fullness(void);
 static int tig_art_cache_entry_compare_time(const void* va, const void* vb);
 static int tig_art_cache_entry_compare_name(const void* va, const void* vb);
@@ -170,11 +173,11 @@ static bool tig_art_cache_find(const char* path, int* index);
 static bool tig_art_cache_entry_load(tig_art_id_t art_id, const char* path, int index);
 static void tig_art_cache_entry_unload(int cache_entry_index);
 static void art_invalidate(int cache_entry_index);
-static void sub_51B650(int cache_entry_index);
-static int sub_51B710(tig_art_id_t art_id, const char* filename, TigArtHeader* hdr, TigPalette** palettes, int a5, art_size_t* size_ptr);
-static int sub_51BE30(TigArtHeader* hdr);
-static void sub_51BE50(TigFile* stream, TigArtHeader* hdr, TigPalette** palette_tbl);
-static void sub_51BF20(TigArtHeader* hdr);
+static void tig_art_cache_video_buffers_free(int cache_entry_index);
+static int tig_art_file_load(tig_art_id_t art_id, const char* filename, TigArtHeader* hdr, TigPalette** palettes, int a5, art_size_t* size_ptr);
+static int art_header_rotation_count(TigArtHeader* hdr);
+static void art_load_failure_cleanup(TigFile* stream, TigArtHeader* hdr, TigPalette** palette_tbl);
+static void art_header_frame_data_free(TigArtHeader* hdr);
 static bool art_read_header(TigArtHeader* hdr, TigFile* stream);
 
 // 0x5BE880
@@ -324,7 +327,7 @@ static float tig_art_cache_video_memory_fullness = 0.3f;
 static TigArtFilePathResolver tig_art_file_path_resolver;
 
 // 0x604714
-static int dword_604714;
+static int tig_art_last_cache_entry_index;
 
 // 0x604718
 static bool tig_art_hardware_accelerated;
@@ -345,7 +348,7 @@ static int tig_art_cache_entries_capacity;
 static art_size_t tig_art_available_video_memory;
 
 // 0x604744
-static TigArtBlitPaletteAdjustCallback dword_604744;
+static TigArtBlitPaletteAdjustCallback tig_art_palette_adjust_callback;
 
 // 0x604738
 static int tig_art_bytes_per_pixel;
@@ -481,7 +484,7 @@ int tig_art_touch(tig_art_id_t art_id)
 {
     int cache_entry_index;
 
-    cache_entry_index = sub_51AA90(art_id);
+    cache_entry_index = tig_art_cache_entry_get_or_load(art_id);
     if (cache_entry_index == -1) {
         return TIG_ERR_IO;
     }
@@ -489,20 +492,23 @@ int tig_art_touch(tig_art_id_t art_id)
     return TIG_OK;
 }
 
+// Sets the callback used to adjust blit palettes.
 // 0x5022B0
-void sub_5022B0(TigArtBlitPaletteAdjustCallback callback)
+void tig_art_palette_adjust_callback_set(TigArtBlitPaletteAdjustCallback callback)
 {
-    dword_604744 = callback;
+    tig_art_palette_adjust_callback = callback;
 }
 
+// Returns the palette adjustment callback.
 // 0x5022C0
-TigArtBlitPaletteAdjustCallback sub_5022C0(void)
+TigArtBlitPaletteAdjustCallback tig_art_palette_adjust_callback_get(void)
 {
-    return dword_604744;
+    return tig_art_palette_adjust_callback;
 }
 
+// Rebuilds adjusted palettes for cached art and invalidates rendered cache entries.
 // 0x5022D0
-void sub_5022D0(void)
+void tig_art_cached_palettes_refresh(void)
 {
     int index;
     unsigned int palette;
@@ -510,7 +516,7 @@ void sub_5022D0(void)
     for (index = 0; index < tig_art_cache_entries_length; index++) {
         for (palette = 0; palette < MAX_PALETTES; palette++) {
             if (tig_art_cache_entries[index].hdr.palette_tbl[palette] != NULL) {
-                sub_505000(tig_art_cache_entries[index].art_id,
+                tig_art_palette_adjust_or_copy(tig_art_cache_entries[index].art_id,
                     tig_art_cache_entries[index].hdr.palette_tbl[palette],
                     tig_art_cache_entries[index].palette_tbl[palette]);
             }
@@ -532,7 +538,7 @@ int tig_art_blit(TigArtBlitInfo* blit_info)
 
     mut_art_blit_info = *blit_info;
 
-    cache_entry_index = sub_51AA90(mut_art_blit_info.art_id);
+    cache_entry_index = tig_art_cache_entry_get_or_load(mut_art_blit_info.art_id);
     if (cache_entry_index == -1) {
         return TIG_ERR_IO;
     }
@@ -567,8 +573,8 @@ int tig_art_blit(TigArtBlitInfo* blit_info)
         }
     }
 
-    if (sub_505940(mut_art_blit_info.flags, &(vb_blit_info.flags)) == TIG_OK
-        && sub_520FB0(mut_art_blit_info.dst_video_buffer, vb_blit_info.flags) == TIG_OK
+    if (tig_art_blit_flags_to_video_flags(mut_art_blit_info.flags, &(vb_blit_info.flags)) == TIG_OK
+        && tig_video_buffer_render_target_check(mut_art_blit_info.dst_video_buffer, vb_blit_info.flags) == TIG_OK
         && art_get_video_buffer(cache_entry_index, mut_art_blit_info.art_id, &video_buffer) == TIG_OK) {
         if ((mut_art_blit_info.flags & TIG_ART_BLT_BLEND_COLOR_CONST) != 0) {
             vb_blit_info.lerp_colors[0] = mut_art_blit_info.color;
@@ -709,7 +715,7 @@ tig_art_id_t tig_art_num_set(tig_art_id_t art_id, unsigned int value)
         shift = UNIQUE_NPC_ID_NUM_SHIFT;
         break;
     case TIG_ART_TYPE_ITEM:
-        max = sub_502830(art_id);
+        max = tig_art_item_subtype_limit_get(art_id);
         mask = 0xFFE0000;
         shift = 17;
         break;
@@ -735,7 +741,7 @@ tig_art_id_t tig_art_num_set(tig_art_id_t art_id, unsigned int value)
 }
 
 // 0x502830
-unsigned int sub_502830(tig_art_id_t art_id)
+unsigned int tig_art_item_subtype_limit_get(tig_art_id_t art_id)
 {
     unsigned int max;
     int type;
@@ -818,7 +824,7 @@ tig_art_id_t tig_art_id_rotation_set(tig_art_id_t art_id, int rotation)
         return art_id;
     }
 
-    if (sub_504790(art_id)) {
+    if (tig_art_light_id_has_extended_rotation(art_id)) {
         return art_id;
     }
 
@@ -1055,13 +1061,14 @@ tig_art_id_t tig_art_id_palette_set(tig_art_id_t art_id, int value)
     }
 }
 
+// Returns a TIG status indicating whether the requested original palette exists.
 // 0x502E00
-int sub_502E00(tig_art_id_t art_id)
+int tig_art_palette_check(tig_art_id_t art_id)
 {
     int cache_entry_index;
     int palette;
 
-    cache_entry_index = sub_51AA90(art_id);
+    cache_entry_index = tig_art_cache_entry_get_or_load(art_id);
     if (cache_entry_index == -1) {
         return TIG_ERR_IO;
     }
@@ -1074,8 +1081,9 @@ int sub_502E00(tig_art_id_t art_id)
     return TIG_OK;
 }
 
+// Reads the original palette color at a frame pixel, accounting for mirroring.
 // 0x502E50
-int sub_502E50(tig_art_id_t art_id, int x, int y, unsigned int* color_ptr)
+int tig_art_pixel_color_get(tig_art_id_t art_id, int x, int y, unsigned int* color_ptr)
 {
     TigArtCacheEntry* cache_entry;
     int cache_entry_index;
@@ -1085,7 +1093,7 @@ int sub_502E50(tig_art_id_t art_id, int x, int y, unsigned int* color_ptr)
     int palette;
     uint8_t byte;
 
-    cache_entry_index = sub_51AA90(art_id);
+    cache_entry_index = tig_art_cache_entry_get_or_load(art_id);
     if (cache_entry_index == -1) {
         return TIG_ERR_IO;
     }
@@ -1119,8 +1127,9 @@ int sub_502E50(tig_art_id_t art_id, int x, int y, unsigned int* color_ptr)
     return TIG_OK;
 }
 
+// Returns TIG_OK for pixel indices at least two; lower indices fail the hit test.
 // 0x502FD0
-int sub_502FD0(tig_art_id_t art_id, int x, int y)
+int tig_art_pixel_hit_test(tig_art_id_t art_id, int x, int y)
 {
     int cache_entry_index;
     int rotation;
@@ -1128,7 +1137,7 @@ int sub_502FD0(tig_art_id_t art_id, int x, int y)
     int type;
     int index;
 
-    cache_entry_index = sub_51AA90(art_id);
+    cache_entry_index = tig_art_cache_entry_get_or_load(art_id);
     if (cache_entry_index == -1) {
         return TIG_ERR_IO;
     }
@@ -1163,7 +1172,7 @@ int tig_art_anim_data(tig_art_id_t art_id, TigArtAnimData* data)
     TigArtCacheEntry* cache_entry;
     int palette;
 
-    cache_entry_index = sub_51AA90(art_id);
+    cache_entry_index = tig_art_cache_entry_get_or_load(art_id);
     if (cache_entry_index == -1) {
         return TIG_ERR_GENERIC;
     }
@@ -1203,7 +1212,7 @@ int tig_art_frame_data(tig_art_id_t art_id, TigArtFrameData* data)
     bool mirrored;
     int type;
 
-    cache_entry_index = sub_51AA90(art_id);
+    cache_entry_index = tig_art_cache_entry_get_or_load(art_id);
     if (cache_entry_index == -1) {
         return TIG_ERR_GENERIC;
     }
@@ -1257,7 +1266,7 @@ int tig_art_frame_data(tig_art_id_t art_id, TigArtFrameData* data)
 }
 
 // 0x503340
-int sub_503340(tig_art_id_t art_id, uint8_t* dst, int pitch)
+int tig_art_frame_pixels_copy_legacy(tig_art_id_t art_id, uint8_t* dst, int pitch)
 {
     int cache_entry_index;
     int rotation;
@@ -1266,7 +1275,7 @@ int sub_503340(tig_art_id_t art_id, uint8_t* dst, int pitch)
     int width;
     int height;
 
-    cache_entry_index = sub_51AA90(art_id);
+    cache_entry_index = tig_art_cache_entry_get_or_load(art_id);
     if (cache_entry_index == -1) {
         return TIG_ERR_IO;
     }
@@ -1287,7 +1296,7 @@ int sub_503340(tig_art_id_t art_id, uint8_t* dst, int pitch)
 }
 
 // 0x5033E0
-int sub_5033E0(tig_art_id_t art_id, int a2, int a3)
+int tig_art_frames_for_displacement_get(tig_art_id_t art_id, int a2, int a3)
 {
     int cache_entry_index;
     int rotation;
@@ -1300,7 +1309,7 @@ int sub_5033E0(tig_art_id_t art_id, int a2, int a3)
     int v3;
     int v4;
 
-    cache_entry_index = sub_51AA90(art_id);
+    cache_entry_index = tig_art_cache_entry_get_or_load(art_id);
     if (cache_entry_index == -1) {
         return 0;
     }
@@ -1383,7 +1392,7 @@ int tig_art_size(tig_art_id_t art_id, int* width_ptr, int* height_ptr)
     int width = 0;
     int height = 0;
 
-    cache_entry_index = sub_51AA90(art_id);
+    cache_entry_index = tig_art_cache_entry_get_or_load(art_id);
     if (cache_entry_index == -1) {
         return TIG_ERR_GENERIC;
     }
@@ -1445,8 +1454,8 @@ int tig_art_tile_id_create(unsigned int num1, unsigned int num2, unsigned int a3
         | ((flippable2 & 1) << TILE_ID_FLIPPABLE2_SHIFT)
         | ((a8 & 3) << 4);
 
-    *art_id_ptr = sub_503740(*art_id_ptr, a3);
-    *art_id_ptr = sub_503800(*art_id_ptr, a4);
+    *art_id_ptr = tig_art_tile_id_transition_mask_set(*art_id_ptr, a3);
+    *art_id_ptr = tig_art_tile_id_variant_set(*art_id_ptr, a4);
 
     return TIG_OK;
 }
@@ -1475,7 +1484,7 @@ int tig_art_tile_id_num2_get(tig_art_id_t art_id)
 }
 
 // 0x503700
-int sub_503700(tig_art_id_t art_id)
+int tig_art_tile_id_transition_mask_get(tig_art_id_t art_id)
 {
     if (tig_art_type(art_id) != TIG_ART_TYPE_TILE) {
         return 0;
@@ -1489,7 +1498,7 @@ int sub_503700(tig_art_id_t art_id)
 }
 
 // 0x503740
-tig_art_id_t sub_503740(tig_art_id_t art_id, int value)
+tig_art_id_t tig_art_tile_id_transition_mask_set(tig_art_id_t art_id, int value)
 {
     if (tig_art_type(art_id) != TIG_ART_TYPE_TILE) {
         return art_id;
@@ -1512,15 +1521,16 @@ tig_art_id_t sub_503740(tig_art_id_t art_id, int value)
     return art_id;
 }
 
+// Reads the tile variant including the mirrored variant bank when applicable.
 // 0x5037B0
-int sub_5037B0(tig_art_id_t art_id)
+int tig_art_tile_id_variant_get(tig_art_id_t art_id)
 {
     if (tig_art_type(art_id) != TIG_ART_TYPE_TILE) {
         return 0;
     }
 
     int v1 = (art_id >> 9) & 7;
-    int v2 = sub_503700(art_id);
+    int v2 = tig_art_tile_id_transition_mask_get(art_id);
     if (dword_5BE8C0[v2] == dword_5BE880[v2]) {
         if ((tig_art_id_flags_get(art_id) & 1) != 0) {
             v1 += 8;
@@ -1529,8 +1539,9 @@ int sub_5037B0(tig_art_id_t art_id)
     return v1;
 }
 
+// Writes the tile variant and its associated mirroring flag.
 // 0x503800
-tig_art_id_t sub_503800(tig_art_id_t art_id, int value)
+tig_art_id_t tig_art_tile_id_variant_set(tig_art_id_t art_id, int value)
 {
     int v1;
 
@@ -1543,7 +1554,7 @@ tig_art_id_t sub_503800(tig_art_id_t art_id, int value)
         value = 0;
     }
 
-    v1 = sub_503700(art_id);
+    v1 = tig_art_tile_id_transition_mask_get(art_id);
     if (value < 8) {
         if (dword_5BE8C0[v1] == dword_5BE880[v1]) {
             art_id = tig_art_id_flags_set(art_id, tig_art_id_flags_get(art_id) & ~1);
@@ -1884,7 +1895,7 @@ int tig_art_monster_id_specie_get(tig_art_id_t art_id)
 }
 
 // 0x503F50
-int sub_503F50(int a1)
+int tig_art_critter_body_type_property_get(int a1)
 {
     return dword_5BE900[a1];
 }
@@ -2114,7 +2125,7 @@ int tig_art_interface_id_create(unsigned int num, unsigned int frame, unsigned c
 }
 
 // 0x504390
-int sub_504390(tig_art_id_t art_id)
+int tig_art_interface_special_flag_get(tig_art_id_t art_id)
 {
     if (tig_art_type(art_id) == TIG_ART_TYPE_INTERFACE) {
         return (art_id >> 7) & 1;
@@ -2149,7 +2160,7 @@ int tig_art_item_id_create(int num, int disposition, int damaged, int destroyed,
         | destroyed;
 
     // NOTE: Signed compare.
-    if ((int)num >= (int)sub_502830(*art_id_ptr)) {
+    if ((int)num >= (int)tig_art_item_subtype_limit_get(*art_id_ptr)) {
         return TIG_ERR_INVALID_PARAM;
     }
 
@@ -2303,9 +2314,9 @@ int tig_art_light_id_create(unsigned int num, unsigned int frame, unsigned int r
 }
 
 // 0x504700
-int sub_504700(tig_art_id_t art_id)
+int tig_art_light_id_rotation_get(tig_art_id_t art_id)
 {
-    if (sub_504790(art_id) != 0) {
+    if (tig_art_light_id_has_extended_rotation(art_id) != 0) {
         return (art_id >> 4) & 0x1F;
     } else {
         return tig_art_id_rotation_get(art_id);
@@ -2313,9 +2324,9 @@ int sub_504700(tig_art_id_t art_id)
 }
 
 // 0x504730
-tig_art_id_t sub_504730(tig_art_id_t art_id, int rotation)
+tig_art_id_t tig_art_light_id_rotation_set(tig_art_id_t art_id, int rotation)
 {
-    if (!sub_504790(art_id)) {
+    if (!tig_art_light_id_has_extended_rotation(art_id)) {
         return tig_art_id_rotation_set(art_id, rotation);
     }
 
@@ -2331,7 +2342,7 @@ tig_art_id_t sub_504730(tig_art_id_t art_id, int rotation)
 }
 
 // 0x504790
-int sub_504790(tig_art_id_t art_id)
+int tig_art_light_id_has_extended_rotation(tig_art_id_t art_id)
 {
     if (tig_art_type(art_id) == TIG_ART_TYPE_LIGHT) {
         return art_id & 1;
@@ -2639,11 +2650,11 @@ int tig_art_id_flags_get(tig_art_id_t art_id)
 }
 
 // 0x505000
-void sub_505000(tig_art_id_t art_id, TigPalette* src_palette, TigPalette* dst_palette)
+void tig_art_palette_adjust_or_copy(tig_art_id_t art_id, TigPalette* src_palette, TigPalette* dst_palette)
 {
     TigPaletteModifyInfo modify_info;
 
-    if (dword_604744 != NULL && dword_604744(art_id, &modify_info)) {
+    if (tig_art_palette_adjust_callback != NULL && tig_art_palette_adjust_callback(art_id, &modify_info)) {
         modify_info.src_palette = src_palette;
         modify_info.dst_palette = dst_palette;
         tig_palette_modify(&modify_info);
@@ -2653,7 +2664,18 @@ void sub_505000(tig_art_id_t art_id, TigPalette* src_palette, TigPalette* dst_pa
 }
 
 // 0x505060
+static int art_get_video_buffer_impl(int cache_entry_index, tig_art_id_t art_id, TigVideoBuffer** video_buffer_ptr);
 int art_get_video_buffer(int cache_entry_index, tig_art_id_t art_id, TigVideoBuffer** video_buffer_ptr)
+{
+    Uint64 start = tig_performance_begin();
+    char resource[TIG_MAX_PATH];
+    if (start != 0) SDL_strlcpy(resource, tig_art_cache_entries[cache_entry_index].path, sizeof(resource));
+    int rc = art_get_video_buffer_impl(cache_entry_index, art_id, video_buffer_ptr);
+    tig_performance_end_detail(TIG_PERF_ART_PREPARE, start, start != 0 ? resource : NULL);
+    return rc;
+}
+
+static int art_get_video_buffer_impl(int cache_entry_index, tig_art_id_t art_id, TigVideoBuffer** video_buffer_ptr)
 {
     TigVideoBufferCreateInfo vb_create_info;
     TigArtBlitInfo art_blit_info;
@@ -2674,7 +2696,7 @@ int art_get_video_buffer(int cache_entry_index, tig_art_id_t art_id, TigVideoBuf
         }
         break;
     case TIG_ART_TYPE_INTERFACE:
-        if (sub_504390(art_id) == 0) {
+        if (tig_art_interface_special_flag_get(art_id) == 0) {
             return TIG_ERR_GENERIC;
         }
         break;
@@ -2684,7 +2706,7 @@ int art_get_video_buffer(int cache_entry_index, tig_art_id_t art_id, TigVideoBuf
         if (!tig_art_hardware_accelerated) {
             return TIG_ERR_GENERIC;
         }
-        if (sub_504790(art_id) == 0) {
+        if (tig_art_light_id_has_extended_rotation(art_id) == 0) {
             return TIG_ERR_GENERIC;
         }
         break;
@@ -2760,7 +2782,7 @@ int art_get_video_buffer(int cache_entry_index, tig_art_id_t art_id, TigVideoBuf
                 art_blit_info.dst_video_buffer = tig_art_cache_entries[cache_entry_index].video_buffers[palette][rotation][frame];
 
                 if (tig_art_hardware_accelerated) {
-                    rc = sub_5059F0(cache_entry_index, &art_blit_info);
+                    rc = tig_art_frame_blit_software(cache_entry_index, &art_blit_info);
                 } else {
                     rc = art_blit(cache_entry_index, &art_blit_info);
                 }
@@ -2778,7 +2800,7 @@ int art_get_video_buffer(int cache_entry_index, tig_art_id_t art_id, TigVideoBuf
                 art_blit_info.dst_video_buffer = tig_art_cache_entries[cache_entry_index].video_buffers[palette][rotation][frame];
 
                 if (tig_art_hardware_accelerated) {
-                    rc = sub_5059F0(cache_entry_index, &art_blit_info);
+                    rc = tig_art_frame_blit_software(cache_entry_index, &art_blit_info);
                 } else {
                     rc = art_blit(cache_entry_index, &art_blit_info);
                 }
@@ -2865,7 +2887,7 @@ int art_get_video_buffer(int cache_entry_index, tig_art_id_t art_id, TigVideoBuf
                 art_blit_info.dst_video_buffer = tig_art_cache_entries[cache_entry_index].video_buffers[palette][rotation][frame];
 
                 if (tig_art_hardware_accelerated) {
-                    rc = sub_5059F0(cache_entry_index, &art_blit_info);
+                    rc = tig_art_frame_blit_software(cache_entry_index, &art_blit_info);
                 } else {
                     rc = art_blit(cache_entry_index, &art_blit_info);
                 }
@@ -2893,7 +2915,7 @@ int art_get_video_buffer(int cache_entry_index, tig_art_id_t art_id, TigVideoBuf
 }
 
 // 0x505940
-int sub_505940(unsigned int art_blt_flags, unsigned int* vb_blt_flags_ptr)
+int tig_art_blit_flags_to_video_flags(unsigned int art_blt_flags, unsigned int* vb_blt_flags_ptr)
 {
     if ((art_blt_flags & 0x1802C) != 0) {
         return TIG_ERR_INVALID_PARAM;
@@ -2957,7 +2979,7 @@ int sub_505940(unsigned int art_blt_flags, unsigned int* vb_blt_flags_ptr)
 }
 
 // 0x5059F0
-int sub_5059F0(int cache_entry_index, TigArtBlitInfo* blit_info)
+int tig_art_frame_blit_software(int cache_entry_index, TigArtBlitInfo* blit_info)
 {
     TigVideoBufferData video_buffer_data;
     TigPalette* plt;
@@ -3033,7 +3055,18 @@ int sub_5059F0(int cache_entry_index, TigArtBlitInfo* blit_info)
 }
 
 // 0x505EB0
+static int art_blit_impl(int cache_entry_index, TigArtBlitInfo* blit_info);
 int art_blit(int cache_entry_index, TigArtBlitInfo* blit_info)
+{
+    Uint64 start = tig_performance_begin();
+    char resource[TIG_MAX_PATH];
+    if (start != 0) SDL_strlcpy(resource, tig_art_cache_entries[cache_entry_index].path, sizeof(resource));
+    int rc = art_blit_impl(cache_entry_index, blit_info);
+    tig_performance_end_detail(TIG_PERF_ART_BLIT, start, start != 0 ? resource : NULL);
+    return rc;
+}
+
+static int art_blit_impl(int cache_entry_index, TigArtBlitInfo* blit_info)
 {
     TigVideoBufferData video_buffer_data;
     TigArtCacheEntry* art;
@@ -5289,7 +5322,7 @@ int art_blit(int cache_entry_index, TigArtBlitInfo* blit_info)
 }
 
 // 0x51AA90
-int sub_51AA90(tig_art_id_t art_id)
+int tig_art_cache_entry_get_or_load(tig_art_id_t art_id)
 {
     char path[TIG_MAX_PATH];
     int cache_entry_index;
@@ -5298,10 +5331,10 @@ int sub_51AA90(tig_art_id_t art_id)
         return -1;
     }
 
-    if (dword_604714 < tig_art_cache_entries_length
-        && strcmp(path, tig_art_cache_entries[dword_604714].path) == 0) {
-        tig_art_cache_entries[dword_604714].time = tig_ping_timestamp;
-        return dword_604714;
+    if (tig_art_last_cache_entry_index < tig_art_cache_entries_length
+        && strcmp(path, tig_art_cache_entries[tig_art_last_cache_entry_index].path) == 0) {
+        tig_art_cache_entries[tig_art_last_cache_entry_index].time = tig_ping_timestamp;
+        return tig_art_last_cache_entry_index;
     }
 
     // Called twice to check both system and video memory.
@@ -5321,7 +5354,7 @@ int sub_51AA90(tig_art_id_t art_id)
 
     tig_art_cache_entries[cache_entry_index].time = tig_ping_timestamp;
     tig_art_cache_entries[cache_entry_index].art_id = art_id;
-    dword_604714 = cache_entry_index;
+    tig_art_last_cache_entry_index = cache_entry_index;
 
     return cache_entry_index;
 }
@@ -5345,6 +5378,7 @@ void tig_art_cache_check_fullness(void)
     art_size_t tgt;
     int index;
     int cnt;
+    Uint64 eviction_start;
 
     if (vid_vs_sys) {
         // NOTE: Signed compare.
@@ -5354,6 +5388,7 @@ void tig_art_cache_check_fullness(void)
         }
 
         tig_debug_printf("Art cache full (vid), making some room");
+        eviction_start = tig_performance_begin();
 
         // Calculate target size we'd like to evict.
         tgt = (art_size_t)((double)tig_art_total_video_memory * tig_art_cache_video_memory_fullness);
@@ -5379,6 +5414,7 @@ void tig_art_cache_check_fullness(void)
         }
 
         tig_debug_printf("Art cache full (sys), making some room");
+        eviction_start = tig_performance_begin();
 
         // Calculate target size we'd like to evict (30% of total system
         // memory).
@@ -5402,12 +5438,15 @@ void tig_art_cache_check_fullness(void)
     // NOTE: Signed compare.
     if (acc < tgt) {
         // We haven't reached eviction target, flush everything.
+        tig_performance_count(TIG_PERF_ART_EVICTIONS, tig_art_cache_entries_length);
         tig_art_flush();
+        tig_performance_end(TIG_PERF_ART_EVICTION, eviction_start);
         tig_debug_printf("...\n");
         return;
     }
 
     cnt = index + 1;
+    tig_performance_count(TIG_PERF_ART_EVICTIONS, cnt);
 
     // Free cache entries.
     for (; index >= 0; index--) {
@@ -5430,6 +5469,7 @@ void tig_art_cache_check_fullness(void)
 
     tig_debug_printf("...\n");
     vid_vs_sys = !vid_vs_sys;
+    tig_performance_end(TIG_PERF_ART_EVICTION, eviction_start);
 }
 
 // 0x51ADE0
@@ -5538,7 +5578,16 @@ bool tig_art_cache_find(const char* path, int* index)
 }
 
 // 0x51B170
+static bool tig_art_cache_entry_load_impl(tig_art_id_t art_id, const char* path, int cache_entry_index);
 bool tig_art_cache_entry_load(tig_art_id_t art_id, const char* path, int cache_entry_index)
+{
+    Uint64 start = tig_performance_begin();
+    bool loaded = tig_art_cache_entry_load_impl(art_id, path, cache_entry_index);
+    tig_performance_end_detail(TIG_PERF_ART_LOAD, start, path);
+    return loaded;
+}
+
+static bool tig_art_cache_entry_load_impl(tig_art_id_t art_id, const char* path, int cache_entry_index)
 {
     TigArtCacheEntry* art;
     int rc;
@@ -5566,7 +5615,7 @@ bool tig_art_cache_entry_load(tig_art_id_t art_id, const char* path, int cache_e
     memset(art, 0, sizeof(TigArtCacheEntry));
     strcpy(art->path, path);
 
-    rc = sub_51B710(art_id,
+    rc = tig_art_file_load(art_id,
         path,
         &(art->hdr),
         art->palette_tbl,
@@ -5638,7 +5687,7 @@ void tig_art_cache_entry_unload(int cache_entry_index)
     tig_art_available_system_memory += cache_entry->system_memory_usage;
     tig_art_available_video_memory += cache_entry->video_memory_usage;
 
-    sub_51B650(cache_entry_index);
+    tig_art_cache_video_buffers_free(cache_entry_index);
 
     type = tig_art_type(cache_entry->art_id);
 
@@ -5690,7 +5739,7 @@ void art_invalidate(int cache_entry_index)
 }
 
 // 0x51B650
-void sub_51B650(int cache_entry_index)
+void tig_art_cache_video_buffers_free(int cache_entry_index)
 {
     TigArtCacheEntry* art;
     int num_frames;
@@ -5721,7 +5770,7 @@ void sub_51B650(int cache_entry_index)
 }
 
 // 0x51B710
-int sub_51B710(tig_art_id_t art_id, const char* filename, TigArtHeader* hdr, TigPalette** palette_tbl, int a5, art_size_t* size_ptr)
+int tig_art_file_load(tig_art_id_t art_id, const char* filename, TigArtHeader* hdr, TigPalette** palette_tbl, int a5, art_size_t* size_ptr)
 {
     TigFile* stream;
     int rotation;
@@ -5734,6 +5783,8 @@ int sub_51B710(tig_art_id_t art_id, const char* filename, TigArtHeader* hdr, Tig
     int current_palette_index;
     void* current_palette;
     int num_rotations;
+    uint8_t* encoded = NULL;
+    size_t encoded_capacity = 0;
 
     // NOTE: Keep compiler happy.
     current_palette_index = 0;
@@ -5746,11 +5797,14 @@ int sub_51B710(tig_art_id_t art_id, const char* filename, TigArtHeader* hdr, Tig
         hdr->pixels_tbl[rotation] = NULL;
     }
 
+    Uint64 open_start = tig_performance_begin();
     stream = tig_file_fopen(filename, "rb");
+    tig_performance_end_detail(TIG_PERF_ART_FILE_OPEN, open_start, filename);
     if (stream == NULL) {
         return TIG_ERR_GENERIC;
     }
 
+    Uint64 metadata_start = tig_performance_begin();
     if (!art_read_header(hdr, stream)) {
         tig_file_fclose(stream);
         return TIG_ERR_GENERIC;
@@ -5780,7 +5834,7 @@ int sub_51B710(tig_art_id_t art_id, const char* filename, TigArtHeader* hdr, Tig
     for (palette = 0; palette < MAX_PALETTES; palette++) {
         if (saved_palette_tbl[palette] != NULL) {
             if (tig_file_fread(temp_palette_entries, sizeof(uint32_t), 256, stream) != 256) {
-                sub_51BE50(stream, hdr, palette_tbl);
+                art_load_failure_cleanup(stream, hdr, palette_tbl);
                 return TIG_ERR_GENERIC;
             }
 
@@ -5803,21 +5857,49 @@ int sub_51B710(tig_art_id_t art_id, const char* filename, TigArtHeader* hdr, Tig
                 }
             }
 
-            sub_505000(art_id, hdr->palette_tbl[palette], palette_tbl[palette]);
+            tig_art_palette_adjust_or_copy(art_id, hdr->palette_tbl[palette], palette_tbl[palette]);
         }
     }
 
-    num_rotations = sub_51BE30(hdr);
+    num_rotations = art_header_rotation_count(hdr);
+    int file_size = tig_file_filelength(stream);
+    if (file_size < 0 || hdr->num_frames <= 0
+        || (uint64_t)hdr->num_frames * num_rotations * sizeof(TigArtFileFrameData) > (uint64_t)file_size) {
+        art_load_failure_cleanup(stream, hdr, palette_tbl);
+        return TIG_ERR_GENERIC;
+    }
 
     for (rotation = 0; rotation < num_rotations; rotation++) {
         hdr->frames_tbl[rotation] = (TigArtFileFrameData*)MALLOC(sizeof(TigArtFileFrameData) * hdr->num_frames);
         *size_ptr += sizeof(TigArtFileFrameData) * hdr->num_frames;
 
         if (tig_file_fread(hdr->frames_tbl[rotation], sizeof(TigArtFileFrameData), hdr->num_frames, stream) != (size_t)hdr->num_frames) {
-            sub_51BE50(stream, hdr, palette_tbl);
+            art_load_failure_cleanup(stream, hdr, palette_tbl);
             return TIG_ERR_GENERIC;
         }
     }
+
+    tig_performance_end_detail(TIG_PERF_ART_METADATA, metadata_start, filename);
+    Uint64 pixels_start = tig_performance_begin();
+
+    // Bound all output sizes and reuse one encoded-frame buffer for this load.
+    // Small per-packet reads are especially costly through compressed DAT streams.
+    for (rotation = 0; rotation < num_rotations; rotation++) {
+        int64_t total = 0;
+        for (frame = 0; frame < hdr->num_frames; frame++) {
+            const TigArtFileFrameData* data = &hdr->frames_tbl[rotation][frame];
+            int64_t pixels = (int64_t)data->width * data->height;
+            if (data->width < 0 || data->height < 0 || pixels > INT_MAX
+                || data->data_size < 0 || data->data_size > file_size || total + pixels > INT_MAX) {
+                art_load_failure_cleanup(stream, hdr, palette_tbl);
+                return TIG_ERR_GENERIC;
+            }
+            total += pixels;
+            if (data->data_size != pixels && (size_t)data->data_size > encoded_capacity)
+                encoded_capacity = data->data_size;
+        }
+    }
+    if (encoded_capacity != 0) encoded = MALLOC(encoded_capacity);
 
     for (index = 0; index < num_rotations; index++) {
         uint8_t* bytes;
@@ -5842,44 +5924,28 @@ int sub_51B710(tig_art_id_t art_id, const char* filename, TigArtHeader* hdr, Tig
             if (hdr->frames_tbl[index][frame].data_size == hdr->frames_tbl[index][frame].width * hdr->frames_tbl[index][frame].height) {
                 // Pixels are not compressed, read everything in one go.
                 if (tig_file_fread(bytes, 1, hdr->frames_tbl[index][frame].data_size, stream) != (size_t)hdr->frames_tbl[index][frame].data_size) {
-                    sub_51BE50(stream, hdr, palette_tbl);
+                    FREE(encoded);
+                    art_load_failure_cleanup(stream, hdr, palette_tbl);
                     return TIG_ERR_GENERIC;
                 }
                 bytes += hdr->frames_tbl[index][frame].data_size;
             } else if (hdr->frames_tbl[index][frame].data_size > 0) {
-                // Pixels are RLE-encoded.
-                uint8_t value;
-                uint8_t color;
-                int len;
-                int cnt = 0;
-
-                while (cnt < hdr->frames_tbl[index][frame].data_size) {
-                    if (tig_file_fread(&value, 1, 1, stream) != 1) {
-                        sub_51BE50(stream, hdr, palette_tbl);
-                        return TIG_ERR_GENERIC;
-                    }
-
-                    len = value & 0x7F;
-                    if ((value & 0x80) != 0) {
-                        if (tig_file_fread(bytes, 1, len, stream) != (size_t)len) {
-                            sub_51BE50(stream, hdr, palette_tbl);
-                            return TIG_ERR_GENERIC;
-                        }
-                        cnt += 1 + len;
-                    } else {
-                        if (tig_file_fread(&color, 1, 1, stream) != 1) {
-                            sub_51BE50(stream, hdr, palette_tbl);
-                            return TIG_ERR_GENERIC;
-                        }
-
-                        memset(bytes, color, len);
-                        cnt += 2;
-                    }
-                    bytes += len;
+                // One stream read per compressed frame; decode packets in RAM.
+                size_t compressed_size = hdr->frames_tbl[index][frame].data_size;
+                size_t pixel_size = (size_t)hdr->frames_tbl[index][frame].width * hdr->frames_tbl[index][frame].height;
+                if (tig_file_fread(encoded, 1, compressed_size, stream) != compressed_size
+                    || !tig_art_decode_rle(encoded, compressed_size, bytes, pixel_size)) {
+                    FREE(encoded);
+                    art_load_failure_cleanup(stream, hdr, palette_tbl);
+                    return TIG_ERR_GENERIC;
                 }
+                bytes += pixel_size;
             }
         }
     }
+
+    FREE(encoded);
+    tig_performance_end_detail(TIG_PERF_ART_PIXELS, pixels_start, filename);
 
     while (index < MAX_ROTATIONS) {
         hdr->frames_tbl[index] = hdr->frames_tbl[0];
@@ -5910,14 +5976,16 @@ int sub_51B710(tig_art_id_t art_id, const char* filename, TigArtHeader* hdr, Tig
     return TIG_OK;
 }
 
+// Returns one or eight stored rotations according to the header flag.
 // 0x51BE30
-int sub_51BE30(TigArtHeader* hdr)
+int art_header_rotation_count(TigArtHeader* hdr)
 {
     return (hdr->flags & TIG_ART_0x01) != 0 ? 1 : MAX_ROTATIONS;
 }
 
+// Closes the stream and frees frame, pixel and palette allocations after loading failure.
 // 0x51BE50
-void sub_51BE50(TigFile* stream, TigArtHeader* hdr, TigPalette** palette_tbl)
+void art_load_failure_cleanup(TigFile* stream, TigArtHeader* hdr, TigPalette** palette_tbl)
 {
     int palette;
 
@@ -5925,7 +5993,7 @@ void sub_51BE50(TigFile* stream, TigArtHeader* hdr, TigPalette** palette_tbl)
         tig_file_fclose(stream);
     }
 
-    sub_51BF20(hdr);
+    art_header_frame_data_free(hdr);
 
     for (palette = 0; palette < MAX_PALETTES; ++palette) {
         if (hdr->palette_tbl[palette] != NULL) {
@@ -5938,13 +6006,14 @@ void sub_51BE50(TigFile* stream, TigArtHeader* hdr, TigPalette** palette_tbl)
     }
 }
 
+// Frees per-rotation frame and pixel arrays without clearing their pointers.
 // 0x51BF20
-void sub_51BF20(TigArtHeader* hdr)
+void art_header_frame_data_free(TigArtHeader* hdr)
 {
     int num_rotations;
     int rotation;
 
-    num_rotations = sub_51BE30(hdr);
+    num_rotations = art_header_rotation_count(hdr);
     for (rotation = 0; rotation < num_rotations; rotation++) {
         if (hdr->pixels_tbl[rotation] != NULL) {
             FREE(hdr->pixels_tbl[rotation]);

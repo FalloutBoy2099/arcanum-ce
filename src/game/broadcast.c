@@ -22,7 +22,7 @@ static bool broadcast_execute_follower_order(int64_t pc_obj, int64_t candidate_o
     BroadcastCommandType cmd, int64_t loc, int64_t target_obj);
 static int broadcast_match_str_to_base_type(const char* str);
 static int broadcast_match_str_to_cmd_type(const char* str);
-static void sub_4C3B90(void);
+static void broadcast_follower_shortcut_labels_load(void);
 
 // 0x5FDC4C
 static char* broadcast_cmd_type_lookup[BROADCAST_CMD_TYPE_COUNT];
@@ -106,7 +106,7 @@ bool broadcast_init(GameInitInfo* init_info)
         tig_debug_printf("broadcast_init: ERROR: couldn't unload message file: bcRuleMessID!\n");
     }
 
-    sub_4C3B90();
+    broadcast_follower_shortcut_labels_load();
 
     if (!text_filter_init()) {
         return false;
@@ -207,7 +207,7 @@ static bool broadcast_execute_follower_order(int64_t pc_obj, int64_t candidate_o
         return moved;
     }
     case BROADCAST_CMD_TYPE_ATTACK:
-        sub_4AA580(candidate_obj);
+        ai_group_attacks_enable(candidate_obj);
         ai_attack(candidate_obj, target_obj, LOUDNESS_LOUD, 0x4);
         return true;
     default:
@@ -220,7 +220,7 @@ static bool broadcast_execute_follower_order(int64_t pc_obj, int64_t candidate_o
     }
     switch (cmd) {
     case BROADCAST_CMD_TYPE_WAIT:
-        sub_424070(candidate_obj, PRIORITY_3, false, true);
+        anim_object_interrupt_by_priority(candidate_obj, PRIORITY_3, false, true);
         ai_npc_wait(candidate_obj);
         break;
     case BROADCAST_CMD_TYPE_STAY_CLOSE:
@@ -361,7 +361,7 @@ void broadcast_msg_client(int64_t pc_obj, Broadcast* bcast)
                     break;
                 case BROADCAST_CMD_TYPE_FOLLOW: {
                     bool force = (obj_field_int32_get(candidate_obj, OBJ_F_NPC_FLAGS) & ONF_FORCED_FOLLOWER) != 0;
-                    AiFollow reason = ai_check_follow(candidate_obj, pc_obj, force);
+                    AiFollowResult reason = ai_check_follow(candidate_obj, pc_obj, force);
                     if (broadcast_float_line_func != NULL) {
                         if (reason == AI_FOLLOW_OK) {
                             dialog_copy_npc_order_ok_msg(candidate_obj, pc_obj, str, &speech_id);
@@ -549,7 +549,7 @@ int broadcast_match_str_to_cmd_type(const char* str)
 }
 
 // 0x4C3B90
-void sub_4C3B90(void)
+void broadcast_follower_shortcut_labels_load(void)
 {
     int index;
     MesFileEntry mes_file_entry;
@@ -562,7 +562,7 @@ void sub_4C3B90(void)
 }
 
 // 0x4C3BE0
-void sub_4C3BE0(unsigned int a1, int64_t loc)
+void broadcast_follower_shortcut_execute(unsigned int a1, int64_t loc)
 {
     BroadcastCommandType command = broadcast_follower_shortcut_command(a1);
     int64_t pc_obj = player_get_local_pc_obj();

@@ -4,10 +4,10 @@
 static UiCallbacks ui_callbacks;
 
 // 0x5E87C8
-static TigIdxTable stru_5E87C8;
+static TigIdxTable ui_pending_messages;
 
 // 0x5E87D8
-static int dword_5E87D8;
+static int ui_next_message_id;
 
 // 0x45FD40
 void ui_init(UiCallbacks* callbacks)
@@ -16,13 +16,13 @@ void ui_init(UiCallbacks* callbacks)
         ui_callbacks = *callbacks;
     }
 
-    tig_idxtable_init(&stru_5E87C8, sizeof(UiMessage));
+    tig_idxtable_init(&ui_pending_messages, sizeof(UiMessage));
 }
 
 // 0x460150
 void ui_exit(void)
 {
-    tig_idxtable_exit(&stru_5E87C8);
+    tig_idxtable_exit(&ui_pending_messages);
 }
 
 // 0x460160
@@ -34,7 +34,7 @@ bool ui_timeevent_process(TimeEvent* timeevent)
         tig_debug_printf("UI: Unknown type of timeevent passed to ui_timeevent_process (%d).\n",
             timeevent->params[0].integer_value);
     } else {
-        tig_idxtable_get(&stru_5E87C8, timeevent->params[1].integer_value, &ui_message);
+        tig_idxtable_get(&ui_pending_messages, timeevent->params[1].integer_value, &ui_message);
         ui_display_msg(&ui_message);
         FREE(ui_message.str);
     }
@@ -43,18 +43,18 @@ bool ui_timeevent_process(TimeEvent* timeevent)
 }
 
 // 0x4601C0
-void sub_4601C0(void)
+void ui_character_panels_refresh(void)
 {
-    if (ui_callbacks.field_0 != NULL) {
-        ui_callbacks.field_0();
+    if (ui_callbacks.character_panels_refresh != NULL) {
+        ui_callbacks.character_panels_refresh();
     }
 }
 
 // 0x4601D0
-void sub_4601D0(int64_t obj)
+void ui_object_destroyed_notify(int64_t obj)
 {
-    if (ui_callbacks.field_4 != NULL) {
-        ui_callbacks.field_4(obj);
+    if (ui_callbacks.object_destroyed_notify != NULL) {
+        ui_callbacks.object_destroyed_notify(obj);
     }
 }
 
@@ -83,10 +83,10 @@ void ui_refresh_fatigue_bar(int64_t obj)
 }
 
 // 0x460280
-void sub_460280(int64_t obj)
+void ui_selected_object_set(int64_t obj)
 {
-    if (ui_callbacks.field_18 != NULL) {
-        ui_callbacks.field_18(obj);
+    if (ui_callbacks.selected_object_set != NULL) {
+        ui_callbacks.selected_object_set(obj);
     }
 }
 
@@ -155,10 +155,10 @@ void ui_set_skill_training(int64_t obj, int skill, int training)
 }
 
 // 0x460410
-void sub_460410(int64_t a1, int64_t a2)
+void ui_dialog_script_and_greeting(int64_t a1, int64_t a2)
 {
-    if (ui_callbacks.field_3C != NULL) {
-        ui_callbacks.field_3C(a1, a2);
+    if (ui_callbacks.dialog_script_and_greeting != NULL) {
+        ui_callbacks.dialog_script_and_greeting(a1, a2);
     }
 }
 
@@ -207,10 +207,10 @@ void ui_spell_maintain_refresh(void)
 }
 
 // 0x4604F0
-void sub_4604F0(int64_t a1, int64_t a2)
+void ui_object_examine_and_select(int64_t a1, int64_t a2)
 {
-    if (ui_callbacks.field_58 != NULL) {
-        ui_callbacks.field_58(a1, a2);
+    if (ui_callbacks.object_examine_and_select != NULL) {
+        ui_callbacks.object_examine_and_select(a1, a2);
     }
 }
 
@@ -231,52 +231,52 @@ void ui_end_game(void)
 }
 
 // 0x460540
-void sub_460540(int a1)
+void ui_hotkey_slot_clear(int a1)
 {
-    if (ui_callbacks.field_64 != NULL) {
-        ui_callbacks.field_64(a1);
+    if (ui_callbacks.hotkey_slot_clear != NULL) {
+        ui_callbacks.hotkey_slot_clear(a1);
     }
 }
 
 // 0x460560
-void sub_460560(int64_t a1, int64_t a2, int a3)
+void ui_item_location_assign(int64_t a1, int64_t a2, int a3)
 {
-    if (ui_callbacks.field_68 != NULL) {
-        ui_callbacks.field_68(a1, a2, a3);
+    if (ui_callbacks.item_location_assign != NULL) {
+        ui_callbacks.item_location_assign(a1, a2, a3);
     }
 }
 
 // 0x460590
-int sub_460590(int64_t a1, int a2)
+int ui_item_hotkey_bind(int64_t a1, int a2)
 {
-    if (ui_callbacks.field_6C != NULL) {
-        return ui_callbacks.field_6C(a1, a2);
+    if (ui_callbacks.item_hotkey_bind != NULL) {
+        return ui_callbacks.item_hotkey_bind(a1, a2);
     } else {
         return 0;
     }
 }
 
 // 0x4605C0
-void sub_4605C0(void)
+void ui_targeting_reset(void)
 {
-    if (ui_callbacks.field_70 != NULL) {
-        ui_callbacks.field_70();
+    if (ui_callbacks.targeting_reset != NULL) {
+        ui_callbacks.targeting_reset();
     }
 }
 
 // 0x4605D0
-void sub_4605D0(void)
+void ui_counters_refresh(void)
 {
-    if (ui_callbacks.field_74 != NULL) {
-        ui_callbacks.field_74();
+    if (ui_callbacks.counters_refresh != NULL) {
+        ui_callbacks.counters_refresh();
     }
 }
 
 // 0x4605E0
-void sub_4605E0(int64_t a1, void* a2, int a3)
+void ui_spell_apply(int64_t a1, void* a2, int a3)
 {
-    if (ui_callbacks.field_78 != NULL) {
-        ui_callbacks.field_78(a1, a2, a3);
+    if (ui_callbacks.spell_apply != NULL) {
+        ui_callbacks.spell_apply(a1, a2, a3);
     }
 }
 
@@ -297,36 +297,36 @@ void ui_display_msg(UiMessage* ui_message)
 }
 
 // 0x460650
-void sub_460650(UiMessage* ui_message, unsigned int milliseconds)
+void ui_message_schedule_delayed(UiMessage* ui_message, unsigned int milliseconds)
 {
     int id;
 
     DateTime datetime;
     TimeEvent timeevent;
 
-    id = dword_5E87D8++;
+    id = ui_next_message_id++;
     ui_message->str = STRDUP(ui_message->str);
     timeevent.type = TIMEEVENT_TYPE_UI;
     timeevent.params[0].integer_value = 0;
     timeevent.params[1].integer_value = id;
-    sub_45A950(&datetime, milliseconds);
-    tig_idxtable_set(&stru_5E87C8, id, ui_message);
+    datetime_init(&datetime, milliseconds);
+    tig_idxtable_set(&ui_pending_messages, id, ui_message);
     timeevent_add_delay(&timeevent, &datetime);
 }
 
 // 0x4606C0
-void sub_4606C0(int a1)
+void ui_numbered_feedback_display(int a1)
 {
-    if (ui_callbacks.field_84 != NULL) {
-        ui_callbacks.field_84(a1);
+    if (ui_callbacks.numbered_feedback_display != NULL) {
+        ui_callbacks.numbered_feedback_display(a1);
     }
 }
 
 // 0x4606E0
-void sub_4606E0(void)
+void ui_mainmenu_request(void)
 {
-    if (ui_callbacks.field_88 != NULL) {
-        ui_callbacks.field_88();
+    if (ui_callbacks.mainmenu_request != NULL) {
+        ui_callbacks.mainmenu_request();
     }
 }
 
@@ -467,26 +467,26 @@ void ui_schematic_feedback(bool success, int64_t primary_obj, int64_t secondary_
 }
 
 // 0x460930
-void sub_460930(int64_t a1, int64_t a2)
+void ui_character_sheet_open(int64_t a1, int64_t a2)
 {
-    if (ui_callbacks.field_D0 != NULL) {
-        ui_callbacks.field_D0(a1, a2);
+    if (ui_callbacks.character_sheet_open != NULL) {
+        ui_callbacks.character_sheet_open(a1, a2);
     }
 }
 
 // 0x460960
-void sub_460960(Packet81* pkt)
+void ui_item_transaction_process(InventoryTransactionPacket* pkt)
 {
-    if (ui_callbacks.field_D4 != NULL) {
-        ui_callbacks.field_D4(pkt);
+    if (ui_callbacks.item_transaction_process != NULL) {
+        ui_callbacks.item_transaction_process(pkt);
     }
 }
 
 // 0x460980
-void sub_460980(int64_t a1)
+void ui_inventory_drag_begin(int64_t a1)
 {
-    if (ui_callbacks.field_D8 != NULL) {
-        ui_callbacks.field_D8(a1);
+    if (ui_callbacks.inventory_drag_begin != NULL) {
+        ui_callbacks.inventory_drag_begin(a1);
     }
 }
 
@@ -515,7 +515,7 @@ void ui_end_dialog(int64_t pc_obj, int a3)
 }
 
 // 0x460AB0
-void sub_460AB0(int a1, int a2, void* a3)
+void ui_optional_event_dispatch(int a1, int a2, void* a3)
 {
     if (ui_callbacks.field_F8 != NULL) {
         ui_callbacks.field_F8(a1, a2, a3);
@@ -523,10 +523,10 @@ void sub_460AB0(int a1, int a2, void* a3)
 }
 
 // 0x460AD0
-void sub_460AD0(int a1)
+void ui_mainmenu_return(int a1)
 {
-    if (ui_callbacks.field_FC != NULL) {
-        ui_callbacks.field_FC(a1);
+    if (ui_callbacks.mainmenu_return != NULL) {
+        ui_callbacks.mainmenu_return(a1);
     }
 }
 
@@ -539,20 +539,20 @@ void ui_refresh_cursor(void)
 }
 
 // 0x460B00
-int sub_460B00(int a1, TargetDescriptor* td)
+int ui_target_skill_resolve(int a1, TargetDescriptor* td)
 {
-    if (ui_callbacks.field_104 != NULL) {
-        return ui_callbacks.field_104(a1, td);
+    if (ui_callbacks.target_skill_resolve != NULL) {
+        return ui_callbacks.target_skill_resolve(a1, td);
     } else {
         return 0;
     }
 }
 
 // 0x460B20
-void sub_460B20(void)
+void ui_inventory_drag_cancel(void)
 {
-    if (ui_callbacks.field_108 != NULL) {
-        ui_callbacks.field_108();
+    if (ui_callbacks.inventory_drag_cancel != NULL) {
+        ui_callbacks.inventory_drag_cancel();
     }
 }
 
@@ -567,10 +567,10 @@ bool ui_wmap_rnd_timeevent_process(TimeEvent* timeevent)
 }
 
 // 0x460B50
-void sub_460B50(int64_t a1, int64_t a2)
+void ui_schematic_open_request(int64_t a1, int64_t a2)
 {
-    if (ui_callbacks.field_110 != NULL) {
-        ui_callbacks.field_110(a1, a2);
+    if (ui_callbacks.schematic_open_request != NULL) {
+        ui_callbacks.schematic_open_request(a1, a2);
     }
 }
 
@@ -593,30 +593,30 @@ bool ui_gameuilib_mod_load(void)
 }
 
 // 0x460BB0
-int sub_460BB0(void)
+int ui_multiplayer_confirmation_1902(void)
 {
-    if (ui_callbacks.field_11C != NULL) {
-        return ui_callbacks.field_11C();
+    if (ui_callbacks.multiplayer_confirmation_1902 != NULL) {
+        return ui_callbacks.multiplayer_confirmation_1902();
     } else {
         return 0;
     }
 }
 
 // 0x460BC0
-int sub_460BC0(void)
+int ui_multiplayer_confirmation_1903(void)
 {
-    if (ui_callbacks.field_120 != NULL) {
-        return ui_callbacks.field_120();
+    if (ui_callbacks.multiplayer_confirmation_1903 != NULL) {
+        return ui_callbacks.multiplayer_confirmation_1903();
     } else {
         return 0;
     }
 }
 
 // 0x460BE0
-int sub_460BE0(const char* a1, const char* a2)
+int ui_multiplayer_named_confirmation(const char* a1, const char* a2)
 {
-    if (ui_callbacks.field_124 != NULL) {
-        return ui_callbacks.field_124(a1, a2);
+    if (ui_callbacks.multiplayer_named_confirmation != NULL) {
+        return ui_callbacks.multiplayer_named_confirmation(a1, a2);
     } else {
         return 0;
     }
@@ -631,48 +631,48 @@ void ui_schematic_info_get(int schematic, SchematicInfo* schematic_info)
 }
 
 // 0x460C20
-int64_t sub_460C20(void)
+int64_t ui_inventory_target_object_get(void)
 {
-    if (ui_callbacks.field_12C != NULL) {
-        return ui_callbacks.field_12C();
+    if (ui_callbacks.inventory_target_object_get != NULL) {
+        return ui_callbacks.inventory_target_object_get();
     } else {
         return OBJ_HANDLE_NULL;
     }
 }
 
 // 0x460C30
-void sub_460C30(int64_t a1)
+void ui_hovered_object_refresh(int64_t a1)
 {
-    if (ui_callbacks.field_130 != NULL) {
-        ui_callbacks.field_130(a1);
+    if (ui_callbacks.hovered_object_refresh != NULL) {
+        ui_callbacks.hovered_object_refresh(a1);
     }
 }
 
 // 0x460C50
-int sub_460C50(int64_t a1, int64_t a2, int a3)
+int ui_inventory_open_preconditions_check(int64_t a1, int64_t a2, int a3)
 {
-    if (ui_callbacks.field_134 != NULL) {
-        return ui_callbacks.field_134(a1, a2, a3);
+    if (ui_callbacks.inventory_open_preconditions_check != NULL) {
+        return ui_callbacks.inventory_open_preconditions_check(a1, a2, a3);
     } else {
         return 0;
     }
 }
 
 // 0x460C80
-int sub_460C80(int64_t a1, int64_t a2, int a3)
+int ui_inventory_game_mode_select(int64_t a1, int64_t a2, int a3)
 {
-    if (ui_callbacks.field_138 != NULL) {
-        return ui_callbacks.field_138(a1, a2, a3);
+    if (ui_callbacks.inventory_game_mode_select != NULL) {
+        return ui_callbacks.inventory_game_mode_select(a1, a2, a3);
     } else {
         return 0;
     }
 }
 
 // 0x460CB0
-void sub_460CB0(int64_t a1, int64_t a2, int a3)
+void ui_inventory_target_prepare(int64_t a1, int64_t a2, int a3)
 {
-    if (ui_callbacks.field_13C != NULL) {
-        ui_callbacks.field_13C(a1, a2, a3);
+    if (ui_callbacks.inventory_target_prepare != NULL) {
+        ui_callbacks.inventory_target_prepare(a1, a2, a3);
     }
 }
 
@@ -687,7 +687,7 @@ bool ui_inven_create(int64_t pc_obj, int64_t target_obj, int mode)
 }
 
 // 0x460D10
-void sub_460D10(const char* a1)
+void ui_reserved_string_callback_144_dispatch(const char* a1)
 {
     if (ui_callbacks.field_144 != NULL) {
         ui_callbacks.field_144(a1);
@@ -695,7 +695,7 @@ void sub_460D10(const char* a1)
 }
 
 // 0x460D30
-void sub_460D30(const char* a1)
+void ui_reserved_string_callback_148_dispatch(const char* a1)
 {
     if (ui_callbacks.field_148 != NULL) {
         ui_callbacks.field_148(a1);
@@ -703,7 +703,7 @@ void sub_460D30(const char* a1)
 }
 
 // 0x460D50
-void sub_460D50(const char* a1, const char* a2)
+void ui_reserved_string_pair_callback_14c_dispatch(const char* a1, const char* a2)
 {
     if (ui_callbacks.field_14C != NULL) {
         ui_callbacks.field_14C(a1, a2);
@@ -711,7 +711,7 @@ void sub_460D50(const char* a1, const char* a2)
 }
 
 // 0x460D70
-void sub_460D70(const char* a1, const char* a2)
+void ui_reserved_string_pair_callback_150_dispatch(const char* a1, const char* a2)
 {
     if (ui_callbacks.field_150 != NULL) {
         ui_callbacks.field_150(a1, a2);
@@ -719,7 +719,7 @@ void sub_460D70(const char* a1, const char* a2)
 }
 
 // 0x460D90
-void sub_460D90(int a1, int a2)
+void ui_reserved_integer_pair_callback_154_dispatch(int a1, int a2)
 {
     if (ui_callbacks.field_154 != NULL) {
         ui_callbacks.field_154(a1, a2);
@@ -727,7 +727,7 @@ void sub_460D90(int a1, int a2)
 }
 
 // 0x460DB0
-void sub_460DB0(const char* a1, const char* a2)
+void ui_reserved_string_pair_callback_158_dispatch(const char* a1, const char* a2)
 {
     if (ui_callbacks.field_158 != NULL) {
         ui_callbacks.field_158(a1, a2);
@@ -735,7 +735,7 @@ void sub_460DB0(const char* a1, const char* a2)
 }
 
 // 0x460DD0
-void sub_460DD0(void)
+void ui_reserved_callback_15c_dispatch(void)
 {
     if (ui_callbacks.field_15C != NULL) {
         ui_callbacks.field_15C();

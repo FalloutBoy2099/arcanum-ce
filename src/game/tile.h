@@ -15,9 +15,9 @@ bool tile_is_blocking(int64_t loc, bool a2);
 bool tile_is_soundproof(int64_t loc);
 bool tile_is_sinkable(int64_t loc);
 bool tile_is_slippery(int64_t loc);
-void sub_4D7430(int64_t loc);
-tig_art_id_t sub_4D7480(tig_art_id_t art_id, int num2, bool flippable2, int a4);
-void sub_4D7590(tig_art_id_t art_id, TigVideoBuffer* video_buffer);
+void tile_cycle_variant(int64_t loc);
+tig_art_id_t tile_transition_art_id_create_random(tig_art_id_t art_id, int num2, bool flippable2, int a4);
+void tile_render_topdown_buffer(tig_art_id_t art_id, TigVideoBuffer* video_buffer);
 void tile_set_render_target(TigVideoBuffer* vb);
 
 #define TILE_X(tile) ((tile) & 0x3F)

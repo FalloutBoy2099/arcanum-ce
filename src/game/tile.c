@@ -19,20 +19,20 @@ typedef struct TileCacheEntry {
     unsigned int time;
 } TileCacheEntry;
 
-static void sub_4D7820(int64_t loc, tig_art_id_t art_id);
-static void sub_4D7980(void);
-static void sub_4D79C0(ViewOptions* view_options);
-static void sub_4D7A00(void);
-static void sub_4D7A40(int zoom);
-static void sub_4D7A90(void);
-static void sub_4D7AC0(int zoom);
-static void sub_4D7C70(void);
-static TigVideoBuffer* sub_4D7E90(unsigned int art_id);
+static void tile_art_id_set_at(int64_t loc, tig_art_id_t art_id);
+static void tile_topdown_resources_free(void);
+static void tile_topdown_prepare_view(ViewOptions* view_options);
+static void tile_topdown_staging_buffer_create(void);
+static void tile_topdown_cache_allocate(int zoom);
+static void tile_topdown_cache_free(void);
+static void tile_topdown_sampling_tables_build(int zoom);
+static void tile_topdown_sampling_tables_free(void);
+static TigVideoBuffer* tile_topdown_cached_buffer_get(unsigned int art_id);
 static void tile_draw_topdown(GameDrawInfo* draw_info);
 static void tile_draw_iso(GameDrawInfo* draw_info);
 
 // 0x602AE0
-static TileCacheEntry stru_602AE0[TILE_CACHE_CAPACITY];
+static TileCacheEntry tile_topdown_cache_entries[TILE_CACHE_CAPACITY];
 
 // 0x602DE0
 static TigVideoBuffer* dword_602DE0;
@@ -83,7 +83,7 @@ bool tile_init(GameInitInfo* init_info)
 // 0x4D68A0
 void tile_exit(void)
 {
-    sub_4D7980();
+    tile_topdown_resources_free();
     tile_iso_window_handle = TIG_WINDOW_HANDLE_INVALID;
     tile_invalidate_rect = NULL;
 }
@@ -107,7 +107,7 @@ void tile_set_render_target(TigVideoBuffer* vb)
 // 0x4D6900
 void tile_update_view(ViewOptions* view_options)
 {
-    sub_4D79C0(view_options);
+    tile_topdown_prepare_view(view_options);
     tile_view_options = *view_options;
 }
 
@@ -213,28 +213,29 @@ bool tile_is_slippery(int64_t loc)
 }
 
 // 0x4D71E0
-void sub_4D71E0(void)
+void tile_reserved_hook_stub(void)
 {
     // TODO: Incomplete.
 }
 
+// Cycles to the next existing tile variant and writes it to the sector.
 // 0x4D7430
-void sub_4D7430(int64_t loc)
+void tile_cycle_variant(int64_t loc)
 {
     tig_art_id_t art_id;
 
     art_id = tile_art_id_at(loc);
     do {
         if (art_id != TIG_ART_ID_INVALID) {
-            art_id = sub_503800(art_id, sub_5037B0(art_id) + 1);
+            art_id = tig_art_tile_id_variant_set(art_id, tig_art_tile_id_variant_get(art_id) + 1);
         }
     } while (tig_art_exists(art_id) != TIG_OK);
 
-    sub_4D7820(loc, art_id);
+    tile_art_id_set_at(loc, art_id);
 }
 
 // 0x4D7480
-tig_art_id_t sub_4D7480(tig_art_id_t art_id, int num2, bool flippable2, int a4)
+tig_art_id_t tile_transition_art_id_create_random(tig_art_id_t art_id, int num2, bool flippable2, int a4)
 {
     int num1;
     int type;
@@ -291,7 +292,7 @@ tig_art_id_t sub_4D7480(tig_art_id_t art_id, int num2, bool flippable2, int a4)
         v1 = 0;
     }
 
-    cnt = sub_4EBEF0(num1, num2, v1, type, flippable1, flippable2);
+    cnt = a_name_tile_variant_count_get(num1, num2, v1, type, flippable1, flippable2);
     v2 = random_between(0, cnt - 1);
 
     if (flippable1
@@ -306,8 +307,9 @@ tig_art_id_t sub_4D7480(tig_art_id_t art_id, int num2, bool flippable2, int a4)
     return art_id;
 }
 
+// Renders an ART tile into a square top-down buffer using the sampling lookup tables.
 // 0x4D7590
-void sub_4D7590(tig_art_id_t art_id, TigVideoBuffer* video_buffer)
+void tile_render_topdown_buffer(tig_art_id_t art_id, TigVideoBuffer* video_buffer)
 {
     TigRect rect;
     TigArtBlitInfo art_blit_spec;
@@ -347,8 +349,9 @@ void sub_4D7590(tig_art_id_t art_id, TigVideoBuffer* video_buffer)
     }
 }
 
+// Sets tile art, marks the sector tile difference and invalidates the visible rectangle.
 // 0x4D7820
-void sub_4D7820(int64_t loc, tig_art_id_t art_id)
+void tile_art_id_set_at(int64_t loc, tig_art_id_t art_id)
 {
     int64_t sector_id;
     Sector* sector;
@@ -382,37 +385,40 @@ void sub_4D7820(int64_t loc, tig_art_id_t art_id)
     }
 }
 
+// Frees the staging buffer, sampling tables and tile cache buffers.
 // 0x4D7980
-void sub_4D7980(void)
+void tile_topdown_resources_free(void)
 {
     if (dword_602DE0 != NULL) {
         tig_video_buffer_destroy(dword_602DE0);
         dword_602DE0 = NULL;
     }
 
-    sub_4D7C70();
-    sub_4D7A90();
+    tile_topdown_sampling_tables_free();
+    tile_topdown_cache_free();
 
     dword_602E08 = false;
 }
 
+// Prepares top-down resources when the requested zoom changes.
 // 0x4D79C0
-void sub_4D79C0(ViewOptions* view_options)
+void tile_topdown_prepare_view(ViewOptions* view_options)
 {
     if (view_options->type == VIEW_TYPE_TOP_DOWN) {
         if (view_options->zoom != tile_view_options.zoom) {
             if (!dword_602E08) {
-                sub_4D7A00();
+                tile_topdown_staging_buffer_create();
             }
 
-            sub_4D7A40(view_options->zoom);
-            sub_4D7AC0(view_options->zoom);
+            tile_topdown_cache_allocate(view_options->zoom);
+            tile_topdown_sampling_tables_build(view_options->zoom);
         }
     }
 }
 
+// Creates the 80 by 40 system-memory staging buffer.
 // 0x4D7A00
-void sub_4D7A00(void)
+void tile_topdown_staging_buffer_create(void)
 {
     TigVideoBufferCreateInfo vb_create_info;
 
@@ -425,13 +431,14 @@ void sub_4D7A00(void)
     dword_602E08 = true;
 }
 
+// Recreates the 64 square tile cache buffers for the supplied zoom.
 // 0x4D7A40
-void sub_4D7A40(int zoom)
+void tile_topdown_cache_allocate(int zoom)
 {
     TigVideoBufferCreateInfo vb_create_info;
     int index;
 
-    sub_4D7A90();
+    tile_topdown_cache_free();
 
     vb_create_info.flags = TIG_VIDEO_BUFFER_CREATE_SYSTEM_MEMORY;
     vb_create_info.width = zoom;
@@ -439,28 +446,30 @@ void sub_4D7A40(int zoom)
     vb_create_info.background_color = 0;
 
     for (index = 0; index < TILE_CACHE_CAPACITY; index++) {
-        stru_602AE0[index].art_id = TIG_ART_ID_INVALID;
-        tig_video_buffer_create(&vb_create_info, &(stru_602AE0[index].video_buffer));
+        tile_topdown_cache_entries[index].art_id = TIG_ART_ID_INVALID;
+        tig_video_buffer_create(&vb_create_info, &(tile_topdown_cache_entries[index].video_buffer));
     }
 }
 
+// Destroys tile cache buffers and clears their handles and art IDs.
 // 0x4D7A90
-void sub_4D7A90(void)
+void tile_topdown_cache_free(void)
 {
     int index;
 
     for (index = 0; index < TILE_CACHE_CAPACITY; index++) {
-        if (stru_602AE0[index].video_buffer != NULL) {
-            tig_video_buffer_destroy(stru_602AE0[index].video_buffer);
+        if (tile_topdown_cache_entries[index].video_buffer != NULL) {
+            tig_video_buffer_destroy(tile_topdown_cache_entries[index].video_buffer);
         }
 
-        stru_602AE0[index].video_buffer = NULL;
-        stru_602AE0[index].art_id = TIG_ART_ID_INVALID;
+        tile_topdown_cache_entries[index].video_buffer = NULL;
+        tile_topdown_cache_entries[index].art_id = TIG_ART_ID_INVALID;
     }
 }
 
+// Builds source pixel coordinate lookup tables for the requested top-down zoom.
 // 0x4D7AC0
-void sub_4D7AC0(int zoom)
+void tile_topdown_sampling_tables_build(int zoom)
 {
     double v1;
     double v2;
@@ -474,7 +483,7 @@ void sub_4D7AC0(int zoom)
     int x;
     int y;
 
-    sub_4D7C70();
+    tile_topdown_sampling_tables_free();
 
     v1 = zoom * 0.5 - 1.0;
 
@@ -520,8 +529,9 @@ void sub_4D7AC0(int zoom)
     }
 }
 
+// Frees and clears both source coordinate lookup tables.
 // 0x4D7C70
-void sub_4D7C70(void)
+void tile_topdown_sampling_tables_free(void)
 {
     if (dword_602DE8 != NULL) {
         FREE(dword_602DE8);
@@ -534,26 +544,27 @@ void sub_4D7C70(void)
     }
 }
 
+// Returns a cached tile buffer, rendering into a free or least-recently-used slot on a miss.
 // 0x4D7E90
-TigVideoBuffer* sub_4D7E90(unsigned int art_id)
+TigVideoBuffer* tile_topdown_cached_buffer_get(unsigned int art_id)
 {
     int candidate = -1;
     int found = -1;
     int index;
 
     for (index = 0; index < TILE_CACHE_CAPACITY; index++) {
-        if (stru_602AE0[index].art_id == -1) {
+        if (tile_topdown_cache_entries[index].art_id == -1) {
             found = index;
         } else {
-            if (stru_602AE0[index].art_id == art_id) {
-                stru_602AE0[index].time = gamelib_ping_time;
-                return stru_602AE0[index].video_buffer;
+            if (tile_topdown_cache_entries[index].art_id == art_id) {
+                tile_topdown_cache_entries[index].time = gamelib_ping_time;
+                return tile_topdown_cache_entries[index].video_buffer;
             }
 
             if (candidate == -1) {
                 candidate = index;
             } else {
-                if (stru_602AE0[index].time < stru_602AE0[candidate].time) {
+                if (tile_topdown_cache_entries[index].time < tile_topdown_cache_entries[candidate].time) {
                     candidate = index;
                 }
             }
@@ -564,11 +575,11 @@ TigVideoBuffer* sub_4D7E90(unsigned int art_id)
         found = candidate;
     }
 
-    sub_4D7590(art_id, stru_602AE0[found].video_buffer);
-    stru_602AE0[found].art_id = art_id;
-    stru_602AE0[found].time = gamelib_ping_time;
+    tile_render_topdown_buffer(art_id, tile_topdown_cache_entries[found].video_buffer);
+    tile_topdown_cache_entries[found].art_id = art_id;
+    tile_topdown_cache_entries[found].time = gamelib_ping_time;
 
-    return stru_602AE0[found].video_buffer;
+    return tile_topdown_cache_entries[found].video_buffer;
 }
 
 // 0x4D7CB0
@@ -610,7 +621,7 @@ void tile_draw_topdown(GameDrawInfo* draw_info)
                             src_rect.height = dst_rect.height;
                             tig_window_copy_from_vbuffer(tile_iso_window_handle,
                                 &dst_rect,
-                                sub_4D7E90(sector->tiles.art_ids[tile]),
+                                tile_topdown_cached_buffer_get(sector->tiles.art_ids[tile]),
                                 &src_rect);
                         }
                         rect_node = rect_node->next;
@@ -721,7 +732,7 @@ void tile_draw_iso(GameDrawInfo* draw_info)
 
                                         color = !tile_type ? indoor_color : outdoor_color;
 
-                                        if (sub_4DA360(center_x, center_y, color, v51)) {
+                                        if (light_tile_grid_colors_sample(center_x, center_y, color, v51)) {
                                             art_blit_info.flags = TIG_ART_BLT_BLEND_COLOR_LERP;
                                             if (!tile_hardware_accelerated) {
                                                 art_blit_info.flags |= TIG_ART_BLT_PALETTE_ORIGINAL;

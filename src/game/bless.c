@@ -166,7 +166,7 @@ void bless_add(int64_t obj, int bless)
     // Append blessing ID and current time to the blessing field arrays.
     cnt = obj_arrayfield_length_get(obj, OBJ_F_PC_BLESSING_IDX);
     obj_arrayfield_uint32_set(obj, OBJ_F_PC_BLESSING_IDX, cnt, bless);
-    obj_arrayfield_int64_set(obj, OBJ_F_PC_BLESSING_TS_IDX, cnt, sub_45A7C0().value);
+    obj_arrayfield_int64_set(obj, OBJ_F_PC_BLESSING_TS_IDX, cnt, game_time_get().value);
 
     // Apply the associated effect.
     effect_add(obj, bless_get_effect(bless), EFFECT_CAUSE_BLESS);
@@ -178,7 +178,7 @@ void bless_add(int64_t obj, int bless)
         // Add UI message.
         ui_message.type = UI_MSG_TYPE_BLESS;
         ui_message.str = mes_file_entry.str;
-        ui_message.field_8 = bless;
+        ui_message.primary_value = bless;
         ui_display_msg(&ui_message);
 
         // Highlight logbook button.

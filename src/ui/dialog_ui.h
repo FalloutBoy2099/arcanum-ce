@@ -13,7 +13,7 @@ void dialog_ui_end_dialog(int64_t obj, int a2);
 bool dialog_ui_is_local_pc_in_dialog(void);
 void dialog_ui_notify_dialog_ended(int64_t obj);
 void dialog_ui_notify_dialog_started(int64_t obj);
-void sub_5681C0(int64_t pc_obj, int64_t npc_obj);
+void dialog_ui_npc_greeting_float(int64_t pc_obj, int64_t npc_obj);
 void dialog_ui_float_line(int64_t npc_obj, int64_t pc_obj, const char* str, int speech_id);
 void dialog_ui_notify_object_destroyed(int64_t obj);
 

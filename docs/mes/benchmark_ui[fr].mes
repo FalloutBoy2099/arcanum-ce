@@ -1,0 +1,12 @@
+// Benchmark button and result messages
+{0}{Benchmark}
+{1}{Benchmark terminé. Mesures enregistrées. Rechargez la sauvegarde avant de reprendre la partie ou de refaire un test.}
+{2}{Benchmark impossible : chargez une sauvegarde avec un personnage conscient, hors combat.}
+{3}{Aucun parcours accessible. Déplacez-vous dans une zone dégagée, puis cliquez à nouveau sur Benchmark.}
+{4}{Impossible de créer les fichiers de mesures du benchmark.}
+{5}{Benchmark arrêté : le personnage n’a pas atteint une destination dans le délai prévu.}
+{6}{Benchmark arrêté : une action du scénario a échoué.}
+{7}{Benchmark interrompu (Échap, perte de focus, menu, changement de carte ou combat). Les mesures sont incomplètes.}
+{8}{Benchmark interrompu : le jeu a perdu le focus. Gardez-le au premier plan jusqu’au message de fin.}
+{9}{Benchmark interrompu par une demande de fermeture du jeu.}
+{10}{Benchmark annulé avec Échap. Les mesures sont incomplètes.}

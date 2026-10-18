@@ -106,8 +106,9 @@ bool player_load(GameLoadInfo* load_info)
     return true;
 }
 
+// Resolves the stored player ID when it is non-null.
 // 0x40D860
-void sub_40D860(void)
+void player_local_pc_handle_refresh(void)
 {
     if (player_pc_oid.type != OID_TYPE_NULL) {
         player_pc_obj = obj_pool_perm_lookup(player_pc_oid);
@@ -123,7 +124,7 @@ void player_create(void)
     int64_t y;
     int64_t loc;
 
-    qword_5D1150 = sub_468570(OBJ_TYPE_PC);
+    qword_5D1150 = proto_default_for_type_get(OBJ_TYPE_PC);
 
     map = map_current_map();
     if (map == 0
@@ -183,8 +184,9 @@ int64_t player_get_local_pc_obj(void)
     return obj;
 }
 
+// Destroys the local player object and clears its handle and ID.
 // 0x40DAB0
-bool sub_40DAB0(void)
+bool player_local_pc_destroy(void)
 {
     if (player_pc_obj == OBJ_HANDLE_NULL) {
         return false;
@@ -197,8 +199,9 @@ bool sub_40DAB0(void)
     return true;
 }
 
+// Stores a player handle and ID, refreshing maintained spells for a non-null object.
 // 0x40DAF0
-bool sub_40DAF0(int64_t obj)
+bool player_local_pc_set(int64_t obj)
 {
     player_pc_obj = obj;
     if (obj != OBJ_HANDLE_NULL) {
@@ -228,9 +231,9 @@ bool player_obj_create_player(PlayerCreateInfo* player_create_info)
     char str[80];
 
     if (player_create_info->basic_prototype != -1) {
-        player_pc_prototype_obj = obj_pool_perm_lookup(obj_get_id(sub_4685A0(player_create_info->basic_prototype)));
+        player_pc_prototype_obj = obj_pool_perm_lookup(obj_get_id(proto_handle_get(player_create_info->basic_prototype)));
     } else {
-        player_pc_prototype_obj = sub_468570(OBJ_TYPE_PC);
+        player_pc_prototype_obj = proto_default_for_type_get(OBJ_TYPE_PC);
     }
 
     if ((player_create_info->flags & PLAYER_CREATE_INFO_LOC) != 0) {
@@ -246,7 +249,7 @@ bool player_obj_create_player(PlayerCreateInfo* player_create_info)
 
     if ((player_create_info->flags & PLAYER_CREATE_INFO_NETWORK) == 0) {
         if (player_pc_obj != OBJ_HANDLE_NULL) {
-            sub_40DAB0();
+            player_local_pc_destroy();
         }
     }
 
@@ -288,7 +291,7 @@ bool player_obj_create_player(PlayerCreateInfo* player_create_info)
     }
 
     level_set(player_create_info->obj, 1);
-    sub_463E20(player_create_info->obj);
+    item_inventory_source_spawn(player_create_info->obj);
     obj_field_int32_set(player_create_info->obj, OBJ_F_CRITTER_INVENTORY_SOURCE, 0);
     ui_spell_maintain_refresh();
 

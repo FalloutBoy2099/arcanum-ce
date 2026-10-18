@@ -504,11 +504,11 @@ void level_recalc(int64_t pc_obj)
             unspent_points += calculate_bonus_character_points(cur_level - 1, cur_level);
             stat_base_set(pc_obj, STAT_UNSPENT_POINTS, unspent_points);
 
-            ui_message.field_8 = cur_level;
+            ui_message.primary_value = cur_level;
 
             if (auto_level_scheme_get(pc_obj) != 0) {
                 // Apply auto-leveling scheme.
-                ui_message.field_C = -1;
+                ui_message.secondary_value = -1;
                 if (auto_level_apply(pc_obj, str)) {
                     mes_file_entry.num = 1; // "Your auto-level scheme has completed."
                     mes_get_msg(level_mes_file, &mes_file_entry);
@@ -517,7 +517,7 @@ void level_recalc(int64_t pc_obj)
                 }
             } else {
                 // No auto-leveling scheme.
-                ui_message.field_C = unspent_points;
+                ui_message.secondary_value = unspent_points;
                 str[0] = '\0';
             }
 

@@ -4,17 +4,17 @@
 #include "game/obj.h"
 #include "game/obj_private.h"
 
-typedef struct S5FC668 {
+typedef struct WaypointDrawEntry {
     /* 0000 */ int64_t obj;
-    /* 0008 */ tig_color_t field_8;
+    /* 0008 */ tig_color_t color;
     /* 000C */ int field_C;
-} S5FC668;
+} WaypointDrawEntry;
 
-static void sub_4C0090(void);
-static void sub_4C00D0(int64_t obj);
-static void sub_4C0140(S5FC668* a1, GameDrawInfo* draw_info);
-static bool sub_4C0280(int64_t location, TigRect* rect);
-static void sub_4C0370(void);
+static void wp_all_waypoint_rects_invalidate(void);
+static void wp_object_waypoint_rects_invalidate(int64_t obj);
+static void wp_object_waypoints_draw(WaypointDrawEntry* a1, GameDrawInfo* draw_info);
+static bool wp_waypoint_screen_rect_get(int64_t location, TigRect* rect);
+static void wp_invalid_objects_prune(void);
 
 // 0x5FC638
 static int wp_iso_art_num_frames;
@@ -44,7 +44,7 @@ static bool wp_editor;
 static tig_window_handle_t wp_iso_window_handle;
 
 // 0x5FC668
-static S5FC668 stru_5FC668[32];
+static WaypointDrawEntry wp_draw_entries[32];
 
 // 0x4BFCE0
 bool wp_init(GameInitInfo* init_info)
@@ -66,7 +66,7 @@ bool wp_init(GameInitInfo* init_info)
     wp_iso_art_num_frames = art_anim_data.num_frames;
 
     for (index = 0; index < 32; index++) {
-        stru_5FC668[index].obj = OBJ_HANDLE_NULL;
+        wp_draw_entries[index].obj = OBJ_HANDLE_NULL;
     }
 
     wp_enabled = true;
@@ -81,7 +81,7 @@ void wp_exit(void)
     int index;
 
     for (index = 0; index < 32; index++) {
-        stru_5FC668[index].obj = OBJ_HANDLE_NULL;
+        wp_draw_entries[index].obj = OBJ_HANDLE_NULL;
     }
 
     wp_initialized = false;
@@ -124,15 +124,15 @@ void wp_draw(GameDrawInfo* draw_info)
         return;
     }
 
-    sub_4C0370();
+    wp_invalid_objects_prune();
 
     for (index = 0; index < dword_5FC654; index++) {
-        sub_4C0140(&(stru_5FC668[index]), draw_info);
+        wp_object_waypoints_draw(&(wp_draw_entries[index]), draw_info);
     }
 }
 
 // 0x4C0090
-void sub_4C0090(void)
+void wp_all_waypoint_rects_invalidate(void)
 {
     int index;
 
@@ -140,15 +140,15 @@ void sub_4C0090(void)
         return;
     }
 
-    sub_4C0370();
+    wp_invalid_objects_prune();
 
     for (index = 0; index < dword_5FC654; index++) {
-        sub_4C00D0(stru_5FC668[index].obj);
+        wp_object_waypoint_rects_invalidate(wp_draw_entries[index].obj);
     }
 }
 
 // 0x4C00D0
-void sub_4C00D0(int64_t obj)
+void wp_object_waypoint_rects_invalidate(int64_t obj)
 {
     int cnt;
     int index;
@@ -162,14 +162,14 @@ void sub_4C00D0(int64_t obj)
     cnt = obj_arrayfield_length_get(obj, OBJ_F_NPC_WAYPOINTS_IDX);
     for (index = 0; index < cnt; index++) {
         waypoint = obj_arrayfield_int64_get(obj, OBJ_F_NPC_WAYPOINTS_IDX, index);
-        if (sub_4C0280(waypoint, &rect)) {
+        if (wp_waypoint_screen_rect_get(waypoint, &rect)) {
             wp_iso_window_invalidate_rect(&rect);
         }
     }
 }
 
 // 0x4C0140
-void sub_4C0140(S5FC668* a1, GameDrawInfo* draw_info)
+void wp_object_waypoints_draw(WaypointDrawEntry* a1, GameDrawInfo* draw_info)
 {
     TigArtBlitInfo art_blit_info;
     TigRect src_rect;
@@ -188,13 +188,13 @@ void sub_4C0140(S5FC668* a1, GameDrawInfo* draw_info)
     art_blit_info.flags = TIG_ART_BLT_BLEND_ADD | TIG_ART_BLT_BLEND_COLOR_CONST;
     art_blit_info.src_rect = &src_rect;
     art_blit_info.dst_rect = &dst_rect;
-    art_blit_info.color = a1->field_8;
+    art_blit_info.color = a1->color;
 
     cnt = obj_arrayfield_length_get(a1->obj, OBJ_F_NPC_WAYPOINTS_IDX);
     for (idx = 0; idx < cnt; idx++) {
         art_id = TIG_ART_ID_INVALID;
         loc = obj_arrayfield_int64_get(a1->obj, OBJ_F_NPC_WAYPOINTS_IDX, idx);
-        if (sub_4C0280(loc, &wp_rect)) {
+        if (wp_waypoint_screen_rect_get(loc, &wp_rect)) {
             node = *draw_info->rects;
             while (node != NULL) {
                 if (tig_rect_intersection(&wp_rect, &(node->rect), &dst_rect) == TIG_OK) {
@@ -216,7 +216,7 @@ void sub_4C0140(S5FC668* a1, GameDrawInfo* draw_info)
 }
 
 // 0x4C0280
-bool sub_4C0280(int64_t location, TigRect* rect)
+bool wp_waypoint_screen_rect_get(int64_t location, TigRect* rect)
 {
     int64_t x;
     int64_t y;
@@ -248,18 +248,18 @@ bool sub_4C0280(int64_t location, TigRect* rect)
 }
 
 // 0x4C0370
-void sub_4C0370(void)
+void wp_invalid_objects_prune(void)
 {
     int idx;
 
     for (idx = 0; idx < dword_5FC654; idx++) {
-        if (stru_5FC668[idx].obj == OBJ_HANDLE_NULL
-            || !obj_handle_is_valid(stru_5FC668[idx].obj)
-            || obj_field_int32_get(stru_5FC668[idx].obj, OBJ_F_TYPE) != OBJ_TYPE_NPC) {
+        if (wp_draw_entries[idx].obj == OBJ_HANDLE_NULL
+            || !obj_handle_is_valid(wp_draw_entries[idx].obj)
+            || obj_field_int32_get(wp_draw_entries[idx].obj, OBJ_F_TYPE) != OBJ_TYPE_NPC) {
             dword_5FC654--;
-            memmove(&(stru_5FC668[idx]),
-                &(stru_5FC668[idx + 1]),
-                sizeof(*stru_5FC668) * (dword_5FC654 + idx));
+            memmove(&(wp_draw_entries[idx]),
+                &(wp_draw_entries[idx + 1]),
+                sizeof(*wp_draw_entries) * (dword_5FC654 + idx));
             idx--;
         }
     }

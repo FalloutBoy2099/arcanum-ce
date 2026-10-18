@@ -447,7 +447,7 @@ int stat_level_get(int64_t obj, int stat)
             // - Strength +2
             //
             // NOTE: Perception bonus is applied via effects.
-            if (sub_4DCE10(obj) < 128) {
+            if (light_object_luminance(obj) < 128) {
                 if (stat == STAT_STRENGTH) {
                     value += 2;
                 } else {
@@ -773,7 +773,7 @@ int stat_base_set(int64_t obj, int stat, int value)
         }
 
         // Update UI.
-        sub_4601C0();
+        ui_character_panels_refresh();
         break;
     case STAT_MAGICK_POINTS:
     case STAT_TECH_POINTS:
@@ -1030,7 +1030,7 @@ bool stat_poison_timeevent_process(TimeEvent* timeevent)
     case POISON_EVENT_DAMAGE:
         if (poison > 0) {
             if ((obj_field_int32_get(obj, OBJ_F_FLAGS) & OF_OFF) == 0) {
-                sub_4B2210(OBJ_HANDLE_NULL, obj, &combat);
+                combat_context_init(OBJ_HANDLE_NULL, obj, &combat);
 
                 // Determine damage based on poison severity.
                 if (poison >= 550) {
@@ -1047,7 +1047,7 @@ bool stat_poison_timeevent_process(TimeEvent* timeevent)
             }
 
             // Add blood splotch effect if applicable.
-            if ((combat.dam_flags & CDF_HAVE_DAMAGE) != 0) {
+            if ((combat.dam_flags & COMBAT_DAMAGE_HAVE_DAMAGE) != 0) {
                 anim_play_blood_splotch_fx(combat.target_obj, BLOOD_SPLOTCH_TYPE_POISON, DAMAGE_TYPE_POISON, &combat);
             }
 
@@ -1076,8 +1076,8 @@ bool stat_poison_timeevent_process(TimeEvent* timeevent)
                 next_timeevent.type = TIMEEVENT_TYPE_POISON;
                 next_timeevent.params[0].integer_value = POISON_EVENT_RECOVERY;
                 next_timeevent.params[1].object_value = obj;
-                next_timeevent.params[2].integer_value = sub_45A7F0();
-                sub_45A950(&datetime, 120000);
+                next_timeevent.params[2].integer_value = game_time_seconds_get();
+                datetime_init(&datetime, 120000);
                 if (!timeevent_add_delay(&next_timeevent, &datetime)) {
                     return false;
                 }
@@ -1112,7 +1112,7 @@ void stat_poison_turn_based_process(int64_t obj)
     timeevent.type = TIMEEVENT_TYPE_POISON;
     timeevent.params[0].integer_value = POISON_EVENT_DAMAGE;
     timeevent.params[1].object_value = obj;
-    timeevent.params[2].integer_value = sub_45A7F0();
+    timeevent.params[2].integer_value = game_time_seconds_get();
     stat_poison_timeevent_process(&timeevent);
 
     poison = stat_base_get(obj, STAT_POISON_LEVEL);
@@ -1201,14 +1201,14 @@ bool poison_timeevent_schedule(int64_t obj, int poison, bool recovery)
     timeevent.type = TIMEEVENT_TYPE_POISON;
     timeevent.params[0].integer_value = POISON_EVENT_DAMAGE;
     timeevent.params[1].object_value = obj;
-    timeevent.params[2].integer_value = sub_45A7F0();
+    timeevent.params[2].integer_value = game_time_seconds_get();
 
     // Check if poison damage event is not already scheduled.
     poison_test_obj = obj;
     poison_test_event = POISON_EVENT_DAMAGE;
     if (!timeevent_any(TIMEEVENT_TYPE_POISON, poison_timeevent_check)) {
         // Schedule damage event in 15 seconds.
-        sub_45A950(&datetime, 15000);
+        datetime_init(&datetime, 15000);
         if (!timeevent_add_delay(&timeevent, &datetime)) {
             return false;
         }
@@ -1223,7 +1223,7 @@ bool poison_timeevent_schedule(int64_t obj, int poison, bool recovery)
             timeevent.params[0].integer_value = POISON_EVENT_RECOVERY;
 
             // Schedule recovery event in 120 seconds.
-            sub_45A950(&datetime, 120000);
+            datetime_init(&datetime, 120000);
             if (!timeevent_add_delay(&timeevent, &datetime)) {
                 return false;
             }

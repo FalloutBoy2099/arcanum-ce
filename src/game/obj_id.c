@@ -7,11 +7,11 @@
 #include "game/map.h"
 #include "game/object.h"
 
-static bool sub_4E67A0(TigGuid* guid, const char* str);
-static bool sub_4E6970(ObjectID_P* p, const char* str);
-static bool sub_4E6A60(int* value_ptr, const char* str);
-static bool sub_4E6AA0(int* value_ptr, const char* str, size_t length);
-static bool sub_4E6B00(char* dst, const char* src, size_t length);
+static bool objid_parse_guid(TigGuid* guid, const char* str);
+static bool objid_parse_position(ObjectID_P* p, const char* str);
+static bool objid_parse_a(int* value_ptr, const char* str);
+static bool objid_parse_hex_digits(int* value_ptr, const char* str, size_t length);
+static bool objid_copy_hex_digits(char* dst, const char* src, size_t length);
 
 // 0x4E62A0
 void objid_create_guid(ObjectID* oid)
@@ -90,8 +90,9 @@ bool objid_is_equal(ObjectID a, ObjectID b)
     return false;
 }
 
+// Constructs an OID_TYPE_A identifier from its integer payload.
 // 0x4E6540
-ObjectID sub_4E6540(int a1)
+ObjectID objid_make_a(int a1)
 {
     ObjectID oid;
     oid.type = OID_TYPE_A;
@@ -151,7 +152,7 @@ bool objid_id_from_str(ObjectID* oid, const char* str)
     switch (str[0]) {
     case 'A':
         temp_oid.type = OID_TYPE_A;
-        if (!sub_4E6A60(&(temp_oid.d.a), str)) {
+        if (!objid_parse_a(&(temp_oid.d.a), str)) {
             return false;
         }
         break;
@@ -160,7 +161,7 @@ bool objid_id_from_str(ObjectID* oid, const char* str)
         break;
     case 'G':
         temp_oid.type = OID_TYPE_GUID;
-        if (!sub_4E67A0(&(temp_oid.d.g), str)) {
+        if (!objid_parse_guid(&(temp_oid.d.g), str)) {
             return false;
         }
         break;
@@ -172,7 +173,7 @@ bool objid_id_from_str(ObjectID* oid, const char* str)
         break;
     case 'P':
         temp_oid.type = OID_TYPE_P;
-        if (!sub_4E6970(&(temp_oid.d.p), str)) {
+        if (!objid_parse_position(&(temp_oid.d.p), str)) {
             return false;
         }
         break;
@@ -185,15 +186,16 @@ bool objid_id_from_str(ObjectID* oid, const char* str)
     return true;
 }
 
+// Parses the G-prefixed serialized identifier into GUID bytes.
 // 0x4E67A0
-bool sub_4E67A0(TigGuid* guid, const char* str)
+bool objid_parse_guid(TigGuid* guid, const char* str)
 {
     int value;
 
     if (str[0] != 'G' || str[1] != '_') return false;
     str += 2;
 
-    if (!sub_4E6AA0(&value, str, 8)) return false;
+    if (!objid_parse_hex_digits(&value, str, 8)) return false;
     guid->data[0] = (value >> 24) & 0xFF;
     guid->data[1] = (value >> 16) & 0xFF;
     guid->data[2] = (value >> 8) & 0xFF;
@@ -203,7 +205,7 @@ bool sub_4E67A0(TigGuid* guid, const char* str)
     if (str[0] != '_') return false;
     str++;
 
-    if (!sub_4E6AA0(&value, str, 4)) return false;
+    if (!objid_parse_hex_digits(&value, str, 4)) return false;
     guid->data[4] = (value >> 8) & 0xFF;
     guid->data[5] = value & 0xFF;
     str += 4;
@@ -211,7 +213,7 @@ bool sub_4E67A0(TigGuid* guid, const char* str)
     if (str[0] != '_') return false;
     str++;
 
-    if (!sub_4E6AA0(&value, str, 4)) return false;
+    if (!objid_parse_hex_digits(&value, str, 4)) return false;
     guid->data[6] = (value >> 8) & 0xFF;
     guid->data[7] = value & 0xFF;
     str += 4;
@@ -219,45 +221,46 @@ bool sub_4E67A0(TigGuid* guid, const char* str)
     if (str[0] != '_') return false;
     str++;
 
-    if (!sub_4E6AA0(&value, str, 2)) return false;
+    if (!objid_parse_hex_digits(&value, str, 2)) return false;
     guid->data[8] = value;
     str += 2;
 
-    if (!sub_4E6AA0(&value, str, 2)) return false;
+    if (!objid_parse_hex_digits(&value, str, 2)) return false;
     guid->data[9] = value;
     str += 2;
 
     if (str[0] != '_') return false;
     str++;
 
-    if (!sub_4E6AA0(&value, str, 2)) return false;
+    if (!objid_parse_hex_digits(&value, str, 2)) return false;
     guid->data[10] = value;
     str += 2;
 
-    if (!sub_4E6AA0(&value, str, 2)) return false;
+    if (!objid_parse_hex_digits(&value, str, 2)) return false;
     guid->data[11] = value;
     str += 2;
 
-    if (!sub_4E6AA0(&value, str, 2)) return false;
+    if (!objid_parse_hex_digits(&value, str, 2)) return false;
     guid->data[12] = value;
     str += 2;
 
-    if (!sub_4E6AA0(&value, str, 2)) return false;
+    if (!objid_parse_hex_digits(&value, str, 2)) return false;
     guid->data[13] = value;
     str += 2;
 
-    if (!sub_4E6AA0(&value, str, 2)) return false;
+    if (!objid_parse_hex_digits(&value, str, 2)) return false;
     guid->data[14] = value;
     str += 2;
 
-    if (!sub_4E6AA0(&value, str, 2)) return false;
+    if (!objid_parse_hex_digits(&value, str, 2)) return false;
     guid->data[15] = value;
 
     return true;
 }
 
+// Parses the P-prefixed identifier fields for location, temporary ID and map.
 // 0x4E6970
-bool sub_4E6970(ObjectID_P* p, const char* str)
+bool objid_parse_position(ObjectID_P* p, const char* str)
 {
     int x;
     int y;
@@ -269,30 +272,31 @@ bool sub_4E6970(ObjectID_P* p, const char* str)
     }
 
     str += 2;
-    if (!sub_4E6AA0(&x, str, 8)) {
+    if (!objid_parse_hex_digits(&x, str, 8)) {
         return false;
     }
 
     str += 8;
     if (str[0] != '_') return false;
-    if (!sub_4E6AA0(&y, str, 8)) return false;
+    if (!objid_parse_hex_digits(&y, str, 8)) return false;
     p->location = location_make(x, y);
 
     str += 8;
     if (str[0] != '_') return false;
-    if (!sub_4E6AA0(&temp_id, str, 8)) return false;
+    if (!objid_parse_hex_digits(&temp_id, str, 8)) return false;
     p->temp_id = temp_id;
 
     str += 8;
     if (str[0] != '_') return false;
-    if (!sub_4E6AA0(&map, str, 8)) return false;
+    if (!objid_parse_hex_digits(&map, str, 8)) return false;
     p->map = map;
 
     return true;
 }
 
+// Parses the eight-digit hexadecimal payload of an A-prefixed identifier.
 // 0x4E6A60
-bool sub_4E6A60(int* value_ptr, const char* str)
+bool objid_parse_a(int* value_ptr, const char* str)
 {
     int value;
 
@@ -300,7 +304,7 @@ bool sub_4E6A60(int* value_ptr, const char* str)
         return false;
     }
 
-    if (!sub_4E6AA0(&value, str + 2, 8)) {
+    if (!objid_parse_hex_digits(&value, str + 2, 8)) {
         return false;
     }
 
@@ -308,14 +312,15 @@ bool sub_4E6A60(int* value_ptr, const char* str)
     return true;
 }
 
+// Parses the requested count of hexadecimal characters into an integer.
 // 0x4E6AA0
-bool sub_4E6AA0(int* value_ptr, const char* str, size_t length)
+bool objid_parse_hex_digits(int* value_ptr, const char* str, size_t length)
 {
     char temp[12];
     char* end;
     int value;
 
-    if (!sub_4E6B00(temp, str, length)) {
+    if (!objid_copy_hex_digits(temp, str, length)) {
         return false;
     }
 
@@ -328,8 +333,9 @@ bool sub_4E6AA0(int* value_ptr, const char* str, size_t length)
     return true;
 }
 
+// Copies exactly the requested count of hexadecimal characters and terminates the output.
 // 0x4E6B00
-bool sub_4E6B00(char* dst, const char* src, size_t length)
+bool objid_copy_hex_digits(char* dst, const char* src, size_t length)
 {
     size_t index;
 

@@ -13,14 +13,14 @@
 #include "game/stat.h"
 #include "game/ui.h"
 
-static int sub_4C0D00(int64_t a1, int64_t a2, unsigned int flags);
-static int sub_4C1290(int64_t a1, int64_t a2);
+static int reaction_get_with_flags(int64_t a1, int64_t a2, unsigned int flags);
+static int reaction_stored_or_base_get(int64_t a1, int64_t a2);
 static int reaction_get_base(int64_t obj);
-static bool sub_4C12F0(int64_t a1, int64_t a2, bool a3, int* a4);
-static void sub_4C1360(int64_t npc_obj, int64_t pc_obj, int value);
-static void sub_4C1490(int64_t npc_obj, int64_t pc_obj, int level, int index);
-static int sub_4C1500(int64_t npc_obj, int64_t pc_obj, unsigned int flags);
-static int sub_4C15A0(int a1);
+static bool reaction_stored_lookup(int64_t a1, int64_t a2, bool a3, int* a4);
+static void reaction_stored_remember(int64_t npc_obj, int64_t pc_obj, int value);
+static void reaction_stored_slot_set(int64_t npc_obj, int64_t pc_obj, int level, int index);
+static int reaction_modifiers_get(int64_t npc_obj, int64_t pc_obj, unsigned int flags);
+static int reaction_distance_from_neutral(int a1);
 
 // 0x5FC88C
 static mes_file_handle_t reaction_mes_file;
@@ -188,23 +188,24 @@ bool reaction_met_before(int64_t npc_obj, int64_t pc_obj)
         return false;
     }
 
-    return sub_4C12F0(npc_obj, pc_obj, false, &v1);
+    return reaction_stored_lookup(npc_obj, pc_obj, false, &v1);
 }
 
 // 0x4C0CC0
 int reaction_get(int64_t npc_obj, int64_t pc_obj)
 {
-    return sub_4C0D00(npc_obj, pc_obj, 0);
+    return reaction_get_with_flags(npc_obj, pc_obj, 0);
 }
 
 // 0x4C0CE0
-int sub_4C0CE0(int64_t npc_obj, int64_t pc_obj)
+int reaction_get_with_limited_penalty(int64_t npc_obj, int64_t pc_obj)
 {
-    return sub_4C0D00(npc_obj, pc_obj, 1);
+    return reaction_get_with_flags(npc_obj, pc_obj, 1);
 }
 
+// Computes reaction including hostility, modifiers, effects and mind control.
 // 0x4C0D00
-int sub_4C0D00(int64_t npc_obj, int64_t pc_obj, unsigned int flags)
+int reaction_get_with_flags(int64_t npc_obj, int64_t pc_obj, unsigned int flags)
 {
     int value;
     int64_t mind_controlled_by_obj;
@@ -223,11 +224,11 @@ int sub_4C0D00(int64_t npc_obj, int64_t pc_obj, unsigned int flags)
         return 50;
     }
 
-    value = sub_4C1500(npc_obj, pc_obj, flags) + sub_4C1290(npc_obj, pc_obj);
+    value = reaction_modifiers_get(npc_obj, pc_obj, flags) + reaction_stored_or_base_get(npc_obj, pc_obj);
     value = effect_adjust_reaction(npc_obj, value);
 
     if (value < 50
-        && sub_459040(npc_obj, OSF_MIND_CONTROLLED, &mind_controlled_by_obj)
+        && magictech_spell_flag_caster_find(npc_obj, OSF_MIND_CONTROLLED, &mind_controlled_by_obj)
         && mind_controlled_by_obj == pc_obj) {
         value = 50;
     }
@@ -270,7 +271,7 @@ void reaction_adj_ex(int64_t npc_obj, int64_t pc_obj, int value, bool apply_effe
         return;
     }
 
-    if (sub_459040(npc_obj, OSF_MIND_CONTROLLED, &mind_controlled_by_obj)
+    if (magictech_spell_flag_caster_find(npc_obj, OSF_MIND_CONTROLLED, &mind_controlled_by_obj)
         && mind_controlled_by_obj == pc_obj) {
         return;
     }
@@ -281,13 +282,13 @@ void reaction_adj_ex(int64_t npc_obj, int64_t pc_obj, int value, bool apply_effe
         return;
     }
 
-    base = sub_4C1290(npc_obj, pc_obj);
+    base = reaction_stored_or_base_get(npc_obj, pc_obj);
     if (apply_effects) {
         adjusted_value = effect_adjust_good_bad_reaction(pc_obj, value);
     } else {
         adjusted_value = value;
     }
-    sub_4C1360(npc_obj, pc_obj, base + adjusted_value);
+    reaction_stored_remember(npc_obj, pc_obj, base + adjusted_value);
 
     if (value < 0 && critter_leader_get(npc_obj) == pc_obj) {
         flags = obj_field_int32_get(npc_obj, OBJ_F_NPC_FLAGS);
@@ -334,8 +335,9 @@ const char* reaction_get_name(int reaction)
     return reaction_names[reaction];
 }
 
+// Initializes reaction slot zero for a conversation, applying the good reaction fate override.
 // 0x4C1020
-void sub_4C1020(int64_t npc_obj, int64_t pc_obj)
+void reaction_begin_conversation(int64_t npc_obj, int64_t pc_obj)
 {
     int v1;
 
@@ -347,16 +349,17 @@ void sub_4C1020(int64_t npc_obj, int64_t pc_obj)
         return;
     }
 
-    v1 = sub_4C1290(npc_obj, pc_obj);
+    v1 = reaction_stored_or_base_get(npc_obj, pc_obj);
     if (v1 < 100 && fate_resolve(pc_obj, FATE_FORCE_GOOD_REACTION)) {
         v1 = 100;
     }
 
-    sub_4C1490(npc_obj, pc_obj, v1, 0);
+    reaction_stored_slot_set(npc_obj, pc_obj, v1, 0);
 }
 
+// Clears the conversation owner and remembers the reaction for that PC.
 // 0x4C10A0
-void sub_4C10A0(int64_t npc_obj, int64_t pc_obj)
+void reaction_end_conversation(int64_t npc_obj, int64_t pc_obj)
 {
     int v1;
 
@@ -368,13 +371,14 @@ void sub_4C10A0(int64_t npc_obj, int64_t pc_obj)
         return;
     }
 
-    v1 = sub_4C1290(npc_obj, pc_obj);
-    sub_4C1490(npc_obj, 0, v1, 0);
-    sub_4C1360(npc_obj, pc_obj, v1);
+    v1 = reaction_stored_or_base_get(npc_obj, pc_obj);
+    reaction_stored_slot_set(npc_obj, 0, v1, 0);
+    reaction_stored_remember(npc_obj, pc_obj, v1);
 }
 
+// Reads the PC handle in reaction slot zero, or null for a non-NPC.
 // 0x4C1110
-int64_t sub_4C1110(int64_t npc)
+int64_t reaction_conversation_pc_get(int64_t npc)
 {
     if (obj_field_int32_get(npc, OBJ_F_TYPE) != OBJ_TYPE_NPC) {
         return 0;
@@ -385,8 +389,9 @@ int64_t sub_4C1110(int64_t npc)
 
 // TODO: Figure out the math.
 //
+// Scales a price according to the NPC reaction toward the PC.
 // 0x4C1150
-int sub_4C1150(int64_t a1, int64_t a2, int a3)
+int reaction_adjust_price(int64_t a1, int64_t a2, int a3)
 {
     int v1;
     int v2;
@@ -410,8 +415,9 @@ int sub_4C1150(int64_t a1, int64_t a2, int a3)
     return a3 * v2 / 100;
 }
 
+// Adjusts reaction based on the signed surplus value of a trade.
 // 0x4C11D0
-void sub_4C11D0(int64_t a1, int64_t a2, int a3)
+void reaction_adjust_for_trade_surplus(int64_t a1, int64_t a2, int a3)
 {
     int v1;
 
@@ -440,12 +446,13 @@ void sub_4C11D0(int64_t a1, int64_t a2, int a3)
     }
 }
 
+// Returns stored reaction for the PC, falling back to the NPC base reaction.
 // 0x4C1290
-int sub_4C1290(int64_t npc_obj, int64_t pc_obj)
+int reaction_stored_or_base_get(int64_t npc_obj, int64_t pc_obj)
 {
     int v1;
 
-    if (sub_4C12F0(npc_obj, pc_obj, 1, &v1)) {
+    if (reaction_stored_lookup(npc_obj, pc_obj, 1, &v1)) {
         return v1;
     }
 
@@ -458,8 +465,9 @@ int reaction_get_base(int64_t obj)
     return obj_field_int32_get(obj, OBJ_F_NPC_REACTION_BASE);
 }
 
+// Searches ten reaction slots, optionally including the conversation slot.
 // 0x4C12F0
-bool sub_4C12F0(int64_t npc_obj, int64_t pc_obj, bool a3, int* a4)
+bool reaction_stored_lookup(int64_t npc_obj, int64_t pc_obj, bool a3, int* a4)
 {
     int index;
 
@@ -474,8 +482,9 @@ bool sub_4C12F0(int64_t npc_obj, int64_t pc_obj, bool a3, int* a4)
     return false;
 }
 
+// Updates or chooses a reaction memory slot according to existing replacement rules.
 // 0x4C1360
-void sub_4C1360(int64_t npc_obj, int64_t pc_obj, int value)
+void reaction_stored_remember(int64_t npc_obj, int64_t pc_obj, int value)
 {
     int index;
     int candidate;
@@ -492,7 +501,7 @@ void sub_4C1360(int64_t npc_obj, int64_t pc_obj, int value)
     for (index = 0; index < 10; index++) {
         obj = obj_arrayfield_handle_get(npc_obj, OBJ_F_NPC_REACTION_PC_IDX, index);
         if (obj == pc_obj) {
-            sub_4C1490(npc_obj, pc_obj, value, index);
+            reaction_stored_slot_set(npc_obj, pc_obj, value, index);
             return;
         }
 
@@ -504,14 +513,14 @@ void sub_4C1360(int64_t npc_obj, int64_t pc_obj, int value)
     }
 
     if (candidate != -1) {
-        sub_4C1490(npc_obj, pc_obj, value, candidate);
+        reaction_stored_slot_set(npc_obj, pc_obj, value, candidate);
         return;
     }
 
     // FIXME: Unused.
     datetime_current_second();
 
-    v1 = sub_4C15A0(value);
+    v1 = reaction_distance_from_neutral(value);
     for (index = 0; index < 10; index++) {
         if (index != 0) {
             reaction_level = obj_arrayfield_uint32_get(npc_obj, OBJ_F_NPC_REACTION_LEVEL_IDX, index);
@@ -519,7 +528,7 @@ void sub_4C1360(int64_t npc_obj, int64_t pc_obj, int value)
             // FIXME: Unused.
             obj_arrayfield_uint32_get(npc_obj, OBJ_F_NPC_REACTION_TIME_IDX, index);
 
-            v2 = sub_4C15A0(reaction_level);
+            v2 = reaction_distance_from_neutral(reaction_level);
             if (v2 < v1 && (candidate == -1 || v2 < v3)) {
                 candidate = index;
                 v3 = v2;
@@ -528,13 +537,14 @@ void sub_4C1360(int64_t npc_obj, int64_t pc_obj, int value)
     }
 
     if (candidate != -1) {
-        sub_4C1490(npc_obj, pc_obj, value, candidate);
+        reaction_stored_slot_set(npc_obj, pc_obj, value, candidate);
         return;
     }
 }
 
+// Writes a reaction slot and time, then refreshes journal memory, UI and combat reaction.
 // 0x4C1490
-void sub_4C1490(int64_t npc_obj, int64_t pc_obj, int level, int index)
+void reaction_stored_slot_set(int64_t npc_obj, int64_t pc_obj, int level, int index)
 {
     obj_arrayfield_obj_set(npc_obj, OBJ_F_NPC_REACTION_PC_IDX, index, pc_obj);
     obj_arrayfield_uint32_set(npc_obj, OBJ_F_NPC_REACTION_LEVEL_IDX, index, level);
@@ -546,8 +556,9 @@ void sub_4C1490(int64_t npc_obj, int64_t pc_obj, int level, int index)
     combat_recalc_reaction(npc_obj);
 }
 
+// Calculates race, reaction-stat and reputation modifiers with aloof/monster rules.
 // 0x4C1500
-int sub_4C1500(int64_t npc_obj, int64_t pc_obj, unsigned int flags)
+int reaction_modifiers_get(int64_t npc_obj, int64_t pc_obj, unsigned int flags)
 {
     int v1 = 0;
     int modifier;
@@ -573,8 +584,9 @@ int sub_4C1500(int64_t npc_obj, int64_t pc_obj, unsigned int flags)
     return v1;
 }
 
+// Returns the absolute distance from neutral reaction fifty.
 // 0x4C15A0
-int sub_4C15A0(int a1)
+int reaction_distance_from_neutral(int a1)
 {
     // FIXME: Unused.
     datetime_current_second();

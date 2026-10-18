@@ -17,7 +17,7 @@
 #include "ui/inven_ui.h"
 #include "ui/spell_ui.h"
 
-static void sub_5719F0(int64_t item_obj, uint64_t** tgt_ptr);
+static void item_ui_target_flags_pointer_get(int64_t item_obj, uint64_t** tgt_ptr);
 
 // 0x5CAC40
 static uint64_t qword_5CAC40 = TGT_OBJECT;
@@ -45,7 +45,7 @@ void item_ui_exit(void)
 }
 
 // 0x5719F0
-void sub_5719F0(int64_t item_obj, uint64_t** tgt_ptr)
+void item_ui_target_flags_pointer_get(int64_t item_obj, uint64_t** tgt_ptr)
 {
     int mana_store;
     unsigned int flags;
@@ -58,13 +58,13 @@ void sub_5719F0(int64_t item_obj, uint64_t** tgt_ptr)
         flags = obj_field_int32_get(item_obj, OBJ_F_ITEM_FLAGS);
         spl = mt_item_spell(item_obj, 0);
         if (mana_store != 0 || (flags & OIF_IS_MAGICAL) != 0) {
-            sub_459F20(spl, tgt_ptr);
+            magictech_target_flags_pointer_get(spl, tgt_ptr);
         } else if (trap_is_trap_device(item_obj)) {
             *tgt_ptr = &qword_5CAC50;
         } else if (spl == -1) {
             *tgt_ptr = &qword_5CAC40;
         } else {
-            sub_459F20(spl, tgt_ptr);
+            magictech_target_flags_pointer_get(spl, tgt_ptr);
         }
     }
 }
@@ -91,7 +91,7 @@ void item_ui_activate(int64_t owner_obj, int64_t item_obj)
 
     qword_6810D8 = item_obj;
 
-    sub_5719F0(item_obj, &tgt_ptr);
+    item_ui_target_flags_pointer_get(item_obj, &tgt_ptr);
 
     if ((*tgt_ptr & TGT_OBJ_INVEN) == 0) {
         inven_ui_destroy();
@@ -162,9 +162,9 @@ void item_ui_apply(TargetDescriptor* td)
         && !tig_kb_get_modifier(SDL_KMOD_LCTRL)
         && (obj_field_int32_get(qword_6810D8, OBJ_F_GENERIC_FLAGS) & OGF_IS_LOCKPICK) != 0) {
         skill_invocation_init(&skill_invocation);
-        sub_4440E0(pc_obj, &(skill_invocation.source));
+        object_handle_reference_init(pc_obj, &(skill_invocation.source));
         if (!td->is_loc) {
-            sub_4440E0(td->obj, &(skill_invocation.target));
+            object_handle_reference_init(td->obj, &(skill_invocation.target));
         }
         skill_invocation.skill = SKILL_PICK_LOCKS;
         skill_invocation.item.obj = item_find_first_generic(skill_invocation.source.obj, OGF_IS_LOCKPICK);
@@ -228,7 +228,7 @@ void item_ui_apply(TargetDescriptor* td)
 
         anim_goal_use_item_on_obj(pc_obj, td->obj, item_obj, 0);
         if (tig_kb_get_modifier(SDL_KMOD_LSHIFT)) {
-            sub_436C80();
+            anim_last_goal_stop_requested_set();
             item_ui_deactivate();
             return;
         }
@@ -236,7 +236,7 @@ void item_ui_apply(TargetDescriptor* td)
         if (tig_kb_get_modifier(SDL_KMOD_LCTRL)
             || !input_binding_is_pressed(INPUT_ACTION_ALWAYS_RUN)
             || (get_always_run(pc_obj) && !tig_kb_get_modifier(SDL_KMOD_LCTRL))) {
-            sub_436C20();
+            anim_selected_goal_running_enable();
             item_ui_deactivate();
             return;
         }

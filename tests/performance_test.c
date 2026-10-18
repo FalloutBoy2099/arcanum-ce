@@ -14,6 +14,7 @@ int main(void)
     CHECK(SDL_Init(0));
     CHECK(tig_memory_init(NULL) == TIG_OK);
     remove(path);
+    remove("performance-test.csv.details.csv");
     CHECK(!tig_performance_is_enabled());
     CHECK(tig_performance_begin() == 0);
     tig_performance_record(TIG_PERF_PATH, 10.0);
@@ -23,6 +24,12 @@ int main(void)
     CHECK(!tig_performance_is_enabled());
     CHECK(tig_performance_set_enabled(true, path));
     CHECK(tig_performance_is_enabled());
+    tig_performance_record_detail(TIG_PERF_ART_LOAD, 0.25, "fast.art");
+    tig_performance_record_detail(TIG_PERF_ART_LOAD, 8.0, "art\\slow,\"quoted\".art");
+    tig_performance_record_detail(TIG_PERF_ART_PREPARE, 9.0, "art\\prepare.art");
+    tig_performance_record_detail(TIG_PERF_ART_BLIT, 10.0, "art\\blit.art");
+    tig_performance_record_detail(TIG_PERF_METRIC_COUNT, 10.0, "invalid.art");
+    tig_performance_record_detail(TIG_PERF_ART_LOAD, NAN, "invalid.art");
     TigPerformanceSummary summary;
     CHECK(tig_performance_summary(TIG_PERF_PATH, &summary));
     CHECK(summary.count == 0 && summary.sampled == 0 && summary.mean_ms == 0.0);
@@ -89,6 +96,26 @@ int main(void)
         fclose(file);
     }
     remove(path);
+    file = fopen("performance-test.csv.details.csv", "r");
+    CHECK(file != NULL);
+    if (file != NULL) {
+        char line[1024];
+        int headers = 0, slow = 0, prepare = 0, blit = 0;
+        while (fgets(line, sizeof(line), file) != NULL) {
+            CHECK(strstr(line, "fast.art") == NULL && strstr(line, "invalid.art") == NULL);
+            if (strncmp(line, "session,interval,metric,milliseconds,resource", 44) == 0) headers++;
+            if (strstr(line, ",art_load,8.000000,\"art\\slow,\"\"quoted\"\".art\"") != NULL) slow++;
+            if (strstr(line, ",art_prepare,9.000000,") != NULL) prepare++;
+            if (strstr(line, ",art_blit,10.000000,") != NULL) blit++;
+        }
+        CHECK(headers == 1 && slow == 1 && prepare == 1 && blit == 1);
+        fclose(file);
+    }
+    remove("performance-test.csv.details.csv");
+    tig_performance_record_detail(TIG_PERF_ART_LOAD, 10.0, "disabled.art");
+    file = fopen("performance-test.csv.details.csv", "r");
+    CHECK(file == NULL); // Profiling off never creates diagnostic files.
+    if (file != NULL) fclose(file);
     tig_memory_exit();
     SDL_Quit();
     printf("Performance regressions: %s\n", failures == 0 ? "PASS" : "FAIL");

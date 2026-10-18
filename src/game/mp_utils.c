@@ -25,17 +25,17 @@
 #include "game/wall.h"
 
 // 0x4ED6C0
-bool sub_4ED6C0(int64_t obj)
+bool mp_junk_pile_cleanup_request(int64_t obj)
 {
     Packet29 pkt;
 
     if (!tig_net_is_active()
         || tig_net_is_host()) {
-        return sub_463540(obj);
+        return item_junk_pile_cleanup(obj);
     }
 
     pkt.type = 29;
-    sub_4F0640(obj, &(pkt.oid));
+    mp_object_id_get_nullable(obj, &(pkt.oid));
     tig_net_send_app_all(&pkt, sizeof(pkt));
 
     return false;
@@ -46,7 +46,7 @@ bool mp_object_create(int name, int64_t loc, int64_t* obj_ptr)
 {
     if (tig_net_is_active()) {
         if (tig_net_is_host()
-            && object_create(sub_4685A0(name), loc, obj_ptr)) {
+            && object_create(proto_handle_get(name), loc, obj_ptr)) {
             Packet70 pkt;
 
             pkt.type = 70;
@@ -63,11 +63,11 @@ bool mp_object_create(int name, int64_t loc, int64_t* obj_ptr)
         return false;
     }
 
-    return object_create(sub_4685A0(name), loc, obj_ptr);
+    return object_create(proto_handle_get(name), loc, obj_ptr);
 }
 
 // 0x4EDA60
-void sub_4EDA60(UiMessage* ui_message, int player, int a3)
+void mp_ui_message_send(UiMessage* ui_message, int player, int a3)
 {
     Packet84* pkt;
     int extra_length;
@@ -84,7 +84,7 @@ void sub_4EDA60(UiMessage* ui_message, int player, int a3)
 }
 
 // 0x4EDCE0
-void sub_4EDCE0(int64_t obj, tig_art_id_t art_id)
+void mp_object_current_art_set(int64_t obj, tig_art_id_t art_id)
 {
     Packet92 pkt;
 
@@ -128,16 +128,16 @@ void mp_handle_ui_update_inven(PacketUpdateInven* pkt)
 }
 
 // 0x4EDF20
-void sub_4EDF20(int64_t obj, int64_t location, int dx, int dy, bool a7)
+void mp_object_move_to_location(int64_t obj, int64_t location, int dx, int dy, bool a7)
 {
-    Packet99 pkt;
+    ObjectMovePacket pkt;
 
     if (!tig_net_is_active()
         || tig_net_is_host()) {
         if (a7 && player_is_local_pc_obj(obj)) {
             location_origin_set(location);
         }
-        sub_43E770(obj, location, dx, dy);
+        object_move_to_location(obj, location, dx, dy);
     }
 
     if (tig_net_is_active()
@@ -153,13 +153,13 @@ void sub_4EDF20(int64_t obj, int64_t location, int dx, int dy, bool a7)
 }
 
 // 0x4EDFF0
-void sub_4EDFF0(Packet99* pkt)
+void mp_object_move_packet_process(ObjectMovePacket* pkt)
 {
     int64_t obj;
 
     if (tig_net_is_host()) {
         obj = obj_pool_perm_lookup(pkt->oid);
-        sub_43E770(obj, pkt->location, pkt->dx, pkt->dy);
+        object_move_to_location(obj, pkt->location, pkt->dx, pkt->dy);
 
         if (pkt->field_30 && player_is_local_pc_obj(obj)) {
             location_origin_set(pkt->location);
@@ -170,7 +170,7 @@ void sub_4EDFF0(Packet99* pkt)
 // 0x4EE060
 void mp_item_activate(int64_t owner_obj, int64_t item_obj)
 {
-    Packet100 pkt;
+    UiRequestPacket pkt;
 
     if (player_is_local_pc_obj(owner_obj)) {
         ui_item_activate(owner_obj, item_obj);
@@ -181,8 +181,8 @@ void mp_item_activate(int64_t owner_obj, int64_t item_obj)
         && tig_net_is_host()) {
         pkt.type = 100;
         pkt.subtype = 5;
-        sub_4F0640(owner_obj, &(pkt.d.s.field_8));
-        sub_4F0640(item_obj, &(pkt.d.s.field_20));
+        mp_object_id_get_nullable(owner_obj, &(pkt.d.s.field_8));
+        mp_object_id_get_nullable(item_obj, &(pkt.d.s.field_20));
         tig_net_send_app_all(&pkt, sizeof(pkt));
     }
 }
@@ -193,7 +193,7 @@ void mp_ui_written_start_type(int64_t obj, WrittenType written_type, int num)
     if (player_get_local_pc_obj() != obj) {
         int client_id = multiplayer_find_slot_from_obj(obj);
         if (client_id != -1) {
-            Packet100 pkt;
+            UiRequestPacket pkt;
 
             pkt.type = 100;
             pkt.subtype = 3;
@@ -213,12 +213,12 @@ void mp_ui_show_inven_loot(int64_t pc_obj, int64_t target_obj)
 {
     if (!player_is_local_pc_obj(pc_obj)) {
         if (tig_net_is_active() && tig_net_is_host()) {
-            Packet100 pkt;
+            UiRequestPacket pkt;
 
             pkt.type = 100;
             pkt.subtype = 6;
-            sub_4F0640(pc_obj, &(pkt.d.s.field_8));
-            sub_4F0640(pc_obj, &(pkt.d.s.field_20));
+            mp_object_id_get_nullable(pc_obj, &(pkt.d.s.field_8));
+            mp_object_id_get_nullable(pc_obj, &(pkt.d.s.field_20));
             tig_net_send_app_all(&pkt, sizeof(pkt));
         }
 
@@ -229,12 +229,12 @@ void mp_ui_show_inven_loot(int64_t pc_obj, int64_t target_obj)
 }
 
 // 0x4EE3A0
-void sub_4EE3A0(int64_t obj, int64_t a2)
+void mp_ui_object_examine_request(int64_t obj, int64_t a2)
 {
-    Packet100 pkt;
+    UiRequestPacket pkt;
 
     if (player_is_local_pc_obj(obj)) {
-        sub_4604F0(obj, a2);
+        ui_object_examine_and_select(obj, a2);
         return;
     }
 
@@ -242,8 +242,8 @@ void sub_4EE3A0(int64_t obj, int64_t a2)
         && tig_net_is_host()) {
         pkt.type = 100;
         pkt.subtype = 7;
-        sub_4F0640(obj, &(pkt.d.s.field_8));
-        sub_4F0640(obj, &(pkt.d.s.field_20));
+        mp_object_id_get_nullable(obj, &(pkt.d.s.field_8));
+        mp_object_id_get_nullable(obj, &(pkt.d.s.field_20));
         tig_net_send_app_all(&pkt, sizeof(pkt));
     }
 }
@@ -253,12 +253,12 @@ void mp_ui_show_inven_identify(int64_t pc_obj, int64_t target_obj)
 {
     if (!player_is_local_pc_obj(pc_obj)) {
         if (tig_net_is_active() && tig_net_is_host()) {
-            Packet100 pkt;
+            UiRequestPacket pkt;
 
             pkt.type = 100;
             pkt.subtype = 8;
-            sub_4F0640(pc_obj, &(pkt.d.s.field_8));
-            sub_4F0640(pc_obj, &(pkt.d.s.field_20));
+            mp_object_id_get_nullable(pc_obj, &(pkt.d.s.field_8));
+            mp_object_id_get_nullable(pc_obj, &(pkt.d.s.field_20));
             tig_net_send_app_all(&pkt, sizeof(pkt));
         }
 
@@ -269,12 +269,12 @@ void mp_ui_show_inven_identify(int64_t pc_obj, int64_t target_obj)
 }
 
 // 0x4EE4C0
-void sub_4EE4C0(int64_t obj, int64_t a2)
+void mp_ui_character_sheet_request(int64_t obj, int64_t a2)
 {
-    Packet100 pkt;
+    UiRequestPacket pkt;
 
     if (player_is_local_pc_obj(obj)) {
-        sub_460930(obj, a2);
+        ui_character_sheet_open(obj, a2);
         return;
     }
 
@@ -282,18 +282,18 @@ void sub_4EE4C0(int64_t obj, int64_t a2)
         && tig_net_is_host()) {
         pkt.type = 100;
         pkt.subtype = 10;
-        sub_4F0640(obj, &(pkt.d.s.field_8));
-        sub_4F0640(obj, &(pkt.d.s.field_20));
+        mp_object_id_get_nullable(obj, &(pkt.d.s.field_8));
+        mp_object_id_get_nullable(obj, &(pkt.d.s.field_20));
         tig_net_send_app_all(&pkt, sizeof(pkt));
     }
 }
 
 // 0x4EE5E0
-void sub_4EE5E0(Packet100* pkt)
+void mp_ui_packet_dispatch(UiRequestPacket* pkt)
 {
     int64_t v1;
     int64_t v2;
-    Packet100 new_pkt;
+    UiRequestPacket new_pkt;
 
     switch (pkt->subtype) {
     case 0:
@@ -314,60 +314,60 @@ void sub_4EE5E0(Packet100* pkt)
             obj_pool_perm_lookup(pkt->d.c.field_28));
         break;
     case 5:
-        sub_4F0690(pkt->d.s.field_20, &v2);
-        sub_4F0690(pkt->d.s.field_8, &v1);
+        mp_object_id_resolve_nullable(pkt->d.s.field_20, &v2);
+        mp_object_id_resolve_nullable(pkt->d.s.field_8, &v1);
         if (player_is_local_pc_obj(v1)) {
             ui_item_activate(v1, v2);
         }
         break;
     case 6:
-        sub_4F0690(pkt->d.s.field_8, &v1);
-        sub_4F0690(pkt->d.s.field_20, &v2);
+        mp_object_id_resolve_nullable(pkt->d.s.field_8, &v1);
+        mp_object_id_resolve_nullable(pkt->d.s.field_20, &v2);
         if (player_is_local_pc_obj(v1)) {
             ui_show_inven_loot(v1, v2);
         }
         break;
     case 7:
-        sub_4F0690(pkt->d.s.field_8, &v1);
-        sub_4F0690(pkt->d.s.field_20, &v2);
+        mp_object_id_resolve_nullable(pkt->d.s.field_8, &v1);
+        mp_object_id_resolve_nullable(pkt->d.s.field_20, &v2);
         if (player_is_local_pc_obj(v1)) {
-            sub_4604F0(v1, v2);
+            ui_object_examine_and_select(v1, v2);
         }
         break;
     case 8:
-        sub_4F0690(pkt->d.s.field_8, &v1);
-        sub_4F0690(pkt->d.s.field_20, &v2);
+        mp_object_id_resolve_nullable(pkt->d.s.field_8, &v1);
+        mp_object_id_resolve_nullable(pkt->d.s.field_20, &v2);
         if (player_is_local_pc_obj(v1)) {
             ui_show_inven_identify(v1, v2);
         }
         break;
     case 9:
-        sub_4F0690(pkt->d.s.field_8, &v1);
-        sub_4F0690(pkt->d.s.field_20, &v2);
+        mp_object_id_resolve_nullable(pkt->d.s.field_8, &v1);
+        mp_object_id_resolve_nullable(pkt->d.s.field_20, &v2);
         if (player_is_local_pc_obj(v1)) {
             ui_show_inven_npc_identify(v1, v2);
         }
         break;
     case 10:
-        sub_4F0690(pkt->d.s.field_8, &v1);
-        sub_4F0690(pkt->d.s.field_20, &v2);
+        mp_object_id_resolve_nullable(pkt->d.s.field_8, &v1);
+        mp_object_id_resolve_nullable(pkt->d.s.field_20, &v2);
         if (player_is_local_pc_obj(v1)) {
-            sub_460930(v1, v2);
+            ui_character_sheet_open(v1, v2);
         }
         break;
     case 11:
-        sub_4F0690(pkt->d.x.field_8, &v1);
+        mp_object_id_resolve_nullable(pkt->d.x.field_8, &v1);
         if (player_is_local_pc_obj(v1)) {
             item_error_msg(v1, pkt->d.x.field_20);
         }
         // FIXME: Fallthrough?
     case 12:
-        sub_4F0690(pkt->d.z.field_8, &v1);
-        sub_4F0690(pkt->d.z.field_20, &v2);
+        mp_object_id_resolve_nullable(pkt->d.z.field_8, &v1);
+        mp_object_id_resolve_nullable(pkt->d.z.field_20, &v2);
         switch (pkt->d.z.field_3C) {
         case 0:
             if (tig_net_is_host()) {
-                if (sub_460C50(v1, v2, pkt->d.z.field_38)) {
+                if (ui_inventory_open_preconditions_check(v1, v2, pkt->d.z.field_38)) {
                     new_pkt = *pkt;
                     new_pkt.d.z.field_3C = 1;
                     tig_net_send_app(&new_pkt, sizeof(new_pkt), sub_52A530());
@@ -376,7 +376,7 @@ void sub_4EE5E0(Packet100* pkt)
             break;
         case 1:
             if (tig_net_is_host()) {
-                if (sub_460C80(v1, v2, pkt->d.z.field_38)) {
+                if (ui_inventory_game_mode_select(v1, v2, pkt->d.z.field_38)) {
                     new_pkt = *pkt;
                     new_pkt.d.z.field_3C = 2;
                     tig_net_send_app_all(&new_pkt, sizeof(new_pkt));
@@ -385,7 +385,7 @@ void sub_4EE5E0(Packet100* pkt)
             break;
         case 2:
             if (tig_net_is_host()) {
-                sub_460CB0(v1, v2, pkt->d.z.field_38);
+                ui_inventory_target_prepare(v1, v2, pkt->d.z.field_38);
 
                 new_pkt = *pkt;
                 new_pkt.d.z.field_3C = 3;
@@ -418,7 +418,7 @@ void mp_gsound_play_sfx(int sound_id)
 }
 
 // 0x4EED00
-void sub_4EED00(int64_t obj, int sound_id)
+void mp_player_sound_play(int64_t obj, int sound_id)
 {
     if (obj == OBJ_HANDLE_NULL) {
         return;
@@ -492,68 +492,68 @@ void mp_handle_gsound_play_scheme(PacketPlaySound* pkt)
 }
 
 // 0x4EF320
-void sub_4EF320(void)
+void mp_reserved_hook_1_stub(void)
 {
     // TODO: Incomplete.
 }
 
 // 0x4EF3D0
-void sub_4EF3D0(void)
+void mp_reserved_hook_2_stub(void)
 {
     // TODO: Incomplete.
 }
 
 // 0x4EF540
-void sub_4EF540(void)
+void mp_reserved_hook_3_stub(void)
 {
     // TODO: Incomplete.
 }
 
 // 0x4EF830
-void sub_4EF830(int64_t a1, int64_t a2)
+void mp_object_pull_request(int64_t a1, int64_t a2)
 {
-    Packet118 pkt;
+    ObjectPullPacket pkt;
 
     if (!tig_net_is_active()
         || tig_net_is_host()) {
-        sub_4445A0(a1, a2);
+        object_pull_adjacent_to_source(a1, a2);
         return;
     }
 
     pkt.type = 118;
-    sub_4F0640(a1, &(pkt.field_8));
-    sub_4F0640(a2, &(pkt.field_20));
+    mp_object_id_get_nullable(a1, &(pkt.field_8));
+    mp_object_id_get_nullable(a2, &(pkt.field_20));
     tig_net_send_app_all(&pkt, sizeof(pkt));
 }
 
 // 0x4EF8B0
-void sub_4EF8B0(Packet118* pkt)
+void mp_object_pull_packet_process(ObjectPullPacket* pkt)
 {
     int64_t v1;
     int64_t v2;
 
     if (tig_net_is_host()) {
-        sub_4F0690(pkt->field_8, &v1);
-        sub_4F0690(pkt->field_20, &v2);
-        sub_4445A0(v1, v2);
+        mp_object_id_resolve_nullable(pkt->field_8, &v1);
+        mp_object_id_resolve_nullable(pkt->field_20, &v2);
+        object_pull_adjacent_to_source(v1, v2);
     }
 }
 
 // 0x4EFAE0
-void sub_4EFAE0(int64_t obj, int a2)
+void mp_inventory_destroy_request(int64_t obj, int a2)
 {
-    Packet121 pkt;
+    InventoryDestroyPacket pkt;
 
     if (!tig_net_is_active()
         || tig_net_is_host()) {
-        sub_463B30(obj, a2);
+        item_inventory_destroy_except_persistent(obj, a2);
     }
 
     if (tig_net_is_active()
         && tig_net_is_host()) {
         if (!multiplayer_is_locked()) {
             pkt.type = 121;
-            sub_4F0640(obj, &(pkt.oid));
+            mp_object_id_get_nullable(obj, &(pkt.oid));
             pkt.field_20 = a2;
             tig_net_send_app_all(&pkt, sizeof(pkt));
         }
@@ -561,44 +561,44 @@ void sub_4EFAE0(int64_t obj, int a2)
 }
 
 // 0x4EFB50
-void sub_4EFB50(Packet121* pkt)
+void mp_inventory_destroy_packet_process(InventoryDestroyPacket* pkt)
 {
     int64_t obj;
 
     multiplayer_lock();
-    sub_4F0690(pkt->oid, &obj);
-    sub_463B30(obj, pkt->field_20);
+    mp_object_id_resolve_nullable(pkt->oid, &obj);
+    item_inventory_destroy_except_persistent(obj, pkt->field_20);
     multiplayer_unlock();
 }
 
 // 0x4EFBA0
-void sub_4EFBA0(int64_t obj)
+void mp_inventory_source_spawn_request(int64_t obj)
 {
-    Packet122 pkt;
+    InventorySpawnPacket pkt;
 
     if (tig_net_is_active()
         && !tig_net_is_host()) {
         pkt.type = 122;
-        sub_4F0640(obj, &(pkt.oid));
+        mp_object_id_get_nullable(obj, &(pkt.oid));
         tig_net_send_app_all(&pkt, sizeof(pkt));
     }
 }
 
 // 0x4EFBE0
-void sub_4EFBE0(void)
+void mp_inventory_spawn_packet_hook_stub(void)
 {
     // TODO: Incomplete.
 }
 
 // 0x4EFC30
-void sub_4EFC30(int64_t pc_obj, const char* name, const char* rule)
+void mp_player_rule_packet_send(int64_t pc_obj, const char* name, const char* rule)
 {
     int size;
-    Packet123* pkt;
+    PlayerRulePacket* pkt;
 
     // NOTE: Unclear what additional 4 bytes are for.
     size = sizeof(*pkt) + (int)strlen(name) + (int)strlen(rule) + 2 + 4;
-    pkt = (Packet123*)MALLOC(size);
+    pkt = (PlayerRulePacket*)MALLOC(size);
     pkt->type = 123;
     pkt->total_size = size;
     pkt->player = multiplayer_find_slot_from_obj(pc_obj);
@@ -611,13 +611,13 @@ void sub_4EFC30(int64_t pc_obj, const char* name, const char* rule)
 }
 
 // 0x4F05F0
-void sub_4F05F0(void)
+void mp_reserved_hook_4_stub(void)
 {
     // TODO: Incomplete.
 }
 
 // 0x4F0640
-void sub_4F0640(int64_t obj, ObjectID* oid_ptr)
+void mp_object_id_get_nullable(int64_t obj, ObjectID* oid_ptr)
 {
     if (obj != OBJ_HANDLE_NULL) {
         *oid_ptr = obj_get_id(obj);
@@ -627,7 +627,7 @@ void sub_4F0640(int64_t obj, ObjectID* oid_ptr)
 }
 
 // 0x4F0690
-void sub_4F0690(ObjectID oid, int64_t* obj_ptr)
+void mp_object_id_resolve_nullable(ObjectID oid, int64_t* obj_ptr)
 {
     if (oid.type != OID_TYPE_NULL) {
         *obj_ptr = obj_pool_perm_lookup(oid);

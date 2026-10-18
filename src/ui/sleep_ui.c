@@ -123,7 +123,7 @@ static bool sleep_ui_wait_mode;
 /**
  * 0x6834B8
  */
-static Ryan sleep_ui_bed_obj_safe;
+static ObjectReference sleep_ui_bed_obj_safe;
 
 /**
  * Flag indicating whether the player is currently sleeping.
@@ -354,7 +354,7 @@ void sleep_ui_toggle(int64_t bed_obj)
 
         if (bed_obj != OBJ_HANDLE_NULL) {
             sleep_ui_using_bed = true;
-            sub_443EB0(bed_obj, &sleep_ui_bed_obj_safe);
+            object_reference_init(bed_obj, &sleep_ui_bed_obj_safe);
         } else {
             sleep_ui_using_bed = false;
         }
@@ -395,7 +395,7 @@ void sleep_ui_close(void)
         sleep_ui_destroy();
 
         if (sleep_ui_using_bed) {
-            if (sub_443F80(&bed_obj, &sleep_ui_bed_obj_safe)
+            if (object_reference_resolve(&bed_obj, &sleep_ui_bed_obj_safe)
                 && bed_obj != OBJ_HANDLE_NULL) {
                 critter_leave_bed(sleep_ui_obj, bed_obj);
             }
@@ -598,7 +598,7 @@ bool sleep_ui_message_filter(TigMessage* msg)
     }
 
     // Schedule the first sleep event in 50 ms.
-    sub_45A950(&datetime, 50);
+    datetime_init(&datetime, 50);
     timeevent_add_delay(&timeevent, &datetime);
 
     // Fade out.
@@ -627,7 +627,7 @@ bool sleep_ui_process_callback(TimeEvent* timeevent)
     int hours;
 
     // Advance game time by one hour.
-    sub_45A950(&datetime, 3600000);
+    datetime_init(&datetime, 3600000);
     timeevent_inc_datetime(&datetime);
 
     // Apply healing if not in wait mode.
@@ -664,7 +664,7 @@ bool sleep_ui_process_callback(TimeEvent* timeevent)
         next_timeevent.params[0].integer_value = timeevent->params[0].integer_value - 1;
 
         // Schedule next event in 200ms.
-        sub_45A950(&datetime, 200);
+        datetime_init(&datetime, 200);
         timeevent_add_delay(&next_timeevent, &datetime);
 
         return true;
@@ -681,7 +681,7 @@ bool sleep_ui_process_callback(TimeEvent* timeevent)
         next_timeevent.params[0].integer_value = timeevent->params[0].integer_value;
 
         // Schedule next event in 200ms.
-        sub_45A950(&datetime, 200);
+        datetime_init(&datetime, 200);
         timeevent_add_delay(&next_timeevent, &datetime);
         return true;
     }

@@ -1,4 +1,6 @@
 #include "game/gamelib.h"
+#include "game/activity_time.h"
+#include "game/zoom_damage.h"
 #include <tig/performance.h>
 #include "game/journal_memory.h"
 #include "game/conversation_history.h"
@@ -333,6 +335,7 @@ TigVideoBuffer* gamelib_scratch_video_buffer;
 
 static TigVideoBuffer* gamelib_world_video_buffer = NULL;
 static TigVideoBuffer* gamelib_iso_window_vb = NULL;
+static ZoomDamageState gamelib_zoom_damage_state;
 static bool gamelib_zoom_world_pass_active = false;
 
 // Zoom-out draw perf counter. See gamelib_zoom_perf_toggle().
@@ -423,9 +426,13 @@ bool gamelib_init(GameInitInfo* init_info)
     settings_register(&settings, RANDOM_ENCOUNTERS_KEY, "0", NULL);
     settings_register(&settings, LIGHTING_KEY, "0", lighting_changed);
     settings_register(&settings, CRAFTING_PARTY_COMPONENTS_KEY, "0", NULL);
+    activity_time_init();
     settings_register(&settings, SCHEMATIC_TOOLBAR_KEY, "1", NULL);
     settings_register(&settings, LOGBOOK_TOOLBAR_KEY, "1", NULL);
     settings_register(&settings, WORLDMAP_TOOLBAR_KEY, "1", NULL);
+    settings_register(&settings, BARTER_COLOR_BETTER_KEY, "#00FF00", NULL);
+    settings_register(&settings, BARTER_COLOR_WORSE_KEY, "#FF0000", NULL);
+    settings_register(&settings, BARTER_COLOR_EQUAL_KEY, "#F5F5F5", NULL);
     settings_register(&settings, SCHEMATIC_COLOR_AVAILABLE_KEY, "original", NULL);
     settings_register(&settings, SCHEMATIC_COLOR_MISSING_KEY, "original", NULL);
     settings_register(&settings, SCHEMATIC_OPACITY_AVAILABLE_KEY, "100", NULL);
@@ -487,6 +494,7 @@ bool gamelib_init(GameInitInfo* init_info)
         world_vb_info.background_color = 0;
         if (tig_video_buffer_create(&world_vb_info, &gamelib_world_video_buffer) != TIG_OK) {
             gamelib_world_video_buffer = NULL;
+            gamelib_zoom_damage_state.valid = false;
             tig_debug_printf("gamelib_init: zoom disabled because world video buffer allocation failed.\n");
         }
     }
@@ -541,6 +549,7 @@ void gamelib_reset(void)
     tig_timer_now(&reset_started_at);
 
     in_reset = true;
+    activity_time_reset();
     gamelib_loaded_save[0] = '\0';
     journal_memory_reset();
     conversation_history_reset();
@@ -615,6 +624,7 @@ void gamelib_exit(void)
     if (gamelib_world_video_buffer != NULL) {
         tig_video_buffer_destroy(gamelib_world_video_buffer);
         gamelib_world_video_buffer = NULL;
+        gamelib_zoom_damage_state.valid = false;
     }
 
     if (tig_file_is_directory("Save\\Current")) {
@@ -642,6 +652,7 @@ void gamelib_ping(void)
         }
     }
     intgame_action_tooltips_tick();
+    activity_time_ping();
     tig_performance_end(TIG_PERF_SIMULATION, perf_start);
 }
 
@@ -684,6 +695,7 @@ void gamelib_resize(GameResizeInfo* resize_info)
     if (gamelib_world_video_buffer != NULL) {
         tig_video_buffer_destroy(gamelib_world_video_buffer);
         gamelib_world_video_buffer = NULL;
+        gamelib_zoom_damage_state.valid = false;
     }
 
     if (gamelib_draw_func == gamelib_draw_game) {
@@ -695,6 +707,7 @@ void gamelib_resize(GameResizeInfo* resize_info)
         world_vb_info.background_color = 0;
         if (tig_video_buffer_create(&world_vb_info, &gamelib_world_video_buffer) != TIG_OK) {
             gamelib_world_video_buffer = NULL;
+            gamelib_zoom_damage_state.valid = false;
             tig_debug_printf("gamelib_resize: zoom disabled because world video buffer allocation failed.\n");
         }
     }
@@ -1055,14 +1068,14 @@ void gamelib_invalidate_rect(TigRect* rect)
 
     if (in_draw) {
         if (gamelib_pending_dirty_rects_head != NULL) {
-            sub_52D480(&gamelib_pending_dirty_rects_head, &dirty_rect);
+            tig_rect_list_add_coalesced(&gamelib_pending_dirty_rects_head, &dirty_rect);
         } else {
             gamelib_pending_dirty_rects_head = tig_rect_node_create();
             gamelib_pending_dirty_rects_head->rect = dirty_rect;
         }
     } else {
         if (gamelib_dirty_rects_head != NULL) {
-            sub_52D480(&gamelib_dirty_rects_head, &dirty_rect);
+            tig_rect_list_add_coalesced(&gamelib_dirty_rects_head, &dirty_rect);
         } else {
             gamelib_dirty_rects_head = tig_rect_node_create();
             gamelib_dirty_rects_head->rect = dirty_rect;
@@ -1091,6 +1104,7 @@ bool gamelib_draw(void)
     int64_t orig_oy;
     int ww;
     int wh;
+    TigVideoUpload zoom_damage;
 
     if (gamelib_renderlock_cnt <= 0) {
         return false;
@@ -1110,6 +1124,7 @@ bool gamelib_draw(void)
     zoom_active = (z != 1.0f)
         && (gamelib_world_video_buffer != NULL)
         && (gamelib_draw_func == gamelib_draw_game);
+    if (!zoom_active) gamelib_zoom_damage_state.valid = false;
 
     // Phase A: world-VB content is built up across frames (we don't clear
     // it). If zoom_active just turned on, OR the zoom level lerped this
@@ -1154,6 +1169,7 @@ bool gamelib_draw(void)
         location_origin_get(&orig_ox, &orig_oy);
         ww = orig_content_rect.width;
         wh = orig_content_rect.height;
+        zoom_damage_init(&zoom_damage, ww, wh);
 
         active_w = (int)ceilf((float)ww / z);
         active_h = (int)ceilf((float)wh / z);
@@ -1212,6 +1228,9 @@ bool gamelib_draw(void)
             gamelib_dirty_rects_head = NULL;
             while (node != NULL) {
                 next = node->next;
+                // Fixed-screen text overlays also invalidate screen rectangles.
+                // Restore those pixels as well as mapped world damage.
+                zoom_damage_screen(&zoom_damage, node->rect);
                 TigRect translated;
                 bool covers_full_screen = node->rect.x <= 0
                     && node->rect.y <= 0
@@ -1236,7 +1255,7 @@ bool gamelib_draw(void)
                     gamelib_dirty_rects_head->rect = translated;
                     gamelib_dirty_rects_head->next = NULL;
                 } else {
-                    sub_52D480(&gamelib_dirty_rects_head, &translated);
+                    tig_rect_list_add_coalesced(&gamelib_dirty_rects_head, &translated);
                 }
                 node = next;
             }
@@ -1285,14 +1304,8 @@ bool gamelib_draw(void)
             location_origin_pixel_set(orig_ox, orig_oy);
             zoom_active = false;
 
-            // Phase A: render is partial (driven by dirty rects above),
-            // but blit is ALWAYS full. Reason: world-VB content is
-            // zoom-independent (rendered at world-VB coords) but the
-            // downscale-to-window mapping is zoom-dependent. If we
-            // partial-blit and the zoom changed since the previous frame,
-            // un-blitted window regions keep the old downscale and look
-            // out of sync with the freshly-blitted partials. Full blit at
-            // 0.5-1ms is small change vs. the ~8ms render savings.
+            // Keep the full transform when copying subregions: separately
+            // rescaling source crops would change rounding/filtering at seams.
             src_w = (int)roundf((float)ww / z);
             src_h = (int)roundf((float)wh / z);
             src.x = ww - src_w / 2;
@@ -1314,11 +1327,37 @@ bool gamelib_draw(void)
                 // instead of being erased by NEAREST sampling.
                 blit.flags = TIG_VIDEO_BUFFER_BLIT_SCALE_LINEAR;
             }
+            for (node = gamelib_dirty_rects_head; node != NULL; node = node->next) {
+                zoom_damage_world(&zoom_damage, src, dst, node->rect);
+            }
+            ZoomMapping mapping = { src, dst, gamelib_world_video_buffer, gamelib_iso_window_vb,
+                orig_ox, orig_oy, blit.flags == TIG_VIDEO_BUFFER_BLIT_SCALE_LINEAR };
+            zoom_damage_finish(&zoom_damage, &gamelib_zoom_damage_state, &mapping);
             if (gamelib_zoom_perf_enabled) {
                 tig_timer_now(&perf_blit_start);
             }
             Uint64 zoom_start = tig_performance_begin();
-            tig_video_buffer_blit(&blit);
+            bool full_copy = zoom_damage.count == 1
+                && zoom_damage.rects[0].w == ww && zoom_damage.rects[0].h == wh;
+            if (!full_copy) {
+                for (int part = 0; part < zoom_damage.count; part++) {
+                    SDL_Rect* region = &zoom_damage.rects[part];
+                    TigRect clipped = { region->x, region->y, region->w, region->h };
+                    if (tig_video_buffer_scale_region(&blit, &clipped) != TIG_OK) {
+                        full_copy = true;
+                        break;
+                    }
+                }
+            }
+            if (full_copy) {
+                tig_video_buffer_blit(&blit);
+                tig_video_upload_reset(&zoom_damage, ww, wh);
+                tig_performance_count(TIG_PERF_ZOOM_FULL_COPIES, 1);
+            }
+            for (int part = 0; part < zoom_damage.count; part++) {
+                tig_performance_count(TIG_PERF_ZOOM_SCALED_PIXELS,
+                    (Uint64)zoom_damage.rects[part].w * zoom_damage.rects[part].h);
+            }
             tig_performance_end(TIG_PERF_ZOOM_BLIT, zoom_start);
 
             if (gamelib_zoom_perf_enabled) {
@@ -1364,13 +1403,15 @@ bool gamelib_draw(void)
             // world_vb at fixed coords outside the scale-blit src rect, so
             // they would have been clipped away. We stamp them on top here.
             {
-                TigRectListNode hud_node;
-                TigRectListNode* hud_head;
+                TigRectListNode hud_nodes[TIG_VIDEO_UPLOAD_RECTS];
+                TigRectListNode* hud_head = zoom_damage.count != 0 ? &hud_nodes[0] : NULL;
                 GameDrawInfo hud_info;
 
-                hud_node.rect = orig_content_rect;
-                hud_node.next = NULL;
-                hud_head = &hud_node;
+                for (int part = 0; part < zoom_damage.count; part++) {
+                    SDL_Rect* region = &zoom_damage.rects[part];
+                    hud_nodes[part].rect = (TigRect){ region->x, region->y, region->w, region->h };
+                    hud_nodes[part].next = part + 1 < zoom_damage.count ? &hud_nodes[part + 1] : NULL;
+                }
 
                 memset(&hud_info, 0, sizeof(hud_info));
                 hud_info.rects = &hud_head;
@@ -1383,8 +1424,8 @@ bool gamelib_draw(void)
                 }
             }
 
-            // Phase A: drop dirty world-VB rects (consumed) and do a full
-            // window invalidate. Matches the full blit above.
+            // Drop consumed world damage and invalidate only copied screen
+            // regions. HUD draws above already use the same disjoint regions.
             node = gamelib_dirty_rects_head;
             while (node != NULL) {
                 next = node->next;
@@ -1392,7 +1433,11 @@ bool gamelib_draw(void)
                 node = next;
             }
             gamelib_dirty_rects_head = NULL;
-            tig_window_invalidate_rect(NULL);
+            for (int part = 0; part < zoom_damage.count; part++) {
+                SDL_Rect* region = &zoom_damage.rects[part];
+                TigRect dirty = { region->x + gamelib_window_rect_x, region->y + gamelib_window_rect_y, region->w, region->h };
+                tig_window_invalidate_rect(&dirty);
+            }
         } else {
             node = gamelib_dirty_rects_head;
             while (node != NULL) {
@@ -1579,7 +1624,7 @@ bool gamelib_save(const char* name, const char* description)
         tig_debug_printf("done. Time (ms): %d\n", duration);
     }
 
-    if (!journal_memory_save() || !conversation_history_save()) {
+    if (!journal_memory_save() || !conversation_history_save() || !activity_time_save()) {
         in_save = false;
         return false;
     }
@@ -1639,6 +1684,7 @@ bool gamelib_load(const char* name)
     tig_timer_now(&start_time);
 
     in_load = true;
+    activity_time_reset();
     journal_memory_reset();
     conversation_history_reset();
 
@@ -1749,6 +1795,7 @@ bool gamelib_load(const char* name)
     duration = tig_timer_elapsed(start_time);
     journal_memory_load();
     conversation_history_load();
+    activity_time_load();
     tig_debug_printf("gamelib_load: Load Complete.  Total time: %d ms.\n", duration);
     SDL_strlcpy(gamelib_loaded_save, name, sizeof(gamelib_loaded_save));
 
@@ -2048,7 +2095,7 @@ bool gamelib_saveinfo_init(const char* name, const char* description, GameSaveIn
     save_info->pc_location = obj_field_int64_get(pc_obj, OBJ_F_LOCATION);
     save_info->story_state = script_story_state_get();
     strcpy(save_info->description, description);
-    save_info->datetime = sub_45A7C0();
+    save_info->datetime = game_time_get();
 
     return true;
 }
@@ -2285,7 +2332,7 @@ void gamelib_draw_game(GameDrawInfo* draw_info)
         light_draw(draw_info);
         tig_performance_end(TIG_PERF_LIGHTING, start);
         tile_draw(draw_info);
-        sub_43C690(draw_info);
+        object_hover_overlay_draw(draw_info);
         start = tig_performance_begin();
         object_draw(draw_info);
         tig_performance_end(TIG_PERF_OBJECTS, start);

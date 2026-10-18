@@ -8,6 +8,18 @@ static int failures;
 
 int main(void)
 {
+    CHECK(benchmark_notice_id("finished") == 1);
+    CHECK(benchmark_notice_id("requires_safe_save") == 2);
+    CHECK(benchmark_notice_id("route_unavailable") == 3);
+    CHECK(benchmark_notice_id("output_unavailable") == 4);
+    CHECK(benchmark_notice_id("timeout") == 5);
+    CHECK(benchmark_notice_id("action_failed") == 6);
+    CHECK(benchmark_notice_id("aborted") == 7);
+    CHECK(benchmark_notice_id("interrupted_focus_lost") == 8);
+    CHECK(benchmark_notice_id("interrupted_quit") == 9);
+    CHECK(benchmark_notice_id("cancelled") == 10);
+    CHECK(benchmark_notice_id("interrupted_shutdown") == 0);
+    CHECK(benchmark_notice_id(NULL) == 0 && benchmark_notice_id("starting") == 0);
     CHECK(benchmark_step(-1) == NULL && benchmark_step(1000) == NULL);
     BenchmarkRun run;
     benchmark_run_init(&run);
@@ -33,7 +45,14 @@ int main(void)
         }
         CHECK(frames == (step->action == BENCHMARK_MOVE ? 120 : step->minimum_frames));
     }
-    CHECK(run.finished && !run.failed && entered == 13);
+    CHECK(run.finished && !run.failed && entered == 16);
+    CHECK(BENCHMARK_SCENARIO_VERSION == 2);
+    CHECK(benchmark_step(13)->action == BENCHMARK_INDEX && benchmark_step(13)->argument == 1);
+    CHECK(benchmark_step(14)->action == BENCHMARK_CONVERSATIONS && benchmark_step(14)->argument == 1);
+    CHECK(benchmark_step(15)->action == BENCHMARK_SCHEMATICS && benchmark_step(15)->argument == 1);
+    for (int i = 0; i < entered; i++) {
+        for (int j = i + 1; j < entered; j++) CHECK(strcmp(benchmark_step(i)->name, benchmark_step(j)->name) != 0);
+    }
     CHECK(!benchmark_run_enter(&run) && !benchmark_run_advance(&run, true));
     CHECK(strcmp(benchmark_step(0)->name, "warmup") == 0);
     for (int leg = 0; leg < 4; leg++) {

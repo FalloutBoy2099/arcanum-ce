@@ -75,8 +75,11 @@ objets, empreintes, pagination et affichage. Ce n'est pas un benchmark de FPS.
 
 ## Suite de l'audit
 
-Les requêtes de collision sans liste, les caches locaux de recherche, le pool
-du planificateur et un changement de sa file restent à examiner avec les
-nouvelles mesures. Leurs règles de secteurs, objets dynamiques et ordre des
-événements ne sont pas modifiées dans ce lot. L'éclairage, les évictions ART
-et le tri des objets restent également des pistes à mesurer.
+Mise à jour : les requêtes directes de pièges/feu et le pool des événements
+sont maintenant appliqués et documentés dans
+`docs/performance_queries_events_20261017.md` (deuxième lot).
+
+Les autres listes de collision, les caches locaux de recherche et un changement
+de la file du planificateur restent à examiner avec les nouvelles mesures.
+L'éclairage, les évictions ART et le tri des objets restent également des pistes
+à mesurer.

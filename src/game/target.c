@@ -10,7 +10,7 @@
 #include "game/stat.h"
 #include "game/tile.h"
 
-static bool sub_4F28A0(int x, int y, TargetDescriptor* td);
+static bool target_pick_at_local_xy(int x, int y, TargetDescriptor* td);
 static void target_list_add_obj_unless_off(TargetList* list, int64_t obj);
 static void target_list_add_obj_unless_destroyed(TargetList* list, int64_t obj);
 static void target_list_add_loc(TargetList* list, int64_t loc);
@@ -63,10 +63,10 @@ static int64_t target_path_from;
 static int64_t target_path_to;
 
 // 0x603CB8
-static TargetContext stru_603CB8;
+static TargetContext target_current_context;
 
 // 0x603D20
-static TargetParams stru_603D20;
+static TargetParams target_current_params;
 
 // 0x603D38
 static bool target_initialized;
@@ -92,7 +92,7 @@ bool target_init(GameInitInfo* init_info)
     }
 
     target_iso_content_rect = window_data.rect;
-    target_context_init(&stru_603CB8, &stru_603D20, OBJ_HANDLE_NULL);
+    target_context_init(&target_current_context, &target_current_params, OBJ_HANDLE_NULL);
     target_initialized = true;
 
     return true;
@@ -123,7 +123,7 @@ void target_resize(GameResizeInfo* resize_info)
  */
 void target_flags_set(uint64_t flags)
 {
-    stru_603D20.tgt = flags;
+    target_current_params.tgt = flags;
 }
 
 /**
@@ -133,7 +133,7 @@ void target_flags_set(uint64_t flags)
  */
 uint64_t target_flags_get(void)
 {
-    return stru_603D20.tgt;
+    return target_current_params.tgt;
 }
 
 // 0x4F25E0
@@ -171,43 +171,44 @@ void target_context_init(TargetContext* ctx, TargetParams* params, int64_t sourc
     }
 }
 
+// Evaluates a descriptor using current targeting state, optionally falling back from object to its location.
 // 0x4F2680
-bool sub_4F2680(S4F2680* a1)
+bool target_descriptor_evaluate_current(TargetDescriptorEvaluation* evaluation)
 {
-    stru_603CB8.source_obj = a1->field_0;
+    target_current_context.source_obj = evaluation->source_obj;
 
-    if (a1->td->is_loc) {
-        stru_603CB8.orig_target_loc = a1->td->loc;
-        stru_603CB8.target_loc = a1->td->loc;
-        stru_603CB8.target_obj = OBJ_HANDLE_NULL;
-        stru_603CB8.orig_target_obj = OBJ_HANDLE_NULL;
+    if (evaluation->td->is_loc) {
+        target_current_context.orig_target_loc = evaluation->td->loc;
+        target_current_context.target_loc = evaluation->td->loc;
+        target_current_context.target_obj = OBJ_HANDLE_NULL;
+        target_current_context.orig_target_obj = OBJ_HANDLE_NULL;
     } else {
-        if ((obj_field_int32_get(a1->td->obj, OBJ_F_FLAGS) & OF_CLICK_THROUGH) != 0) {
+        if ((obj_field_int32_get(evaluation->td->obj, OBJ_F_FLAGS) & OF_CLICK_THROUGH) != 0) {
             return false;
         }
 
-        stru_603CB8.orig_target_obj = a1->td->obj;
-        stru_603CB8.target_obj = a1->td->obj;
-        stru_603CB8.target_loc = OBJ_HANDLE_NULL;
-        stru_603CB8.orig_target_loc = OBJ_HANDLE_NULL;
+        target_current_context.orig_target_obj = evaluation->td->obj;
+        target_current_context.target_obj = evaluation->td->obj;
+        target_current_context.target_loc = OBJ_HANDLE_NULL;
+        target_current_context.orig_target_loc = OBJ_HANDLE_NULL;
     }
 
-    stru_603CB8.self_obj = a1->field_8;
+    target_current_context.self_obj = evaluation->self_obj;
 
-    if (target_context_evaluate(&stru_603CB8)) {
-        if (stru_603D20.tgt) {
+    if (target_context_evaluate(&target_current_context)) {
+        if (target_current_params.tgt) {
             return true;
         }
         return false;
     }
 
-    if (!a1->td->is_loc) {
-        if (a1->td->obj != OBJ_HANDLE_NULL) {
-            stru_603CB8.target_loc = obj_field_int64_get(a1->td->obj, OBJ_F_LOCATION);
-            stru_603CB8.orig_target_loc = stru_603CB8.target_loc;
+    if (!evaluation->td->is_loc) {
+        if (evaluation->td->obj != OBJ_HANDLE_NULL) {
+            target_current_context.target_loc = obj_field_int64_get(evaluation->td->obj, OBJ_F_LOCATION);
+            target_current_context.orig_target_loc = target_current_context.target_loc;
         }
-        if (target_context_evaluate(&stru_603CB8) && stru_603D20.tgt) {
-            target_descriptor_set_loc(a1->td, stru_603CB8.target_loc);
+        if (target_context_evaluate(&target_current_context) && target_current_params.tgt) {
+            target_descriptor_set_loc(evaluation->td, target_current_context.target_loc);
             return true;
         }
     }
@@ -261,7 +262,7 @@ bool target_pick_at_screen_xy(int x, int y, TargetDescriptor* td, bool fullscree
         y -= target_iso_content_rect.y;
     }
 
-    return sub_4F28A0(x, y, td);
+    return target_pick_at_local_xy(x, y, td);
 }
 
 bool target_pick_at_virtual_xy(int x, int y, TargetDescriptor* td, bool fullscreen)
@@ -270,14 +271,15 @@ bool target_pick_at_virtual_xy(int x, int y, TargetDescriptor* td, bool fullscre
     if (!fullscreen) {
         y -= target_iso_content_rect.y;
     }
-    return sub_4F28A0(x, y, td);
+    return target_pick_at_local_xy(x, y, td);
 }
 
+// Picks and evaluates objects or a tile in local viewport coordinates with current targeting flags.
 // 0x4F28A0
-bool sub_4F28A0(int x, int y, TargetDescriptor* td)
+bool target_pick_at_local_xy(int x, int y, TargetDescriptor* td)
 {
     int64_t pc_obj;
-    S4F2680 v1;
+    TargetDescriptorEvaluation v1;
     ObjectList party_members;
     ObjectList mp_party_members;
     ObjectList dead_critters;
@@ -295,15 +297,15 @@ bool sub_4F28A0(int x, int y, TargetDescriptor* td)
     dead_critters.head = NULL;
     objects.head = NULL;
 
-    v1.field_0 = pc_obj;
-    v1.field_8 = pc_obj;
+    v1.source_obj = pc_obj;
+    v1.self_obj = pc_obj;
     v1.td = td;
 
-    if ((stru_603D20.tgt & TGT_OBJ_NO_SELF) != 0) {
+    if ((target_current_params.tgt & TGT_OBJ_NO_SELF) != 0) {
         object_flags_set(pc_obj, OF_CLICK_THROUGH);
     }
 
-    if ((stru_603D20.tgt & TGT_NON_PARTY_CRITTERS) != 0) {
+    if ((target_current_params.tgt & TGT_NON_PARTY_CRITTERS) != 0) {
         object_list_all_followers(pc_obj, &party_members);
         node = party_members.head;
         while (node != NULL) {
@@ -321,7 +323,7 @@ bool sub_4F28A0(int x, int y, TargetDescriptor* td)
         }
     }
 
-    if ((stru_603D20.tgt & TGT_OBJ_NO_ST_CRITTER_DEAD) != 0) {
+    if ((target_current_params.tgt & TGT_OBJ_NO_ST_CRITTER_DEAD) != 0) {
         object_list_vicinity(pc_obj, OBJ_TM_PC | OBJ_TM_NPC, &dead_critters);
         node = mp_party_members.head;
         while (node != NULL) {
@@ -332,10 +334,10 @@ bool sub_4F28A0(int x, int y, TargetDescriptor* td)
         }
     }
 
-    if (sub_43D9F0(x, y, &v2, 0x3)) {
-        sub_4F2C60(&v2);
+    if (object_pick_at_screen_xy(x, y, &v2, 0x3)) {
+        target_resolve_scenery_occupant(&v2);
         target_descriptor_set_obj(td, v2);
-        if (sub_4F2680(&v1)) {
+        if (target_descriptor_evaluate_current(&v1)) {
             ret = true;
         }
     }
@@ -346,9 +348,9 @@ bool sub_4F28A0(int x, int y, TargetDescriptor* td)
             node = objects.head;
             while (node != NULL) {
                 v2 = node->obj;
-                sub_4F2C60(&v2);
+                target_resolve_scenery_occupant(&v2);
                 target_descriptor_set_obj(td, v2);
-                if (sub_4F2680(&v1)) {
+                if (target_descriptor_evaluate_current(&v1)) {
                     ret = true;
                     break;
                 }
@@ -358,18 +360,18 @@ bool sub_4F28A0(int x, int y, TargetDescriptor* td)
 
             if (!ret) {
                 target_descriptor_set_loc(td, loc);
-                if (sub_4F2680(&v1)) {
+                if (target_descriptor_evaluate_current(&v1)) {
                     ret = true;
                 }
             }
         }
     }
 
-    if ((stru_603D20.tgt & TGT_OBJ_NO_SELF) != 0) {
+    if ((target_current_params.tgt & TGT_OBJ_NO_SELF) != 0) {
         object_flags_unset(pc_obj, OF_CLICK_THROUGH);
     }
 
-    if ((stru_603D20.tgt & TGT_NON_PARTY_CRITTERS) != 0) {
+    if ((target_current_params.tgt & TGT_NON_PARTY_CRITTERS) != 0) {
         node = party_members.head;
         while (node != NULL) {
             object_flags_unset(node->obj, OF_CLICK_THROUGH);
@@ -385,7 +387,7 @@ bool sub_4F28A0(int x, int y, TargetDescriptor* td)
         }
     }
 
-    if ((stru_603D20.tgt & TGT_OBJ_NO_ST_CRITTER_DEAD) != 0) {
+    if ((target_current_params.tgt & TGT_OBJ_NO_ST_CRITTER_DEAD) != 0) {
         node = mp_party_members.head;
         while (node != NULL) {
             if (critter_is_dead(node->obj)) {
@@ -403,8 +405,9 @@ bool sub_4F28A0(int x, int y, TargetDescriptor* td)
     return true;
 }
 
+// Replaces occupied scenery with its occupant and returns the effective target type.
 // 0x4F2C60
-int sub_4F2C60(int64_t* obj_ptr)
+int target_resolve_scenery_occupant(int64_t* obj_ptr)
 {
     int type;
     int64_t whos_in_me_obj;
@@ -444,7 +447,7 @@ bool target_pick_at_screen_xy_ex(int x, int y, TargetDescriptor* td, uint64_t tg
 
     old_tgt = target_flags_get();
     target_flags_set(tgt);
-    rc = sub_4F28A0(x, y, td);
+    rc = target_pick_at_local_xy(x, y, td);
     target_flags_set(old_tgt);
     return rc;
 }
@@ -975,7 +978,7 @@ bool target_context_evaluate(TargetContext* ctx)
         target_path_create_info.to = ctx->target_loc;
         target_path_create_info.max_rotations = sizeof(target_path_rotations);
         target_path_create_info.rotations = target_path_rotations;
-        target_path_create_info.flags = PATH_FLAG_0x0010;
+        target_path_create_info.flags = PATH_FLAG_IGNORE_CRITTERS;
 
         target_path_length = path_make(&target_path_create_info);
         target_path_from = target_path_create_info.from;
@@ -1264,7 +1267,7 @@ void target_context_build_list(TargetContext* ctx)
         obj_node = objects.head;
         while (obj_node != NULL) {
             int64_t tmp_obj = obj_node->obj;
-            if (sub_4F2C60(&tmp_obj) != OBJ_TYPE_SCENERY || all) {
+            if (target_resolve_scenery_occupant(&tmp_obj) != OBJ_TYPE_SCENERY || all) {
                 tmp_target_ctx.target_obj = tmp_obj;
                 if (target_context_evaluate(&tmp_target_ctx)) {
                     target_list_add_obj_unless_off(targets, tmp_obj);
@@ -1475,7 +1478,7 @@ void target_context_build_list(TargetContext* ctx)
                         obj_node = objects.head;
                         while (obj_node != NULL) {
                             int64_t tmp_obj = obj_node->obj;
-                            if (sub_4F2C60(&tmp_obj) != OBJ_TYPE_SCENERY
+                            if (target_resolve_scenery_occupant(&tmp_obj) != OBJ_TYPE_SCENERY
                                 || all) {
                                 tmp_target_ctx.target_obj = tmp_obj;
                                 if (target_context_evaluate(&tmp_target_ctx)) {
@@ -1532,7 +1535,7 @@ void target_context_build_list(TargetContext* ctx)
                 if (targets->entries[idx].obj != OBJ_HANDLE_NULL) {
                     mt_obj_node->obj = targets->entries[idx].obj;
                     mt_obj_node->next = *ctx->obj_list;
-                    sub_443EB0(mt_obj_node->obj, &(mt_obj_node->field_8));
+                    object_reference_init(mt_obj_node->obj, &(mt_obj_node->reference));
                     if (mt_obj_node->obj != OBJ_HANDLE_NULL) {
                         mt_obj_node->type = obj_field_int32_get(mt_obj_node->obj, OBJ_F_TYPE);
                         if (obj_type_is_critter(mt_obj_node->type)) {
@@ -1614,7 +1617,7 @@ bool target_find_displacement_loc(int64_t obj, int distance, int64_t* loc_ptr)
     target_path_create_info.to = to;
     target_path_create_info.max_rotations = sizeof(target_path_rotations);
     target_path_create_info.rotations = target_path_rotations;
-    target_path_create_info.flags = PATH_FLAG_0x0010;
+    target_path_create_info.flags = PATH_FLAG_IGNORE_CRITTERS;
 
     target_path_length = path_make(&target_path_create_info);
     target_path_to = target_path_create_info.to;
