@@ -85,6 +85,8 @@ static const InputBindingDef input_binding_defs[] = {
     { INPUT_ACTION_SCHEMATICS_NEXT, "schematics_next", "DOWN" },
     { INPUT_ACTION_SCHEMATICS_PAGE_PREVIOUS, "schematics_page_previous", "LEFT" },
     { INPUT_ACTION_SCHEMATICS_PAGE_NEXT, "schematics_page_next", "RIGHT" },
+    { INPUT_ACTION_TOGGLE_DAY_NIGHT_SHADER, "toggle_day_night_shader", "F6" },
+    { INPUT_ACTION_TOGGLE_WATER_SHADER, "toggle_water_shader", "F9" },
 };
 
 static InputBindingPart input_bindings[INPUT_ACTION_COUNT][INPUT_BINDING_MAX_PARTS];

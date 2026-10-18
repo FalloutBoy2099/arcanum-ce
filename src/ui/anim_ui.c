@@ -222,6 +222,7 @@ void ambient_lighting_enable(void)
 {
     if (!ambient_lighting_enabled) {
         ambient_lighting_enabled = true;
+        light_scheme_day_night_pause(false);
         ambient_lighting_reschedule();
     }
 }
@@ -230,6 +231,7 @@ void ambient_lighting_enable(void)
 void ambient_lighting_disable(void)
 {
     ambient_lighting_enabled = false;
+    light_scheme_day_night_pause(true);
 }
 
 // 0x57D650

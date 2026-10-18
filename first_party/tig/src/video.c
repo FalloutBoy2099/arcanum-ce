@@ -83,6 +83,7 @@ static bool tig_video_show_fps;
 static int dword_6103A4;
 
 static TigFadeState tig_fade_state;
+static TigColorGrade tig_world_color_grade = { 1, 1, 1, 1 };
 
 // 0x51F330
 int tig_video_init(TigInitInfo* init_info)
@@ -120,6 +121,7 @@ int tig_video_init(TigInitInfo* init_info)
 // 0x51F3F0
 void tig_video_exit(void)
 {
+    tig_color_grade_shutdown();
     tig_video_window_destroy();
     tig_video_initialized = false;
 }
@@ -178,10 +180,14 @@ void tig_video_display_fps(void)
 
     if (tig_video_show_fps) {
         ++counter;
-        if (counter >= 10) {
-            tig_timer_now(&curr);
-            elapsed = tig_timer_between(prev, curr);
-            tig_video_state.fps = (int)((float)counter / ((float)elapsed / 1000.0f));
+        tig_timer_now(&curr);
+        if (prev == 0) {
+            prev = curr;
+            counter = 0;
+        }
+        elapsed = tig_timer_between(prev, curr);
+        if (elapsed >= 1000) {
+            tig_video_state.fps = (int)((float)counter * 1000.0f / elapsed + 0.5f);
             prev = curr;
             counter = 0;
         }
@@ -387,6 +393,22 @@ void tig_video_invalidate_texture(void)
     }
 }
 
+void tig_video_color_grade_set(TigColorGrade grade)
+{
+    tig_world_color_grade = grade;
+}
+
+bool tig_video_buffer_water_shader(TigVideoBuffer* buffer, SDL_Surface* mask,
+    const TigVideoUpload* damage, float time, float strength, float origin_x, float origin_y)
+{
+    return buffer != NULL && tig_water_shader_apply(buffer->surface, mask, damage, time, strength, origin_x, origin_y);
+}
+
+void tig_video_buffer_color_grade(TigVideoBuffer* buffer, const TigVideoUpload* damage)
+{
+    if (buffer != NULL) tig_color_grade_apply(buffer->surface, damage, &tig_world_color_grade);
+}
+
 int tig_video_flip(void)
 {
     Uint64 start = tig_performance_begin();
@@ -414,7 +436,15 @@ int tig_video_flip(void)
 
     if (tig_video_show_fps) {
         SDL_SetRenderDrawColor(tig_video_state.renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
-        SDL_RenderDebugTextFormat(tig_video_state.renderer, 0, 0, "%d", tig_video_state.fps);
+        char text[32];
+        SDL_snprintf(text, sizeof(text), "%d FPS", tig_video_state.fps);
+        float width = (float)SDL_strlen(text) * SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE;
+        float x = tig_video_state.surface->w - width - 8.0f;
+        SDL_FRect background = { x - 4.0f, 4.0f, width + 8.0f, SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE + 8.0f };
+        SDL_SetRenderDrawColor(tig_video_state.renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+        SDL_RenderFillRect(tig_video_state.renderer, &background);
+        SDL_SetRenderDrawColor(tig_video_state.renderer, 245, 245, 245, SDL_ALPHA_OPAQUE);
+        SDL_RenderDebugText(tig_video_state.renderer, x, 8.0f, text);
     }
 
     start = tig_performance_begin();

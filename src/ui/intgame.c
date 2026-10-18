@@ -26,6 +26,7 @@
 #include "game/item_effect.h"
 #include "game/level.h"
 #include "game/light.h"
+#include "game/light_scheme.h"
 #include "game/magictech.h"
 #include "game/map.h"
 #include "game/mt_item.h"
@@ -1887,6 +1888,17 @@ void intgame_ammo_icon_refresh(tig_art_id_t art_id)
     tig_window_blit_art(intgame_interface_windows[index], &blt);
 }
 
+static void intgame_shader_toggle(const char* key, int feedback_base)
+{
+    bool enabled = settings_get_value(&settings, key) == 0;
+    settings_set_value(&settings, key, enabled);
+    if (strcmp(key, DAY_NIGHT_SHADER_KEY) == 0) light_scheme_day_night_tick();
+    UiMessage feedback = { 0 };
+    feedback.type = UI_MSG_TYPE_FEEDBACK;
+    feedback.str = (char*)mes_localized_get("shader_ui", feedback_base + (enabled ? 1 : 0));
+    intgame_message_window_display_msg(&feedback);
+}
+
 static bool intgame_handle_view_controls(TigMessage* msg)
 {
     if (mainmenu_ui_is_active() || textedit_ui_is_focused()
@@ -1907,7 +1919,9 @@ static bool intgame_handle_view_controls(TigMessage* msg)
     bool zoom_out = input_binding_matches_keyboard(INPUT_ACTION_ZOOM_OUT, msg);
     bool zoom_reset = input_binding_matches_keyboard(INPUT_ACTION_ZOOM_RESET, msg);
     bool cycle_hud = input_binding_matches_keyboard(INPUT_ACTION_CYCLE_HUD, msg);
-    if (!zoom_in && !zoom_out && !zoom_reset && !cycle_hud) {
+    bool toggle_shader = input_binding_matches_keyboard(INPUT_ACTION_TOGGLE_DAY_NIGHT_SHADER, msg);
+    bool toggle_water = input_binding_matches_keyboard(INPUT_ACTION_TOGGLE_WATER_SHADER, msg);
+    if (!zoom_in && !zoom_out && !zoom_reset && !cycle_hud && !toggle_shader && !toggle_water) {
         return false;
     }
     if (!msg->data.keyboard.pressed) {
@@ -1915,6 +1929,8 @@ static bool intgame_handle_view_controls(TigMessage* msg)
         if (zoom_out) iso_zoom_step_out();
         if (zoom_reset) iso_zoom_reset();
         if (cycle_hud) intgame_hud_user_toggle();
+        if (toggle_shader) intgame_shader_toggle(DAY_NIGHT_SHADER_KEY, 0);
+        if (toggle_water) intgame_shader_toggle(WATER_SHADER_KEY, 2);
         gamelib_invalidate_rect(NULL);
     }
     return true;

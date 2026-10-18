@@ -121,6 +121,7 @@ bool combat_is_turn_based(void);
 bool combat_turn_based_mode_change(bool turn_based);
 void combat_turn_based_toggle(void);
 bool combat_turn_based_is_active(void);
+bool combat_turn_based_has_active_opponents(int64_t pc);
 int64_t combat_turn_based_whos_turn_get(void);
 void combat_turn_based_whos_turn_set(int64_t obj);
 void combat_npc_turn_process(int64_t obj);

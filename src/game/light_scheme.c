@@ -1,6 +1,9 @@
 #include "game/light_scheme.h"
 
 #include <stdio.h>
+#include <math.h>
+#include "game/day_night.h"
+#include "game/timeevent.h"
 
 #include "game/light.h"
 #include "game/gamelib.h"
@@ -70,7 +73,7 @@ static int light_scheme_hour;
  *
  * 0x5F5CA8
  */
-static mes_file_handle_t light_schemes_msg_file;
+static mes_file_handle_t light_schemes_msg_file = MES_FILE_HANDLE_INVALID;
 
 /**
  * Flag indicating if the light scheme is currently being updated.
@@ -78,6 +81,7 @@ static mes_file_handle_t light_schemes_msg_file;
  * 0x5F5CAC
  */
 static bool light_scheme_changing;
+static bool light_scheme_day_night_paused;
 
 /**
  * Called when the game is initialized.
@@ -293,6 +297,22 @@ bool light_scheme_set_hour(int hour)
 
     // Retrieve color data for the specified hour.
     light_scheme_data = &(light_scheme_colors[hour]);
+    LightSchemeData blended = *light_scheme_data;
+    if (!light_scheme_day_night_paused && settings_get_value(&settings, DAY_NIGHT_SHADER_KEY) != 0) {
+        DateTime now = game_time_get();
+        int seconds = (now.milliseconds / 1000) % 86400;
+        if (seconds / 3600 == hour) {
+            float fraction = (seconds % 3600) / 3600.0f;
+            LightSchemeData* next = &light_scheme_colors[(hour + 1) % LIGHT_SCHEME_HOURS];
+            blended.indoor.red = (int)lroundf(blended.indoor.red + fraction * (next->indoor.red - blended.indoor.red));
+            blended.indoor.green = (int)lroundf(blended.indoor.green + fraction * (next->indoor.green - blended.indoor.green));
+            blended.indoor.blue = (int)lroundf(blended.indoor.blue + fraction * (next->indoor.blue - blended.indoor.blue));
+            blended.outdoor.red = (int)lroundf(blended.outdoor.red + fraction * (next->outdoor.red - blended.outdoor.red));
+            blended.outdoor.green = (int)lroundf(blended.outdoor.green + fraction * (next->outdoor.green - blended.outdoor.green));
+            blended.outdoor.blue = (int)lroundf(blended.outdoor.blue + fraction * (next->outdoor.blue - blended.outdoor.blue));
+            light_scheme_data = &blended;
+        }
+    }
     int reduction = settings_get_value(&settings, LIGHTING_KEY);
     indoor_color = tig_color_make(
         lighting_adjust_channel(light_scheme_data->indoor.red, reduction),
@@ -304,12 +324,47 @@ bool light_scheme_set_hour(int hour)
         lighting_adjust_channel(light_scheme_data->outdoor.blue, reduction));
 
     // Update ambient colors.
-    light_set_colors(indoor_color, outdoor_color);
+    if (indoor_color != light_get_indoor_color() || outdoor_color != light_get_outdoor_color()) {
+        light_set_colors(indoor_color, outdoor_color);
+    }
 
     // Indicate that the update is complete.
     light_scheme_changing = false;
 
     return true;
+}
+
+void light_scheme_day_night_pause(bool paused)
+{
+    light_scheme_day_night_paused = paused;
+}
+
+void light_scheme_day_night_tick(void)
+{
+    static int previous_second = -1;
+    static int previous_strength = -1;
+    static bool previous_enabled;
+    static TigColorGrade previous_grade = { 1, 1, 1, 1 };
+    if (light_scheme_day_night_paused || light_schemes_msg_file == MES_FILE_HANDLE_INVALID) return;
+    DateTime now = game_time_get();
+    int seconds = (now.milliseconds / 1000) % 86400;
+    int strength = settings_get_value(&settings, DAY_NIGHT_STRENGTH_KEY);
+    bool enabled = settings_get_value(&settings, DAY_NIGHT_SHADER_KEY) != 0;
+    if (!enabled && !previous_enabled) {
+        tig_video_color_grade_set((TigColorGrade){ 1, 1, 1, 1 });
+        return;
+    }
+    if (seconds / 10 == previous_second / 10 && strength == previous_strength && enabled == previous_enabled) return;
+    previous_second = seconds;
+    previous_strength = strength;
+    previous_enabled = enabled;
+    TigColorGrade grade = day_night_grade(seconds / 3600.0f, enabled ? strength / 100.0f : 0);
+    tig_video_color_grade_set(grade);
+    light_scheme_set_hour(seconds / 3600);
+    if (memcmp(&grade, &previous_grade, sizeof(grade)) != 0) {
+        previous_grade = grade;
+        gamelib_invalidate_rect(NULL);
+    }
 }
 
 /**

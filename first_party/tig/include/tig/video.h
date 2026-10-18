@@ -3,6 +3,7 @@
 
 #include "tig/color.h"
 #include "tig/rect.h"
+#include "tig/color_grade.h"
 #include "tig/types.h"
 
 typedef struct SDL_Surface SDL_Surface;
@@ -119,6 +120,8 @@ int tig_video_blit_near_black_alpha(TigVideoBuffer* src_video_buffer,
     int underlay_offset_x, int underlay_offset_y, uint8_t threshold, uint8_t opacity);
 int tig_video_fill(const TigRect* rect, tig_color_t color);
 int tig_video_flip(void);
+void tig_video_color_grade_set(TigColorGrade grade);
+void tig_video_buffer_color_grade(TigVideoBuffer* buffer, const TigVideoUpload* damage);
 void tig_video_invalidate_texture(void);
 int tig_video_screenshot_set_settings(TigVideoScreenshotSettings* settings);
 int tig_video_screenshot_make(void);
@@ -135,6 +138,8 @@ int tig_video_buffer_destroy(TigVideoBuffer* video_buffer);
 int tig_video_buffer_data(TigVideoBuffer* video_buffer, TigVideoBufferData* video_buffer_data);
 int tig_video_buffer_set_color_key(TigVideoBuffer* video_buffer, int color_key);
 int tig_video_buffer_lock(TigVideoBuffer* video_buffer);
+bool tig_video_buffer_water_shader(TigVideoBuffer* buffer, SDL_Surface* mask,
+    const TigVideoUpload* damage, float time, float strength, float origin_x, float origin_y);
 int tig_video_buffer_unlock(TigVideoBuffer* video_buffer);
 int tig_video_buffer_outline(TigVideoBuffer* video_buffer, TigRect* rect, tig_color_t color);
 int tig_video_buffer_fill(TigVideoBuffer* video_buffer, TigRect* rect, tig_color_t color);

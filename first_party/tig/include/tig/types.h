@@ -83,10 +83,6 @@ typedef enum TigError {
 
 typedef unsigned int TigInitFlags;
 
-// Display FPS counter in the top-left corner of the window.
-//
-// NOTE: The counter is rendered using GDI which severely affects
-// performance.
 #define TIG_INITIALIZE_FPS 0x0001u
 
 // Use intermediary buffer when rendering windows with color key.

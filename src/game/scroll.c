@@ -568,7 +568,7 @@ void scroll_by(int64_t dx, int64_t dy)
         scroll_init_info.draw_func();
 
         // Scroll the window content.
-        tig_window_scroll(scroll_init_info.iso_window_handle, (int)dx, (int)dy);
+        gamelib_scroll_world_and_interface((int)dx, (int)dy);
 
         // Invalidate newly revealed areas (horizontal scroll).
         if (dx > 0) {

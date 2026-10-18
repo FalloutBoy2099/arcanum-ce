@@ -59,6 +59,8 @@ set(SRCS
     "src/game/ci.c"
     "src/game/ci.h"
     "src/game/combat.c"
+    "src/game/combat_auto_exit.c"
+    "src/game/combat_auto_exit.h"
     "src/game/combat.h"
     "src/game/companion_movement.c"
     "src/game/companion_movement.h"
@@ -285,6 +287,10 @@ set(SRCS
     "src/game/timeevent_pool.h"
     "src/game/zoom_damage.c"
     "src/game/zoom_damage.h"
+    "src/game/world_composition.c"
+    "src/game/world_composition.h"
+    "src/game/day_night.c"
+    "src/game/day_night.h"
     "src/game/timeevent.h"
     "src/game/townmap.c"
     "src/game/townmap.h"
@@ -489,6 +495,31 @@ if(ARCANUM_BUILD_TESTS)
     target_include_directories(scale_region_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(scale_region_test PRIVATE ${TIG_LIBRARY})
     add_test(NAME scale_region COMMAND scale_region_test)
+
+    add_executable(world_composition_test tests/world_composition_test.c src/game/world_composition.c)
+    target_include_directories(world_composition_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(world_composition_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME world_composition COMMAND world_composition_test)
+
+    add_executable(day_night_test tests/day_night_test.c src/game/day_night.c)
+    target_include_directories(day_night_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(day_night_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME day_night COMMAND day_night_test)
+
+    add_executable(combat_auto_exit_test tests/combat_auto_exit_test.c src/game/combat_auto_exit.c)
+    target_include_directories(combat_auto_exit_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(combat_auto_exit_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME combat_auto_exit COMMAND combat_auto_exit_test)
+
+    add_executable(day_night_gpu_test tests/day_night_gpu_test.c)
+    target_link_libraries(day_night_gpu_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME day_night_gpu COMMAND day_night_gpu_test)
+    set_tests_properties(day_night_gpu PROPERTIES SKIP_RETURN_CODE 77)
+
+    add_executable(water_shader_gpu_test tests/water_shader_gpu_test.c)
+    target_link_libraries(water_shader_gpu_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME water_shader_gpu COMMAND water_shader_gpu_test)
+    set_tests_properties(water_shader_gpu PROPERTIES SKIP_RETURN_CODE 77)
 
     add_executable(object_query_test tests/object_query_test.c tests/object_query_reference.c src/game/object_query.c)
     target_compile_definitions(object_query_test PRIVATE TIG_DEBUG_MEMORY)

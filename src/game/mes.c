@@ -112,6 +112,7 @@ static LocalizedCatalog localized_catalogs[] = {
     { "follower_ui", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
     { "item_compare_ui", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
     { "benchmark_ui", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
+    { "shader_ui", MES_FILE_HANDLE_INVALID, MES_FILE_HANDLE_INVALID, false },
 };
 
 static const char* mes_localized_lookup(const char* name, int id, bool fallback_only)

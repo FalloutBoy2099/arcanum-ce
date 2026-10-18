@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include "game/ai.h"
+#include "game/combat_auto_exit.h"
 #include "game/anim.h"
 #include "game/animfx.h"
 #include "game/ci.h"
@@ -239,6 +240,7 @@ void combat_exit(void)
 // 0x4B1E80
 void combat_reset(void)
 {
+    combat_auto_exit_tick(0, false);
     in_combat_reset = true;
     combat_turn_based_end();
     in_combat_reset = false;
@@ -2904,6 +2906,18 @@ void combat_turn_based_toggle(void)
 bool combat_turn_based_is_active(void)
 {
     return combat_turn_based_active;
+}
+
+bool combat_turn_based_has_active_opponents(int64_t pc)
+{
+    if (!combat_turn_based_active) return false;
+    for (ObjectNode* node = combat_critter_list.head; node != NULL; node = node->next) {
+        int64_t obj = node->obj;
+        if (obj_handle_is_valid(obj) && critter_is_active(obj) && !critter_party_same(pc, obj)
+            && (obj_field_int32_get(obj, OBJ_F_CRITTER_FLAGS) & OCF_SURRENDERED) == 0
+            && (ai_is_fighting(obj) || combat_critter_is_combat_mode_active(obj))) return true;
+    }
+    return false;
 }
 
 // 0x4B6D80

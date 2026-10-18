@@ -959,6 +959,34 @@ static void test_startup_resolution(void)
     CHECK(highres_config_get()->height == 720);
 }
 
+static void test_startup_fps(void)
+{
+    const char* values[] = {
+        "[global]\nshow_fps=1\n[video]\nshow_fps=0\n",
+        "[global]\nshow_fps=0\n",
+        "[ui]\nshow_fps=1\n",
+        "[global]\n show_fps = 1 \n",
+        "[global]\nshow_fps=oops\n",
+    };
+    for (int i = 0; i < SDL_arraysize(values); i++) {
+        FILE* stream = fopen("arcanum.ini", "wt");
+        CHECK(stream != NULL);
+        if (stream == NULL) return;
+        fputs(values[i], stream);
+        fclose(stream);
+        highres_config_load();
+        CHECK(highres_config_get()->show_fps == (i == 0 || i == 3));
+    }
+    settings_set_value(&settings, "show_fps", 1);
+    settings_set_value(&settings, "auto_exit_combat", 1);
+    settings_save(&settings);
+    settings_exit(&settings);
+    settings_init(&settings, "arcanum.ini");
+    settings_load(&settings);
+    CHECK(settings_get_value(&settings, "show_fps") == 1);
+    CHECK(settings_get_value(&settings, "auto_exit_combat") == 1);
+}
+
 static void test_bindings(void)
 {
     TigMessage message = { 0 };
@@ -978,6 +1006,47 @@ static void test_bindings(void)
     CHECK(!input_binding_matches_keyboard(INPUT_ACTION_CYCLE_HUD, &message));
     message.data.keyboard.scancode = SDL_SCANCODE_F11;
     CHECK(input_binding_matches_keyboard(INPUT_ACTION_CYCLE_HUD, &message));
+}
+
+static void test_shader_toggle_binding(void)
+{
+    TigMessage message = { 0 };
+    message.type = TIG_MESSAGE_KEYBOARD;
+    message.data.keyboard.scancode = SDL_SCANCODE_F6;
+    input_bindings_init();
+    message.data.keyboard.pressed = true;
+    CHECK(input_binding_navigation_event(INPUT_ACTION_TOGGLE_DAY_NIGHT_SHADER, &message) == INPUT_NAVIGATION_CONSUME);
+    message.data.keyboard.pressed = false;
+    CHECK(input_binding_navigation_event(INPUT_ACTION_TOGGLE_DAY_NIGHT_SHADER, &message) == INPUT_NAVIGATION_ACTIVATE);
+    settings_set_str_value(&settings, "toggle_day_night_shader", "F9");
+    settings_save(&settings);
+    settings_exit(&settings);
+    settings_init(&settings, "arcanum.ini");
+    settings_load(&settings);
+    input_bindings_init();
+    CHECK(!input_binding_matches_keyboard(INPUT_ACTION_TOGGLE_DAY_NIGHT_SHADER, &message));
+    message.data.keyboard.scancode = SDL_SCANCODE_F9;
+    CHECK(input_binding_matches_keyboard(INPUT_ACTION_TOGGLE_DAY_NIGHT_SHADER, &message));
+    settings_set_str_value(&settings, "toggle_day_night_shader", "NONE");
+    input_bindings_init();
+    CHECK(!input_binding_matches_keyboard(INPUT_ACTION_TOGGLE_DAY_NIGHT_SHADER, &message));
+}
+
+static void test_water_shader_binding(void)
+{
+    TigMessage message = { 0 };
+    message.type = TIG_MESSAGE_KEYBOARD;
+    message.data.keyboard.scancode = SDL_SCANCODE_F9;
+    input_bindings_init();
+    message.data.keyboard.pressed = true;
+    CHECK(input_binding_navigation_event(INPUT_ACTION_TOGGLE_WATER_SHADER, &message) == INPUT_NAVIGATION_CONSUME);
+    message.data.keyboard.pressed = false;
+    CHECK(input_binding_navigation_event(INPUT_ACTION_TOGGLE_WATER_SHADER, &message) == INPUT_NAVIGATION_ACTIVATE);
+    settings_set_str_value(&settings, "toggle_water_shader", "F11");
+    input_bindings_init();
+    CHECK(!input_binding_matches_keyboard(INPUT_ACTION_TOGGLE_WATER_SHADER, &message));
+    message.data.keyboard.scancode = SDL_SCANCODE_F11;
+    CHECK(input_binding_matches_keyboard(INPUT_ACTION_TOGGLE_WATER_SHADER, &message));
 }
 
 static void test_panel_navigation_bindings(void)
@@ -1398,7 +1467,10 @@ int main(int argc, char** argv)
     test_localized_catalog_fallback();
     test_mes_duplicate_groups();
     test_startup_resolution();
+    test_startup_fps();
     test_bindings();
+    test_shader_toggle_binding();
+    test_water_shader_binding();
     test_panel_navigation_bindings();
     test_panel_navigation_mouse();
     test_zoom();

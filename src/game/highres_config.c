@@ -38,6 +38,7 @@ void highres_config_load(void)
         return;
     }
     bool video_section = false;
+    bool global_section = false;
     while (fgets(line, sizeof(line), stream) != NULL) {
         char* start = line;
         char* end = line + strlen(line);
@@ -45,13 +46,19 @@ void highres_config_load(void)
         *end = '\0';
         if (*start == '[') {
             video_section = SDL_strcasecmp(start, "[video]") == 0;
-        } else if (video_section) {
+            global_section = SDL_strcasecmp(start, "[global]") == 0;
+        } else if (video_section || global_section) {
             char* separator = strchr(start, '=');
             if (separator == NULL) continue;
             char* key_end = separator;
             highres_config_trim(&start, &key_end);
             *key_end = '\0';
-            if (SDL_strcasecmp(start, "resolution") == 0) {
+            if (global_section && SDL_strcasecmp(start, "show_fps") == 0) {
+                int value;
+                if (highres_config_parse_int(separator + 1, &value)) {
+                    highres_config.show_fps = value != 0;
+                }
+            } else if (video_section && SDL_strcasecmp(start, "resolution") == 0) {
                 int width, height;
                 char trailing;
                 if (sscanf(separator + 1, " %dx%d %c", &width, &height, &trailing) == 2

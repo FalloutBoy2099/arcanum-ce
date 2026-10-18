@@ -22,6 +22,12 @@
 #define WINDOW_CLOSE_MODE_KEY "window_close_mode"
 #define RANDOM_ENCOUNTERS_KEY "random_encounters"
 #define LIGHTING_KEY "lighting"
+#define DAY_NIGHT_SHADER_KEY "day_night_shader"
+#define SHOW_FPS_KEY "show_fps"
+#define AUTO_EXIT_COMBAT_KEY "auto_exit_combat"
+#define DAY_NIGHT_STRENGTH_KEY "day_night_strength"
+#define WATER_SHADER_KEY "water_shader"
+#define WATER_STRENGTH_KEY "water_strength"
 #define HUD_STAGE_KEY "hud_stage"
 #define VIOLENCE_FILTER_KEY "violence_filter"
 #define TURN_BASED_KEY "turn_based"
@@ -150,6 +156,7 @@ int gamelib_cheat_level_get(void);
 void gamelib_cheat_level_set(int level);
 void gamelib_invalidate_rect(TigRect* rect);
 bool gamelib_draw(void);
+void gamelib_scroll_world_and_interface(int dx, int dy);
 void gamelib_renderlock_acquire(void);
 void gamelib_renderlock_release(void);
 void gamelib_clear_screen(void);

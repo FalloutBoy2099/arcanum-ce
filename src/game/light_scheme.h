@@ -22,6 +22,8 @@ int light_scheme_get_map_default(void);
 bool light_scheme_set(int light_scheme, int hour);
 int light_scheme_get(void);
 bool light_scheme_set_hour(int hour);
+void light_scheme_day_night_tick(void);
+void light_scheme_day_night_pause(bool paused);
 int light_scheme_get_hour(void);
 int light_scheme_is_changing(void);
 

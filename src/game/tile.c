@@ -30,6 +30,17 @@ static void tile_topdown_sampling_tables_free(void);
 static TigVideoBuffer* tile_topdown_cached_buffer_get(unsigned int art_id);
 static void tile_draw_topdown(GameDrawInfo* draw_info);
 static void tile_draw_iso(GameDrawInfo* draw_info);
+static void tile_water_prepare(void);
+static void tile_water_mark(TigRect tile, GameDrawInfo* draw_info);
+static void tile_water_apply(GameDrawInfo* draw_info);
+
+static SDL_Surface* tile_water_mask;
+static bool tile_water_visible;
+static bool tile_water_marked;
+static bool tile_water_enabled;
+static bool tile_water_available = true;
+static tig_timestamp_t tile_water_timestamp;
+static tig_timestamp_t tile_water_seen_time;
 
 // 0x602AE0
 static TileCacheEntry tile_topdown_cache_entries[TILE_CACHE_CAPACITY];
@@ -67,6 +78,9 @@ static bool tile_topdown_staging_buffer_created;
 // 0x4D6840
 bool tile_init(GameInitInfo* init_info)
 {
+    tile_water_available = true;
+    tile_water_visible = false;
+    tile_water_enabled = false;
     if (tig_window_vbid_get(init_info->iso_window_handle, &tile_iso_video_buffer) != TIG_OK) {
         return false;
     }
@@ -83,6 +97,9 @@ bool tile_init(GameInitInfo* init_info)
 // 0x4D68A0
 void tile_exit(void)
 {
+    SDL_DestroySurface(tile_water_mask);
+    tile_water_mask = NULL;
+    tile_water_visible = false;
     tile_topdown_resources_free();
     tile_iso_window_handle = TIG_WINDOW_HANDLE_INVALID;
     tile_invalidate_rect = NULL;
@@ -126,7 +143,9 @@ void tile_draw(GameDrawInfo* draw_info)
 
     switch (tile_view_options.type) {
     case VIEW_TYPE_ISOMETRIC:
+        tile_water_prepare();
         tile_draw_iso(draw_info);
+        tile_water_apply(draw_info);
         break;
     case VIEW_TYPE_TOP_DOWN:
         // NOTE: Refactored into separate function for clarity.
@@ -716,6 +735,14 @@ void tile_draw_iso(GameDrawInfo* draw_info)
                             tile_rect.x = center_x + 1;
                             tile_rect.y = center_y;
 
+                            if (tile_water_enabled && tile_water_mask != NULL && art_blit_info.art_id != TIG_ART_ID_INVALID
+                                && a_name_tile_sound(art_blit_info.art_id) == TILE_SOUND_WATER
+                                && (tig_art_tile_id_transition_mask_get(art_blit_info.art_id) == 15
+                                    || (tig_art_tile_id_num1_get(art_blit_info.art_id) == tig_art_tile_id_num2_get(art_blit_info.art_id)
+                                        && tig_art_tile_id_flippable1_get(art_blit_info.art_id) == tig_art_tile_id_flippable2_get(art_blit_info.art_id)))) {
+                                tile_water_mark((TigRect){ center_x, center_y, 80, 40 }, draw_info);
+                            }
+
                             rect_node = *draw_info->rects;
                             while (rect_node != NULL) {
                                 if (tig_rect_intersection(&tile_rect, &(rect_node->rect), &dst_rect) == TIG_OK) {
@@ -860,4 +887,80 @@ void tile_draw_iso(GameDrawInfo* draw_info)
     }
 
     light_buffers_unlock();
+}
+
+void tile_water_tick(bool allowed)
+{
+    if (!allowed || !tile_water_available || !tile_water_visible || settings_get_value(&settings, WATER_SHADER_KEY) == 0
+        || settings_get_value(&settings, WATER_STRENGTH_KEY) <= 0) return;
+    if ((unsigned int)(gamelib_ping_time - tile_water_seen_time) > 1000) {
+        tile_water_visible = false;
+        return;
+    }
+    if ((unsigned int)(gamelib_ping_time - tile_water_timestamp) >= 50) {
+        tile_water_timestamp = gamelib_ping_time;
+        gamelib_invalidate_rect(NULL);
+    }
+}
+
+static void tile_water_prepare(void)
+{
+    tile_water_marked = false;
+    tile_water_enabled = tile_water_available && settings_get_value(&settings, WATER_SHADER_KEY) != 0
+        && settings_get_value(&settings, WATER_STRENGTH_KEY) > 0;
+    if (!tile_water_enabled) {
+        tile_water_visible = false;
+        return;
+    }
+    TigVideoBufferData data;
+    if (tig_video_buffer_data(tile_iso_video_buffer, &data) != TIG_OK) {
+        tile_water_enabled = false;
+        return;
+    }
+    if (tile_water_mask == NULL || tile_water_mask->w != data.width || tile_water_mask->h != data.height) {
+        SDL_DestroySurface(tile_water_mask);
+        tile_water_mask = SDL_CreateSurface(data.width, data.height, SDL_PIXELFORMAT_INDEX8);
+    }
+    if (tile_water_mask) SDL_FillSurfaceRect(tile_water_mask, NULL, 0);
+    else tile_water_enabled = false;
+}
+
+static void tile_water_mark(TigRect tile, GameDrawInfo* draw_info)
+{
+    for (TigRectListNode* node = *draw_info->rects; node != NULL; node = node->next) {
+        TigRect clipped;
+        TigRect bounds = { 0, 0, tile_water_mask->w, tile_water_mask->h };
+        if (tig_rect_intersection(&tile, &node->rect, &clipped) != TIG_OK
+            || tig_rect_intersection(&clipped, &bounds, &clipped) != TIG_OK) continue;
+        for (int y = clipped.y; y < clipped.y + clipped.height; y++) {
+            float half_width = 40.0f * (1.0f - fabsf((y + 0.5f - tile.y - 20.0f) / 20.0f));
+            int left = SDL_max(clipped.x, (int)ceilf(tile.x + 40.0f - half_width - 0.5f));
+            int right = SDL_min(clipped.x + clipped.width, (int)ceilf(tile.x + 40.0f + half_width - 0.5f));
+            if (right > left) {
+                memset((Uint8*)tile_water_mask->pixels + y * tile_water_mask->pitch + left, 255, right - left);
+                tile_water_marked = true;
+            }
+        }
+    }
+}
+
+static void tile_water_apply(GameDrawInfo* draw_info)
+{
+    if (!tile_water_marked || tile_water_mask == NULL) return;
+    tile_water_visible = true;
+    tile_water_seen_time = gamelib_ping_time;
+    TigVideoUpload damage = { 0 };
+    damage.bounds = (SDL_Rect){ 0, 0, tile_water_mask->w, tile_water_mask->h };
+    for (TigRectListNode* node = *draw_info->rects; node != NULL; node = node->next) {
+        TigRect* rect = &node->rect;
+        tig_video_upload_mark(&damage, (SDL_Rect){ rect->x, rect->y, rect->width, rect->height });
+    }
+    int64_t origin_x, origin_y;
+    location_origin_get(&origin_x, &origin_y);
+    float strength = SDL_clamp(settings_get_value(&settings, WATER_STRENGTH_KEY), 0, 100) / 100.0f;
+    if (!tig_video_buffer_water_shader(tile_iso_video_buffer, tile_water_mask, &damage,
+            gamelib_ping_time / 1000.0f, strength, (float)origin_x, (float)origin_y)) {
+        tile_water_available = false;
+        tile_water_visible = false;
+    }
 }
