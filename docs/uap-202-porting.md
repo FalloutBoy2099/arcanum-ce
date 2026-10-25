@@ -6,6 +6,10 @@ range, minimum age, annual aging, optional Master Educator and kill-only XP,
 and the unspent-points limit. The initial binary mapping and remaining-work
 tables below are historical findings, not a current count of missing fixes.
 
+The subsequent [race and follower UI report](uap_races_crafting_20261025.md)
+also covers DE/OG/OC portrait and background markers, the follower Schematics
+context-menu entry, and the `-cheatmode` command-line option.
+
 This document tracks the work needed to make Arcanum CE behave like the
 reference installation in `C:\Games\ArcanumUAP`:
 

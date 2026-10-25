@@ -19,6 +19,7 @@
 #include "ui/dialog_ui.h"
 #include "ui/intgame.h"
 #include "ui/inven_ui.h"
+#include "ui/schematic_ui.h"
 #include "ui/tb_ui.h"
 
 /**
@@ -37,8 +38,12 @@ typedef enum FollowerUiCommand {
     FOLLOWER_UI_COMMAND_INVENTORY,
     FOLLOWER_UI_COMMAND_CHARACTER_SHEET,
     FOLLOWER_UI_COMMAND_MOVE_ASIDE,
+    FOLLOWER_UI_COMMAND_SCHEMATICS,
     FOLLOWER_UI_COMMAND_COUNT,
 } FollowerUiCommand;
+
+#define FOLLOWER_UI_BASE_MENU_ROWS 8
+#define FOLLOWER_UI_ADDITIONAL_MENU_ROWS (FOLLOWER_UI_COMMAND_COUNT - FOLLOWER_UI_BASE_MENU_ROWS)
 
 // Keep the original command/message IDs stable while inserting the new row.
 static const FollowerUiCommand follower_ui_command_order[] = {
@@ -51,6 +56,7 @@ static const FollowerUiCommand follower_ui_command_order[] = {
     FOLLOWER_UI_COMMAND_WAIT,
     FOLLOWER_UI_COMMAND_INVENTORY,
     FOLLOWER_UI_COMMAND_CHARACTER_SHEET,
+    FOLLOWER_UI_COMMAND_SCHEMATICS,
 };
 
 /**
@@ -182,6 +188,7 @@ static void follower_ui_toggle(void);
 static void update_toggle_button_visibility(void);
 static void update_scroll_buttons_visibility(void);
 static void follower_ui_drop_down_menu_refresh(int highlighted_cmd);
+static bool follower_ui_can_open_schematics(void);
 
 /**
  * Defines content frames for buttons managed by follower UI.
@@ -421,7 +428,7 @@ bool follower_ui_init(GameInitInfo* init_info)
         follower_ui_drop_down_menu_rects[index].x = follower_ui_button_rects[index].x + follower_ui_button_rects[index].width;
         follower_ui_drop_down_menu_rects[index].y = follower_ui_button_rects[index].y;
         follower_ui_drop_down_menu_rects[index].width = art_frame_data.width;
-        follower_ui_drop_down_menu_rects[index].height = art_frame_data.height + FOLLOWER_UI_DROP_DOWN_MENU_ENTRY_HEIGHT;
+        follower_ui_drop_down_menu_rects[index].height = art_frame_data.height + FOLLOWER_UI_ADDITIONAL_MENU_ROWS * FOLLOWER_UI_DROP_DOWN_MENU_ENTRY_HEIGHT;
     }
 
     follower_ui_followers_capacity = FOLLOWER_UI_FOLLOWERS_INITIAL_CAPACITY;
@@ -712,6 +719,11 @@ bool follower_ui_message_filter(TigMessage* msg)
                             // Open barter inventory if permitted.
                             if (inven_ui_can_open_inven(follower_ui_commander_obj, follower_ui_subordinate_obj)) {
                                 inven_ui_open(follower_ui_commander_obj, follower_ui_subordinate_obj, INVEN_UI_MODE_BARTER);
+                            }
+                            break;
+                        case FOLLOWER_UI_COMMAND_SCHEMATICS:
+                            if (follower_ui_can_open_schematics()) {
+                                schematic_ui_toggle(follower_ui_subordinate_obj, follower_ui_commander_obj);
                             }
                             break;
                         case FOLLOWER_UI_COMMAND_CHARACTER_SHEET:
@@ -1407,7 +1419,6 @@ void follower_ui_drop_down_menu_refresh(int highlighted_cmd)
     TigRect destination;
     int split = follower_ui_drop_down_menu_entry_rect.y + FOLLOWER_UI_DROP_DOWN_MENU_ENTRY_HEIGHT;
 
-    // Insert one row of the original texture, retaining the top/bottom borders.
     tig_art_interface_id_create(FOLLOWER_UI_DROP_DOWN_MENU_ART, 0, 0, 0, &art_id);
     tig_art_frame_data(art_id, &frame);
     blit.art_id = art_id;
@@ -1419,10 +1430,13 @@ void follower_ui_drop_down_menu_refresh(int highlighted_cmd)
     source.y = split;
     source.height = FOLLOWER_UI_DROP_DOWN_MENU_ENTRY_HEIGHT;
     destination = source;
-    tig_window_blit_art(follower_ui_drop_down_menu_window, &blit);
+    for (int extra_row = 0; extra_row < FOLLOWER_UI_ADDITIONAL_MENU_ROWS; extra_row++) {
+        tig_window_blit_art(follower_ui_drop_down_menu_window, &blit);
+        destination.y += FOLLOWER_UI_DROP_DOWN_MENU_ENTRY_HEIGHT;
+    }
     source.height = frame.height - split;
     destination = source;
-    destination.y += FOLLOWER_UI_DROP_DOWN_MENU_ENTRY_HEIGHT;
+    destination.y += FOLLOWER_UI_ADDITIONAL_MENU_ROWS * FOLLOWER_UI_DROP_DOWN_MENU_ENTRY_HEIGHT;
     tig_window_blit_art(follower_ui_drop_down_menu_window, &blit);
 
     rect = follower_ui_drop_down_menu_entry_rect;
@@ -1432,9 +1446,16 @@ void follower_ui_drop_down_menu_refresh(int highlighted_cmd)
         if (cmd == FOLLOWER_UI_COMMAND_MOVE_ASIDE) {
             mes_file_entry.str = (char*)mes_localized_get("follower_ui", 100);
         }
-        if (cmd == FOLLOWER_UI_COMMAND_MOVE_ASIDE || mes_search(follower_ui_mes_file, &mes_file_entry)) {
+        if (cmd == FOLLOWER_UI_COMMAND_SCHEMATICS) {
+            mes_file_entry.str = (char*)mes_localized_get("follower_ui", 8);
+        }
+        if (cmd == FOLLOWER_UI_COMMAND_MOVE_ASIDE || cmd == FOLLOWER_UI_COMMAND_SCHEMATICS
+            || mes_search(follower_ui_mes_file, &mes_file_entry)) {
             // Determine whether this command is currently available.
             switch (cmd) {
+            case FOLLOWER_UI_COMMAND_SCHEMATICS:
+                enabled = follower_ui_can_open_schematics();
+                break;
             case FOLLOWER_UI_COMMAND_INVENTORY:
                 enabled = inven_ui_can_open_inven(follower_ui_commander_obj, follower_ui_subordinate_obj);
                 break;
@@ -1495,4 +1516,12 @@ int follower_ui_panel_bottom(void)
     }
 
     return follower_ui_button_rects[visible - 1].y + follower_ui_button_rects[visible - 1].height;
+}
+
+static bool follower_ui_can_open_schematics(void)
+{
+    return follower_ui_commander_obj != OBJ_HANDLE_NULL && follower_ui_subordinate_obj != OBJ_HANDLE_NULL
+        && critter_pc_leader_get(follower_ui_subordinate_obj) == follower_ui_commander_obj
+        && !critter_is_dead(follower_ui_commander_obj) && !critter_is_dead(follower_ui_subordinate_obj)
+        && !critter_is_unconscious(follower_ui_commander_obj) && !critter_is_unconscious(follower_ui_subordinate_obj);
 }

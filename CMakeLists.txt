@@ -151,6 +151,7 @@ set(SRCS
     "src/game/level.c"
     "src/game/level_progression.c"
     "src/game/progression_rules.c"
+    "src/game/race_identity.c"
     "src/game/repetitive_sound.c"
     "src/game/level.h"
     "src/game/li.c"
@@ -521,6 +522,11 @@ if(ARCANUM_BUILD_TESTS)
     add_test(NAME pathfinding COMMAND pathfinding_test)
 
     add_executable(ui_asset_warmup_test tests/ui_asset_warmup_test.c src/ui/asset_warmup.c)
+    add_executable(race_identity_test tests/race_identity_test.c src/game/race_identity.c)
+    target_include_directories(race_identity_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(race_identity_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME race_identity COMMAND race_identity_test)
+
     add_executable(progression_rules_test tests/progression_rules_test.c src/game/progression_rules.c)
     target_include_directories(progression_rules_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     add_test(NAME progression_rules COMMAND progression_rules_test)

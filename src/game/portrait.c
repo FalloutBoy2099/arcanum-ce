@@ -6,34 +6,10 @@
 #include "game/multiplayer.h"
 #include "game/player.h"
 #include "game/stat.h"
+#include "game/race_identity.h"
 
 static void portrait_draw_func(int64_t obj, int num, tig_window_handle_t window_handle, int x, int y, int width, int height);
 static bool portrait_is_valid(int64_t obj, const char* str);
-
-/**
- * 0x5B7C0C
- */
-static const char* portrait_race_specifiers[RACE_COUNT] = {
-    /*     RACE_HUMAN */ "HU",
-    /*     RACE_DWARF */ "DW",
-    /*       RACE_ELF */ "EL",
-    /*  RACE_HALF_ELF */ "HE",
-    /*     RACE_GNOME */ "GN",
-    /*  RACE_HALFLING */ "HA",
-    /*  RACE_HALF_ORC */ "HO",
-    /* RACE_HALF_OGRE */ "HG",
-    /*  RACE_DARK_ELF */ "EL",
-    /*      RACE_OGRE */ "HG",
-    /*       RACE_ORC */ "HO",
-};
-
-/**
- * 0x5B7C38
- */
-static char portrait_gender_specifiers[GENDER_COUNT] = {
-    /* GENDER_FEMALE */ 'F',
-    /*   GENDER_MALE */ 'M',
-};
 
 /**
  * "userport.mes"
@@ -450,39 +426,9 @@ bool portrait_find_prev(int64_t obj, int* portrait_ptr)
  */
 bool portrait_is_valid(int64_t obj, const char* str)
 {
-    int race;
-    int gender;
-    char buffer[4];
-
-    if (str != NULL) {
-        race = stat_base_get(obj, STAT_RACE);
-        gender = stat_base_get(obj, STAT_GENDER);
-
-        // Construct the exact portrait prefix.
-        snprintf(buffer, sizeof(buffer),
-            "%s%c",
-            portrait_race_specifiers[race],
-            portrait_gender_specifiers[gender]);
-
-        // Check if portrait file name starts with the race-gender specifiers.
-        if (SDL_strncasecmp(buffer, str, 3) == 0) {
-            return true;
-        }
-
-        // Special case - portraits prefixed with "ANY" are suitable for any
-        // critter.
-        if (SDL_strncasecmp("ANY", str, 3) == 0) {
-            return true;
-        }
-
-        // Special case - portraits prefixed with "NPC" are suitable for NPCs.
-        if (obj_field_int32_get(obj, OBJ_F_TYPE) == OBJ_TYPE_NPC
-            && SDL_strncasecmp("NPC", str, 3) == 0) {
-            return true;
-        }
-    }
-
-    return false;
+    if (obj == OBJ_HANDLE_NULL) return false;
+    return race_identity_portrait_matches(stat_base_get(obj, STAT_RACE),
+        stat_base_get(obj, STAT_GENDER), obj_field_int32_get(obj, OBJ_F_TYPE) == OBJ_TYPE_NPC, str);
 }
 
 /**

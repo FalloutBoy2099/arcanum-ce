@@ -168,6 +168,10 @@ int main(int argc, char** argv)
         gamelib_cheat_level_set(3);
     }
 
+    for (int argument = 1; argument < argc; argument++) {
+        if (SDL_strcasecmp(argv[argument], "-cheatmode") == 0) gamelib_cheat_level_set(3);
+    }
+
     pch = strstr(lpCmdLine, "-pathlimit");
     if (pch != NULL) {
         value = atoi(pch + 10);

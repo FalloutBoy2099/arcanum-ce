@@ -12,6 +12,7 @@
 #include "game/proto.h"
 #include "game/skill.h"
 #include "game/stat.h"
+#include "game/race_identity.h"
 
 #define FIRST_DESCRIPTION_ID 1000
 #define BACKGROUND_BLOCK_SIZE 10
@@ -25,28 +26,6 @@
 
 static int background_get_base_money(void);
 static bool background_is_legal(int64_t obj, char* str);
-
-/**
- * 0x5B6AEC
- */
-static const char* background_race_specifiers[] = {
-    /*     RACE_HUMAN */ "HU",
-    /*     RACE_DWARF */ "DW",
-    /*       RACE_ELF */ "EL",
-    /*  RACE_HALF_ELF */ "HE",
-    /*     RACE_GNOME */ "GN",
-    /*  RACE_HALFLING */ "HA",
-    /*  RACE_HALF_ORC */ "HO",
-    /* RACE_HALF_OGRE */ "HG",
-};
-
-/**
- * 0x5B6B0C
- */
-static char background_gender_specifiers[GENDER_COUNT] = {
-    /* GENDER_FEMALE */ 'F',
-    /*   GENDER_MALE */ 'M',
-};
 
 /**
  * 0x5FD858
@@ -503,31 +482,7 @@ bool background_get_items(char* dest, size_t size, int background)
  */
 bool background_is_legal(int64_t obj, char* str)
 {
-    int gender;
-    int race;
-    char buffer[4];
-
-    if (str != NULL && *str != '\0') {
-        race = stat_base_get(obj, STAT_RACE);
-        gender = stat_base_get(obj, STAT_GENDER);
-
-        // Construct the exact background prefix.
-        snprintf(buffer, sizeof(buffer),
-            "%s%c",
-            background_race_specifiers[race],
-            background_gender_specifiers[gender]);
-
-        // Convert the condition string to uppercase for comparison.
-        str = SDL_strupr(str);
-
-        // Check race/gender spec, "ANY", or "NPC" (in case critter is NPC).
-        if (strstr(str, buffer) == NULL
-            && strstr(str, "ANY") == NULL
-            && ((obj_field_int32_get(obj, OBJ_F_TYPE) != OBJ_TYPE_NPC
-                || strstr(str, "NPC") == NULL))) {
-            return false;
-        }
-    }
-
-    return true;
+    if (obj == OBJ_HANDLE_NULL) return false;
+    return race_identity_background_matches(stat_base_get(obj, STAT_RACE),
+        stat_base_get(obj, STAT_GENDER), obj_field_int32_get(obj, OBJ_F_TYPE) == OBJ_TYPE_NPC, str);
 }
