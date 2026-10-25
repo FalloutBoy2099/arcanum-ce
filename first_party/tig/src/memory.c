@@ -4,6 +4,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef SDL_PLATFORM_WINDOWS
+#include <windows.h>
+#endif
+
 #define START_GUARD_BYTE 0xAA
 #define START_GUARD_SIZE ((int)sizeof(void*))
 #define END_GUARD_BYTE 0xBB
@@ -102,6 +106,9 @@ void* tig_memory_calloc(size_t count, size_t size, const char* file, int line)
 
     SDL_LockMutex(tig_memory_mutex);
 
+    if (size != 0 && count > SIZE_MAX / size) {
+        tig_memory_fatal_error("TIG Memory: array size overflow in %s:%d.", file, line);
+    }
     ptr = tig_memory_alloc(size * count, file, line);
     if (ptr != NULL) {
         memset(ptr, 0, size * count);
@@ -167,6 +174,9 @@ void* tig_memory_alloc(size_t size, const char* file, int line)
 
     SDL_LockMutex(tig_memory_mutex);
 
+    if (size > SIZE_MAX - OVERHEAD_SIZE) {
+        tig_memory_fatal_error("TIG Memory: allocation size overflow in %s:%d.", file, line);
+    }
     ptr = malloc(size + OVERHEAD_SIZE);
     if (ptr == NULL) {
         // NOTE: Format is slightly modified for VS Code to recognize file path.
@@ -243,6 +253,11 @@ void* tig_memory_realloc(void* ptr, size_t size, const char* file, int line)
             line);
     }
 
+    tig_memory_validate(block, file, line);
+    if (size > SIZE_MAX - OVERHEAD_SIZE) {
+        tig_memory_fatal_error("TIG Memory: reallocation size overflow in %s:%d.", file, line);
+    }
+
     if (prev != NULL) {
         prev->next = block->next;
     } else {
@@ -271,7 +286,7 @@ void* tig_memory_realloc(void* ptr, size_t size, const char* file, int line)
     // NOTE: Start guard stays in tact.
     memset((unsigned char*)block->data + size, END_GUARD_BYTE, END_GUARD_SIZE);
 
-    tig_memory_current_allocated += size - old_size;
+    tig_memory_current_allocated = tig_memory_current_allocated - old_size + size;
     tig_memory_allocation_requests++;
     tig_memory_requested_bytes += size;
 
@@ -442,11 +457,18 @@ void tig_memory_validate_all(const char* file, int line)
 // 0x4FEA30
 void tig_memory_get_system_status(size_t* total, size_t* available)
 {
-    // SDL exposes installed RAM in megabytes, but the original API had this
-    // value in bytes.
-    *total = (size_t)SDL_GetSystemRAM() * 1024 * 1024;
-
-    // SDL does not have API to get available RAM.
+#ifdef SDL_PLATFORM_WINDOWS
+    MEMORYSTATUSEX status = { 0 };
+    status.dwLength = sizeof(status);
+    if (GlobalMemoryStatusEx(&status)) {
+        *total = status.ullTotalPhys > SIZE_MAX ? SIZE_MAX : (size_t)status.ullTotalPhys;
+        *available = status.ullAvailPhys > SIZE_MAX ? SIZE_MAX : (size_t)status.ullAvailPhys;
+        return;
+    }
+#endif
+    int system_ram_mb = SDL_GetSystemRAM();
+    uint64_t bytes = system_ram_mb > 0 ? (uint64_t)system_ram_mb * 1024 * 1024 : 0;
+    *total = bytes > SIZE_MAX ? SIZE_MAX : (size_t)bytes;
     *available = *total;
 }
 

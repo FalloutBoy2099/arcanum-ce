@@ -187,10 +187,10 @@ tig_art_id_t tile_art_id_at(int64_t loc)
 }
 
 // 0x4D7110
-bool tile_is_blocking(int64_t loc, bool a2)
+bool tile_is_blocking(int64_t loc, bool ignore_art_blocking)
 {
     tig_art_id_t art_id;
-    bool v1;
+    bool blocking;
 
     if (tileblock_is_tile_blocked(loc)) {
         return true;
@@ -201,16 +201,16 @@ bool tile_is_blocking(int64_t loc, bool a2)
         return !tig_art_facade_id_walkable_get(art_id);
     }
 
-    v1 = a_name_tile_is_blocking(art_id);
-    if (a2) {
-        if (v1) {
+    blocking = a_name_tile_is_blocking(art_id);
+    if (ignore_art_blocking) {
+        if (blocking) {
             // FIXME: Useless.
             tile_is_sinkable(loc);
         }
-        v1 = false;
+        blocking = false;
     }
 
-    return v1;
+    return blocking;
 }
 
 // 0x4D7180
@@ -254,14 +254,14 @@ void tile_cycle_variant(int64_t loc)
 }
 
 // 0x4D7480
-tig_art_id_t tile_transition_art_id_create_random(tig_art_id_t art_id, int num2, bool flippable2, int a4)
+tig_art_id_t tile_transition_art_id_create_random(tig_art_id_t art_id, int num2, bool flippable2, int transition_mask)
 {
     int num1;
     int type;
     int flippable1;
     int palette;
-    int v1;
-    int v2;
+    int effective_transition_mask;
+    int variant;
     int cnt;
     int tmp;
 
@@ -272,7 +272,7 @@ tig_art_id_t tile_transition_art_id_create_random(tig_art_id_t art_id, int num2,
 
     if (flippable1) {
         if (flippable2 && num2 < num1) {
-            v1 = 15 - a4;
+            effective_transition_mask = 15 - transition_mask;
 
             tmp = num2;
             num2 = num1;
@@ -282,11 +282,11 @@ tig_art_id_t tile_transition_art_id_create_random(tig_art_id_t art_id, int num2,
             flippable2 = flippable1;
             flippable1 = tmp;
         } else {
-            v1 = a4;
+            effective_transition_mask = transition_mask;
         }
     } else {
         if (flippable2 || num2 < num1) {
-            v1 = 15 - a4;
+            effective_transition_mask = 15 - transition_mask;
 
             tmp = num2;
             num2 = num1;
@@ -296,32 +296,32 @@ tig_art_id_t tile_transition_art_id_create_random(tig_art_id_t art_id, int num2,
             flippable2 = flippable1;
             flippable1 = tmp;
         } else {
-            v1 = a4;
+            effective_transition_mask = transition_mask;
         }
     }
 
-    if (v1 == 0) {
+    if (effective_transition_mask == 0) {
         flippable1 = flippable2;
         num1 = num2;
     } else if (num1 == num2 && flippable1 == flippable2) {
-        v1 = 0;
-    } else if (v1 == 15) {
+        effective_transition_mask = 0;
+    } else if (effective_transition_mask == 15) {
         flippable2 = flippable1;
         num2 = num1;
-        v1 = 0;
+        effective_transition_mask = 0;
     }
 
-    cnt = a_name_tile_variant_count_get(num1, num2, v1, type, flippable1, flippable2);
-    v2 = random_between(0, cnt - 1);
+    cnt = a_name_tile_variant_count_get(num1, num2, effective_transition_mask, type, flippable1, flippable2);
+    variant = random_between(0, cnt - 1);
 
     if (flippable1
         && flippable2
         && num1 != num2
         && random_between(0, 1) != 0) {
-        v2 += 8;
+        variant += 8;
     }
 
-    tig_art_tile_id_create(num1, num2, v1, v2, type, flippable1, flippable2, palette, &art_id);
+    tig_art_tile_id_create(num1, num2, effective_transition_mask, variant, type, flippable1, flippable2, palette, &art_id);
 
     return art_id;
 }
@@ -490,28 +490,28 @@ void tile_topdown_cache_free(void)
 // 0x4D7AC0
 void tile_topdown_sampling_tables_build(int zoom)
 {
-    double v1;
-    double v2;
-    double v3;
-    double v4;
+    double sample_center;
+    double rotated_half_extent;
+    double horizontal_scale;
+    double vertical_scale;
     double scale;
-    double v5;
-    double v6;
-    double v7;
-    double v8;
+    double scaled_horizontal_step;
+    double scaled_vertical_step;
+    double rotated_y;
+    double rotated_x;
     int x;
     int y;
 
     tile_topdown_sampling_tables_free();
 
-    v1 = zoom * 0.5 - 1.0;
+    sample_center = zoom * 0.5 - 1.0;
 
     tile_topdown_source_x_samples = (uint8_t*)MALLOC(sizeof(*tile_topdown_source_x_samples) * (zoom * zoom));
     tile_topdown_source_y_samples = (uint8_t*)MALLOC(sizeof(*tile_topdown_source_y_samples) * (zoom * zoom));
 
-    v2 = ((zoom - 1) - v1) * M_SQRT1_2;
-    v3 = 80.0 / (v2 * 4.0);
-    v4 = 40.0 / (v2 + v1 * M_SQRT1_2 + v2 + v1 * M_SQRT1_2);
+    rotated_half_extent = ((zoom - 1) - sample_center) * M_SQRT1_2;
+    horizontal_scale = 80.0 / (rotated_half_extent * 4.0);
+    vertical_scale = 40.0 / (rotated_half_extent + sample_center * M_SQRT1_2 + rotated_half_extent + sample_center * M_SQRT1_2);
 
     if (zoom < 8) {
         scale = 0.5;
@@ -535,15 +535,15 @@ void tile_topdown_sampling_tables_build(int zoom)
         scale = 0.95;
     }
 
-    v5 = v3 * scale;
-    v6 = v4 * scale;
+    scaled_horizontal_step = horizontal_scale * scale;
+    scaled_vertical_step = vertical_scale * scale;
 
     for (y = 0; y < zoom; y++) {
-        v7 = (y - v1) * M_SQRT1_2;
+        rotated_y = (y - sample_center) * M_SQRT1_2;
         for (x = 0; x < zoom; x++) {
-            v8 = (x - v1) * M_SQRT1_2;
-            tile_topdown_source_x_samples[y * zoom + x] = (uint8_t)((v7 + v8) * v5 + 40.0);
-            tile_topdown_source_y_samples[y * zoom + x] = (uint8_t)((v7 - v8) * v6 + 20.0);
+            rotated_x = (x - sample_center) * M_SQRT1_2;
+            tile_topdown_source_x_samples[y * zoom + x] = (uint8_t)((rotated_y + rotated_x) * scaled_horizontal_step + 40.0);
+            tile_topdown_source_y_samples[y * zoom + x] = (uint8_t)((rotated_y - rotated_x) * scaled_vertical_step + 20.0);
         }
     }
 }
@@ -662,8 +662,8 @@ void tile_draw_topdown(GameDrawInfo* draw_info)
 // if `tile_draw_topdown` is definitely there, why `tile_draw_iso` should not?
 void tile_draw_iso(GameDrawInfo* draw_info)
 {
-    SectorRect* v1;
-    SectorRectRow* v3;
+    SectorRect* sector_rect;
+    SectorRectRow* sector_row;
     TigArtBlitInfo art_blit_info;
     TigRect src_rect;
     TigRect dst_rect;
@@ -671,8 +671,8 @@ void tile_draw_iso(GameDrawInfo* draw_info)
     TigRect tile_subrect;
     tig_color_t indoor_color;
     tig_color_t outdoor_color;
-    int v2;
-    int v4;
+    int sector_row_index;
+    int sector_column_index;
     int indexes[3];
     int widths[3];
     bool sector_lock_results[3];
@@ -682,18 +682,18 @@ void tile_draw_iso(GameDrawInfo* draw_info)
     TigRectListNode* rect_node;
     int tile_type;
     tig_color_t color;
-    tig_color_t v36[4];
-    tig_color_t v51[9];
-    int v10;
-    int v11;
+    tig_color_t corner_colors[4];
+    tig_color_t grid_colors[9];
+    int row_screen_offset_x;
+    int row_screen_offset_y;
     int center_x;
     int center_y;
-    int v15;
-    int v42;
+    int sector_column;
+    int tile_column;
     bool blit_info_initialized;
-    int v38;
+    int tile_row;
 
-    v1 = draw_info->sector_rect;
+    sector_rect = draw_info->sector_rect;
 
     art_blit_info.flags = 0; // NOTE: Initialize to silence compiler warning.
     art_blit_info.src_rect = &src_rect;
@@ -707,29 +707,29 @@ void tile_draw_iso(GameDrawInfo* draw_info)
 
     light_buffers_lock();
 
-    for (v2 = 0; v2 < v1->num_rows; v2++) {
-        v3 = &(v1->rows[v2]);
+    for (sector_row_index = 0; sector_row_index < sector_rect->num_rows; sector_row_index++) {
+        sector_row = &(sector_rect->rows[sector_row_index]);
 
-        for (v4 = 0; v4 < v3->num_cols; v4++) {
-            indexes[v4] = v3->tile_ids[v4];
-            widths[v4] = 64 - v3->num_hor_tiles[v4];
-            sector_lock_results[v4] = sector_lock(v3->sector_ids[v4], &(sectors[v4]));
+        for (sector_column_index = 0; sector_column_index < sector_row->num_cols; sector_column_index++) {
+            indexes[sector_column_index] = sector_row->tile_ids[sector_column_index];
+            widths[sector_column_index] = 64 - sector_row->num_hor_tiles[sector_column_index];
+            sector_lock_results[sector_column_index] = sector_lock(sector_row->sector_ids[sector_column_index], &(sectors[sector_column_index]));
         }
 
-        location_xy(v3->origin_locs[0], &loc_x, &loc_y);
+        location_xy(sector_row->origin_locs[0], &loc_x, &loc_y);
 
-        v10 = 0;
-        v11 = 0;
+        row_screen_offset_x = 0;
+        row_screen_offset_y = 0;
 
-        for (v38 = 0; v38 < v3->num_vert_tiles; v38++) {
-            center_x = (int)loc_x + v10;
-            center_y = (int)loc_y + v11;
+        for (tile_row = 0; tile_row < sector_row->num_vert_tiles; tile_row++) {
+            center_x = (int)loc_x + row_screen_offset_x;
+            center_y = (int)loc_y + row_screen_offset_y;
 
-            for (v15 = 0; v15 < v3->num_cols; v15++) {
-                if (sector_lock_results[v15]) {
-                    for (v42 = 0; v42 < v3->num_hor_tiles[v15]; v42++) {
+            for (sector_column = 0; sector_column < sector_row->num_cols; sector_column++) {
+                if (sector_lock_results[sector_column]) {
+                    for (tile_column = 0; tile_column < sector_row->num_hor_tiles[sector_column]; tile_column++) {
                         blit_info_initialized = false;
-                        art_blit_info.art_id = sectors[v15]->tiles.art_ids[indexes[v15]];
+                        art_blit_info.art_id = sectors[sector_column]->tiles.art_ids[indexes[sector_column]];
                         tile_type = tig_art_tile_id_type_get(art_blit_info.art_id);
                         if (!roof_is_covered_xy(center_x + 40, center_y + 20, false)) {
                             tile_rect.x = center_x + 1;
@@ -755,18 +755,18 @@ void tile_draw_iso(GameDrawInfo* draw_info)
                                         blit_info_initialized = true;
 
                                         art_blit_info.dst_video_buffer = tile_iso_video_buffer;
-                                        art_blit_info.field_14 = v36;
+                                        art_blit_info.blend_colors = corner_colors;
 
                                         color = !tile_type ? indoor_color : outdoor_color;
 
-                                        if (light_tile_grid_colors_sample(center_x, center_y, color, v51)) {
+                                        if (light_tile_grid_colors_sample(center_x, center_y, color, grid_colors)) {
                                             art_blit_info.flags = TIG_ART_BLT_BLEND_COLOR_LERP;
                                             if (!tile_hardware_accelerated) {
                                                 art_blit_info.flags |= TIG_ART_BLT_PALETTE_ORIGINAL;
                                             }
-                                        } else if (v51[0] != color || tile_hardware_accelerated) {
+                                        } else if (grid_colors[0] != color || tile_hardware_accelerated) {
                                             art_blit_info.flags = TIG_ART_BLT_BLEND_COLOR_CONST;
-                                            art_blit_info.color = v51[0];
+                                            art_blit_info.color = grid_colors[0];
                                             if (!tile_hardware_accelerated) {
                                                 art_blit_info.flags |= TIG_ART_BLT_PALETTE_ORIGINAL;
                                             }
@@ -776,7 +776,7 @@ void tile_draw_iso(GameDrawInfo* draw_info)
                                     }
 
                                     if ((art_blit_info.flags & TIG_ART_BLT_BLEND_COLOR_LERP) != 0) {
-                                        art_blit_info.field_18 = &tile_subrect;
+                                        art_blit_info.blend_rect = &tile_subrect;
 
                                         tile_subrect.x = tile_rect.x;
                                         tile_subrect.y = tile_rect.y;
@@ -791,10 +791,10 @@ void tile_draw_iso(GameDrawInfo* draw_info)
                                             src_rect.width = dst_rect.width;
                                             src_rect.height = dst_rect.height;
 
-                                            v36[0] = v51[0];
-                                            v36[1] = v51[1];
-                                            v36[2] = v51[4];
-                                            v36[3] = v51[3];
+                                            corner_colors[0] = grid_colors[0];
+                                            corner_colors[1] = grid_colors[1];
+                                            corner_colors[2] = grid_colors[4];
+                                            corner_colors[3] = grid_colors[3];
 
                                             tig_art_blit(&art_blit_info);
                                         }
@@ -810,10 +810,10 @@ void tile_draw_iso(GameDrawInfo* draw_info)
                                             src_rect.width = dst_rect.width;
                                             src_rect.height = dst_rect.height;
 
-                                            v36[0] = v51[1];
-                                            v36[1] = v51[2];
-                                            v36[2] = v51[5];
-                                            v36[3] = v51[4];
+                                            corner_colors[0] = grid_colors[1];
+                                            corner_colors[1] = grid_colors[2];
+                                            corner_colors[2] = grid_colors[5];
+                                            corner_colors[3] = grid_colors[4];
 
                                             tig_art_blit(&art_blit_info);
                                         }
@@ -829,10 +829,10 @@ void tile_draw_iso(GameDrawInfo* draw_info)
                                             src_rect.width = dst_rect.width;
                                             src_rect.height = dst_rect.height;
 
-                                            v36[0] = v51[3];
-                                            v36[1] = v51[4];
-                                            v36[2] = v51[7];
-                                            v36[3] = v51[6];
+                                            corner_colors[0] = grid_colors[3];
+                                            corner_colors[1] = grid_colors[4];
+                                            corner_colors[2] = grid_colors[7];
+                                            corner_colors[3] = grid_colors[6];
 
                                             tig_art_blit(&art_blit_info);
                                         }
@@ -848,10 +848,10 @@ void tile_draw_iso(GameDrawInfo* draw_info)
                                             src_rect.width = dst_rect.width;
                                             src_rect.height = dst_rect.height;
 
-                                            v36[0] = v51[4];
-                                            v36[1] = v51[5];
-                                            v36[2] = v51[8];
-                                            v36[3] = v51[7];
+                                            corner_colors[0] = grid_colors[4];
+                                            corner_colors[1] = grid_colors[5];
+                                            corner_colors[2] = grid_colors[8];
+                                            corner_colors[3] = grid_colors[7];
 
                                             tig_art_blit(&art_blit_info);
                                         }
@@ -863,25 +863,25 @@ void tile_draw_iso(GameDrawInfo* draw_info)
                             }
                         }
 
-                        indexes[v15]++;
+                        indexes[sector_column]++;
                         center_x -= 40;
                         center_y += 20;
                     }
 
-                    indexes[v15] += widths[v15];
+                    indexes[sector_column] += widths[sector_column];
                 } else {
-                    center_x -= 40 * v3->num_hor_tiles[v15];
-                    center_y += 20 * v3->num_hor_tiles[v15];
+                    center_x -= 40 * sector_row->num_hor_tiles[sector_column];
+                    center_y += 20 * sector_row->num_hor_tiles[sector_column];
                 }
             }
 
-            v10 += 40;
-            v11 += 20;
+            row_screen_offset_x += 40;
+            row_screen_offset_y += 20;
         }
 
-        for (v4 = 0; v4 < v3->num_cols; v4++) {
-            if (sector_lock_results[v4]) {
-                sector_unlock(v3->sector_ids[v4]);
+        for (sector_column_index = 0; sector_column_index < sector_row->num_cols; sector_column_index++) {
+            if (sector_lock_results[sector_column_index]) {
+                sector_unlock(sector_row->sector_ids[sector_column_index]);
             }
         }
     }

@@ -2,6 +2,10 @@
 
 #include <inttypes.h>
 #include <stdio.h>
+#include <tig/performance.h>
+#include <tig/asset_prefetch.h>
+#include <tig/async_asset_reader.h>
+#include "game/sector_art_preview.h"
 
 #include "game/gamelib.h"
 #include "game/li.h"
@@ -12,6 +16,23 @@
 #include "game/tile.h"
 #include "game/timeevent.h"
 #include "game/townmap.h"
+
+typedef struct SectorNeighborPreview {
+    int64_t id;
+    bool queued;
+    bool finished;
+    bool terrain;
+    size_t art_count;
+    size_t art_cursor;
+    uint32_t art_ids[SECTOR_ART_PREVIEW_CAPACITY];
+} SectorNeighborPreview;
+
+static AsyncAssetReader* sector_preview_reader;
+static Uint64 sector_preview_generation;
+static int64_t sector_preview_center = -1;
+static SectorNeighborPreview sector_previews[25];
+static int sector_preview_count;
+static void sector_neighbor_prefetch_reset(void);
 
 typedef uint32_t DifferenceFileFlags;
 
@@ -34,7 +55,7 @@ typedef struct SectorCacheEntry {
     /* 0000 */ bool used;
     /* 0004 */ int refcount;
     /* 0008 */ unsigned int timestamp;
-    /* 000C */ int field_C;
+    /* 000C */ int reserved_slot_1;
     /* 0010 */ Sector sector;
 } SectorCacheEntry;
 
@@ -235,6 +256,7 @@ bool sector_init(GameInitInfo* init_info)
 // 0x4CF0D0
 void sector_reset(void)
 {
+    sector_neighbor_prefetch_reset();
     sector_cache_reset();
     sector_history_size = 0;
 }
@@ -242,6 +264,9 @@ void sector_reset(void)
 // 0x4CF0E0
 void sector_exit(void)
 {
+    async_asset_reader_destroy(sector_preview_reader);
+    sector_preview_reader = NULL;
+    sector_neighbor_prefetch_reset();
     SectorListNode* node;
     unsigned int index;
     Sector* sector;
@@ -308,6 +333,7 @@ void sector_resize(GameResizeInfo* resize_info)
 // 0x4CF320
 void sector_map_close(void)
 {
+    sector_neighbor_prefetch_reset();
     sector_cache_reset();
     if (!gamelib_in_load()) {
         sector_history_size = 0;
@@ -824,6 +850,7 @@ void sector_list_destroy(SectorListNode* node)
 // 0x4D0440
 bool sector_map_name_set(const char* base_path, const char* save_path)
 {
+    sector_neighbor_prefetch_reset();
     strcpy(sector_base_path, base_path);
     strcpy(sector_save_path, save_path);
 
@@ -889,13 +916,16 @@ bool sector_lock(int64_t id, Sector** sector_ptr)
 
     cache_entry = &(sector_cache_entries[sector_cache_indexes[sector_cache_last_entry_index]]);
     if (cache_entry->used && cache_entry->sector.id == id) {
+        tig_performance_count(TIG_PERF_SECTOR_HITS, 1);
         cache_entry->refcount++;
         cache_entry->timestamp = sector_cache_access_sequence;
     } else if (sector_cache_find_by_id(id, &sector_cache_last_entry_index)) {
         cache_entry = &(sector_cache_entries[sector_cache_indexes[sector_cache_last_entry_index]]);
+        tig_performance_count(TIG_PERF_SECTOR_HITS, 1);
         cache_entry->refcount++;
         cache_entry->timestamp = sector_cache_access_sequence;
     } else {
+        tig_performance_count(TIG_PERF_SECTOR_MISSES, 1);
         if (sector_cache_size >= sector_cache_capacity) {
             for (index = 0; index < sector_cache_capacity; index++) {
                 if (sector_cache_entries[sector_cache_indexes[index]].refcount == 0) {
@@ -915,7 +945,10 @@ bool sector_lock(int64_t id, Sector** sector_ptr)
             tig_debug_printf("Sector cache full, removing oldest (%I64u)...\n",
                 sector_cache_entries[sector_cache_indexes[oldest]].sector.id);
 
+            Uint64 save_start = tig_performance_begin();
             sector_save_func(&(sector_cache_entries[sector_cache_indexes[oldest]].sector));
+            tig_performance_end(TIG_PERF_SECTOR_SAVE, save_start);
+            tig_performance_count(TIG_PERF_SECTOR_EVICTIONS, 1);
             sector_cache_evict(&(sector_cache_entries[sector_cache_indexes[oldest]].sector));
             sector_cache_entries[sector_cache_indexes[oldest]].used = false;
 
@@ -948,7 +981,15 @@ bool sector_lock(int64_t id, Sector** sector_ptr)
         cache_entry = &(sector_cache_entries[index]);
         cache_entry->sector.datetime = datetime;
 
-        if (!sector_load_func(id, &(cache_entry->sector))) {
+        Uint64 load_start = tig_performance_begin();
+        bool loaded = sector_load_func(id, &(cache_entry->sector));
+        if (load_start != 0) {
+            char sector_detail[32];
+            snprintf(sector_detail, sizeof(sector_detail), "%llu", (unsigned long long)id);
+            tig_performance_end_detail(TIG_PERF_SECTOR_LOAD, load_start, sector_detail);
+        }
+        if (!loaded) {
+            tig_performance_count(TIG_PERF_SECTOR_LOAD_FAILURES, 1);
             tig_debug_printf("Error: attempt to lock sector %I64u in cache failed due to error in load.  This is bad.  Help.\n", id);
             in_sector_lock = false;
             return false;
@@ -1216,7 +1257,7 @@ bool sector_history_load(GameLoadInfo* load_info)
         return false;
     }
 
-    if (sector_history_size > 2 * sector_cache_capacity) {
+    if (sector_history_size < 0 || sector_history_size > 2 * sector_cache_capacity) {
         return false;
     }
 
@@ -1452,7 +1493,7 @@ bool sector_load_game(int64_t id, Sector* sector)
 {
     bool generated = false;
     DifferenceFileFlags dif_flags = 0;
-    int64_t v2 = -1;
+    int64_t relocation_sector_id = -1;
     char sec_path[TIG_MAX_PATH];
     char dif_path[TIG_MAX_PATH];
     TigFile* sec_stream = NULL;
@@ -1467,7 +1508,7 @@ bool sector_load_game(int64_t id, Sector* sector)
 
         if (!tig_file_exists(sec_path, NULL)) {
             terrain_sector_path(id, sec_path);
-            v2 = id;
+            relocation_sector_id = id;
 
             if (!tig_file_exists(sec_path, NULL)) {
                 tig_debug_printf("Sector: ERROR loading %s terrain sector while attempting to load sector %I64d\n",
@@ -1480,7 +1521,7 @@ bool sector_load_game(int64_t id, Sector* sector)
     } else {
         tig_debug_printf("Sector %I64u is beyond the demo limits\n", id);
         terrain_sector_path(id, sec_path);
-        v2 = id;
+        relocation_sector_id = id;
 
         if (!tig_file_exists(sec_path, NULL)) {
             terrain_fill(sector);
@@ -1519,12 +1560,12 @@ bool sector_load_game(int64_t id, Sector* sector)
 
         li_update();
         if ((dif_flags & DIF_HAVE_LIGHT_LIST) != 0) {
-            if (!sector_light_list_load_with_dif(&(sector->lights), sec_stream, dif_stream, v2)) {
+            if (!sector_light_list_load_with_dif(&(sector->lights), sec_stream, dif_stream, relocation_sector_id)) {
                 tig_debug_printf("Error loading lights with differences from files %s and %s\n", sec_path, dif_path);
                 goto error;
             }
         } else {
-            if (!sector_light_list_load(&(sector->lights), sec_stream, v2)) {
+            if (!sector_light_list_load(&(sector->lights), sec_stream, relocation_sector_id)) {
                 tig_debug_printf("Error loading lights from sector file %s\n", sec_path);
                 goto error;
             }
@@ -1658,12 +1699,12 @@ bool sector_load_game(int64_t id, Sector* sector)
 
         li_update();
         if ((dif_flags & DIF_HAVE_OBJ_LIST) != 0) {
-            if (!objlist_load_with_difs(&(sector->objects), sec_stream, dif_stream, v2)) {
+            if (!objlist_load_with_difs(&(sector->objects), sec_stream, dif_stream, relocation_sector_id)) {
                 tig_debug_printf("Error loading objects with differences from files %s and %s\n", sec_path, dif_path);
                 goto error;
             }
         } else {
-            if (!objlist_load(&(sector->objects), sec_stream, v2)) {
+            if (!objlist_load(&(sector->objects), sec_stream, relocation_sector_id)) {
                 tig_debug_printf("Error loading objects from sector file %s\n", sec_path);
                 goto error;
             }
@@ -1678,9 +1719,11 @@ bool sector_load_game(int64_t id, Sector* sector)
 
     sector_validate_game("sector post-load (pre-fold)");
     li_update();
+    Uint64 activation_start = tig_performance_begin();
     objlist_fold(&(sector->objects), id, datetime_is_at_least_milliseconds(&(sector->datetime), 3000));
     li_update();
     sector_light_list_fold(&(sector->lights), id, &(sector->tiles));
+    tig_performance_end(TIG_PERF_SECTOR_ACTIVATE, activation_start);
     sector_validate_game("sector post-fold");
 
     if (sector->townmap_info != 0) {
@@ -2177,6 +2220,7 @@ void sector_precache_art(Sector* sector)
 {
     int index;
 
+    Uint64 precache_start = tig_performance_begin();
     if (sector_art_cache_state > 0) {
         li_update();
         sector_list_tile_precache_art(&(sector->tiles));
@@ -2189,6 +2233,10 @@ void sector_precache_art(Sector* sector)
         li_update();
 
         for (index = 0; index < sector_art_cache_size; index++) {
+            for (int ahead = index; tig_asset_prefetch_is_enabled() && ahead < sector_art_cache_size && ahead < index + 16; ahead++) {
+                if (ahead == index || sector_art_cache[ahead] != sector_art_cache[ahead - 1])
+                    tig_art_prefetch(sector_art_cache[ahead], 16 - (ahead - index));
+            }
             while (index + 1 < sector_art_cache_size && sector_art_cache[index] == sector_art_cache[index + 1]) {
                 index++;
             }
@@ -2198,6 +2246,7 @@ void sector_precache_art(Sector* sector)
 
         sector_art_cache_reset();
     }
+    tig_performance_end(TIG_PERF_SECTOR_ART_PRECACHE, precache_start);
 }
 
 // 0x4D2F80
@@ -2238,7 +2287,11 @@ int sector_block_find(int64_t sec)
 // 0x4D3000
 void sector_block_add(int64_t sec)
 {
-    sector_blocked_sectors = (int64_t*)REALLOC(sector_blocked_sectors, sizeof(*sector_blocked_sectors) * (sector_blocked_sectors_cnt + 1));
+    if (sector_blocked_sectors_cnt < 0 || sector_blocked_sectors_cnt == INT_MAX
+        || (size_t)sector_blocked_sectors_cnt + 1 > SIZE_MAX / sizeof(*sector_blocked_sectors)) return;
+    int64_t* resized = (int64_t*)REALLOC(sector_blocked_sectors, sizeof(*resized) * ((size_t)sector_blocked_sectors_cnt + 1));
+    if (resized == NULL) return;
+    sector_blocked_sectors = resized;
     sector_blocked_sectors[sector_blocked_sectors_cnt++] = sec;
     sector_blocked_sectors_changed = true;
 }
@@ -2246,6 +2299,7 @@ void sector_block_add(int64_t sec)
 // 0x4D3050
 void sector_block_remove(int idx)
 {
+    if (idx < 0 || idx >= sector_blocked_sectors_cnt) return;
     memmove(&(sector_blocked_sectors[idx]),
         &(sector_blocked_sectors[idx + 1]),
         sizeof(*sector_blocked_sectors) * (sector_blocked_sectors_cnt - idx - 1));
@@ -2322,12 +2376,103 @@ bool sector_block_load_internal(const char* base_map_name, const char* current_m
         return false;
     }
 
-    sector_blocked_sectors = (int64_t*)MALLOC(sizeof(*sector_blocked_sectors) * sector_blocked_sectors_cnt);
+    if (!tig_file_count_fits(stream, sector_blocked_sectors_cnt, SIZE_MAX / sizeof(*sector_blocked_sectors), sizeof(*sector_blocked_sectors))) {
+        sector_blocked_sectors_cnt = 0;
+        tig_file_fclose(stream);
+        return false;
+    }
+    sector_blocked_sectors = sector_blocked_sectors_cnt == 0 ? NULL
+        : (int64_t*)MALLOC(sizeof(*sector_blocked_sectors) * (size_t)sector_blocked_sectors_cnt);
+    if (sector_blocked_sectors_cnt != 0 && sector_blocked_sectors == NULL) {
+        sector_blocked_sectors_cnt = 0;
+        tig_file_fclose(stream);
+        return false;
+    }
     if (tig_file_fread(sector_blocked_sectors, sizeof(*sector_blocked_sectors), sector_blocked_sectors_cnt, stream) != sector_blocked_sectors_cnt) {
+        FREE(sector_blocked_sectors);
+        sector_blocked_sectors = NULL;
+        sector_blocked_sectors_cnt = 0;
         tig_file_fclose(stream);
         return false;
     }
 
     tig_file_fclose(stream);
     return true;
+}
+
+static void sector_neighbor_prefetch_reset(void)
+{
+    sector_preview_generation++;
+    async_asset_reader_reset(sector_preview_reader, sector_preview_generation);
+    memset(sector_previews, 0, sizeof(sector_previews));
+    sector_preview_count = 0;
+    sector_preview_center = -1;
+}
+
+void sector_neighbor_prefetch_tick(int64_t location)
+{
+    if (sector_editor || !tig_asset_prefetch_is_enabled()) return;
+    Uint64 start = tig_performance_begin();
+    int64_t center = sector_id_from_loc(location);
+    if (center != sector_preview_center) {
+        sector_neighbor_prefetch_reset();
+        sector_preview_center = center;
+        for (int radius = 1; radius <= 2; radius++) {
+            for (int dy = -radius; dy <= radius; dy++) {
+                for (int dx = -radius; dx <= radius; dx++) {
+                    if (abs(dx) != radius && abs(dy) != radius) continue;
+                    int64_t x = (int64_t)SECTOR_X(center) + dx;
+                    int64_t y = (int64_t)SECTOR_Y(center) + dy;
+                    if (x < 0 || y < 0 || x >= sector_limit_x || y >= sector_limit_y) continue;
+                    sector_previews[sector_preview_count++].id = SECTOR_MAKE(x, y);
+                }
+            }
+        }
+    }
+    if (sector_preview_reader == NULL) {
+        sector_preview_reader = async_asset_reader_create(2, 2 * 1024 * 1024, 4 * 1024 * 1024);
+        if (sector_preview_reader == NULL) return;
+        async_asset_reader_reset(sector_preview_reader, sector_preview_generation);
+    }
+    int art_budget = 16;
+    bool requested = false;
+    bool decoded = false;
+    for (int i = 0; i < sector_preview_count; i++) {
+        SectorNeighborPreview* preview = &sector_previews[i];
+        if (preview->queued && !decoded) {
+            AsyncAssetResult result = { 0 };
+            if (async_asset_reader_take(sector_preview_reader, sector_preview_generation, (Uint64)i + 1, &result)) {
+                preview->queued = false;
+                decoded = true;
+                bool valid = result.success && sector_art_preview_read(result.bytes, result.size, preview->art_ids, &preview->art_count);
+                preview->finished = valid || preview->terrain || result.success;
+                if (!preview->finished) preview->terrain = true;
+                tig_performance_count(valid ? TIG_PERF_NEIGHBOR_READY : TIG_PERF_NEIGHBOR_FAILURES, 1);
+                async_asset_result_release(&result);
+            }
+        }
+        while (preview->art_cursor < preview->art_count && art_budget > 0) {
+            tig_art_prefetch(preview->art_ids[preview->art_cursor++], 1);
+            tig_performance_count(TIG_PERF_NEIGHBOR_ART_REQUESTS, 1);
+            art_budget--;
+        }
+        if (preview->finished || preview->queued || requested) continue;
+        if (sector_loaded(preview->id)) { preview->finished = true; continue; }
+        char path[TIG_MAX_PATH];
+        if (preview->terrain || !sector_check_demo_limits(preview->id)) {
+            terrain_sector_path(preview->id, path);
+            preview->terrain = true;
+        } else {
+            SDL_snprintf(path, sizeof(path), "%s\\%" PRIu64 ".sec", sector_base_path, (uint64_t)preview->id);
+        }
+        TigAssetSource sources[TIG_ASSET_SOURCE_CAPACITY];
+        int count = tig_file_snapshot_sources(path, sources);
+        requested = true;
+        if (count == 0) { preview->finished = true; continue; }
+        if (async_asset_reader_request_sources(sector_preview_reader, sources, count, sector_preview_generation, (Uint64)i + 1, 1)) {
+            preview->queued = true;
+            tig_performance_count(TIG_PERF_NEIGHBOR_REQUESTS, 1);
+        }
+    }
+    tig_performance_end_detail(TIG_PERF_NEIGHBOR_PREFETCH, start, "neighbor_resources");
 }

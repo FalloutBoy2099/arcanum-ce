@@ -1,6 +1,7 @@
 #include "tig/scale_region.h"
 #include "game/zoom_damage.h"
 #include <stdio.h>
+#include <limits.h>
 
 static int failures;
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "FAIL %d: %s\n", __LINE__, #x); failures++; } } while (0)
@@ -63,10 +64,52 @@ static void test_damage(void)
     SDL_DestroySurface(src);
 }
 
+
+static void test_extreme_damage(void)
+{
+    TigVideoUpload plan;
+    zoom_damage_init(&plan, 100, 80);
+    zoom_damage_world(&plan, (TigRect){ INT_MIN, INT_MIN, INT_MAX, INT_MAX },
+        (TigRect){ 0, 0, 100, 80 }, (TigRect){ INT_MIN, INT_MIN, 1, 1 });
+    CHECK(plan.count == 1 && plan.rects[0].x == 0 && plan.rects[0].y == 0
+        && plan.rects[0].w == 3 && plan.rects[0].h == 3);
+    zoom_damage_init(&plan, 100, 80);
+    zoom_damage_world(&plan, (TigRect){ INT_MAX - 10, INT_MAX - 10, 20, 20 },
+        (TigRect){ 0, 0, 100, 80 }, (TigRect){ INT_MAX - 1, INT_MAX - 1, 2, 2 });
+    CHECK(plan.count == 1 && plan.rects[0].x == 38 && plan.rects[0].y == 30
+        && plan.rects[0].w == 24 && plan.rects[0].h == 20);
+    zoom_damage_init(&plan, 100, 80);
+    zoom_damage_world(&plan, (TigRect){ 0, 0, 20, 20 },
+        (TigRect){ INT_MAX, INT_MAX, INT_MAX, INT_MAX }, (TigRect){ 0, 0, 20, 20 });
+    CHECK(plan.count == 0);
+    zoom_damage_world(&plan, (TigRect){ 0, 0, 20, 20 },
+        (TigRect){ 0, 0, 100, 80 }, (TigRect){ 2, 2, 0, 0 });
+    CHECK(plan.count == 0);
+    zoom_damage_screen(&plan, (TigRect){ 50, 40, INT_MAX, INT_MAX });
+    CHECK(plan.count == 1 && plan.rects[0].x == 50 && plan.rects[0].y == 40
+        && plan.rects[0].w == 50 && plan.rects[0].h == 40);
+    plan.count = INT_MAX;
+    zoom_damage_screen(&plan, (TigRect){ 0, 0, 1, 1 });
+    CHECK(plan.count == 1 && plan.rects[0].w == 100);
+    ZoomDamageState state = { 0 };
+    ZoomMapping mapping = { 0 };
+    plan.count = INT_MAX;
+    zoom_damage_finish(&plan, &state, &mapping);
+    CHECK(plan.count == 1 && plan.rects[0].w == 100 && plan.rects[0].h == 80);
+    plan.count = -1;
+    zoom_damage_finish(&plan, &state, &mapping);
+    CHECK(plan.count == 1);
+    plan.count = 1;
+    plan.rects[0] = (SDL_Rect){ INT_MAX, 0, 1, 1 };
+    zoom_damage_finish(&plan, &state, &mapping);
+    CHECK(plan.count == 1 && plan.rects[0].x == 0 && plan.rects[0].w == 100);
+}
+
 int main(void)
 {
     CHECK(SDL_Init(0));
     test_damage();
+    test_extreme_damage();
     unsigned int random = 12345;
     for (int test = 0; test < 160; test++) {
         int sw = 2 + test * 17 % 131, sh = 2 + test * 13 % 97;

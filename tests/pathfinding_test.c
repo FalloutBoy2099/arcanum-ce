@@ -13,18 +13,23 @@
 #include "game/terrain.h"
 #include "game/tile.h"
 #include "game/trap.h"
+#include "path_jps.h"
 
 static int failures;
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "FAIL %d: %s\n", __LINE__, #x); failures++; } } while (0)
 static unsigned char grid[64][64];
 static unsigned int random_state = 12345;
 static int actor_type = OBJ_TYPE_PC;
+static uint64_t trap_queries, fire_queries, light_queries, traversal_queries, traversal_trace;
+static bool scripted_traversal;
+static unsigned int lighting_revision;
 static struct { int type; int flags; bool dead; } destination_objects[3];
 static int destination_count;
 static const int dx[8] = { -1, -1, -1, 0, 1, 1, 1, 0 };
 static const int dy[8] = { -1, 0, 1, 1, 1, 0, -1, -1 };
 int reference_astar(PathCreateInfo* path);
 int path_test_astar(PathCreateInfo* path);
+int path_weighted_baseline(PathCreateInfo* path);
 
 static unsigned int next_random(void) { random_state = random_state * 1664525U + 1013904223U; return random_state; }
 static int cell(int64_t loc) { return grid[(int)LOCATION_GET_X(loc)][(int)LOCATION_GET_Y(loc)]; }
@@ -45,10 +50,10 @@ int64_t object_find_first_at_location(int64_t loc, unsigned int flags, ObjectQue
 void object_list_location(int64_t loc, unsigned int flags, ObjectList* list) { (void)loc; (void)flags; memset(list, 0, sizeof(*list)); }
 void object_list_destroy(ObjectList* list) { (void)list; }
 bool tile_is_blocking(int64_t loc, bool ignored) { (void)ignored; return cell(loc) == 1; }
-int64_t get_trap_at_location(int64_t loc) { return cell(loc) == 2 ? 2 : 0; }
-int64_t get_fire_at_location(int64_t loc) { return cell(loc) == 3 ? 3 : 0; }
+int64_t get_trap_at_location(int64_t loc) { trap_queries++; return cell(loc) == 2 || cell(loc) == 10 ? 2 : 0; }
+int64_t get_fire_at_location(int64_t loc) { fire_queries++; return cell(loc) == 3 || cell(loc) == 10 ? 3 : 0; }
 bool trap_is_spotted(int64_t actor, int64_t trap) { (void)actor; (void)trap; return true; }
-tig_color_t light_luminance_at_location(int64_t loc, int x, int y) { (void)x; (void)y; return (tig_color_t)((LOCATION_GET_X(loc) % 4) * 50); }
+tig_color_t light_luminance_at_location(int64_t loc, int x, int y) { (void)x; (void)y; light_queries++; return (tig_color_t)(((LOCATION_GET_X(loc) + lighting_revision) % 4) * 50); }
 int64_t location_dist(int64_t a, int64_t b) { return SDL_max(llabs((int64_t)LOCATION_GET_X(a) - LOCATION_GET_X(b)), llabs((int64_t)LOCATION_GET_Y(a) - LOCATION_GET_Y(b))); }
 bool location_in_dir(int64_t loc, int direction, int64_t* next)
 {
@@ -77,12 +82,21 @@ int object_calc_traversal_cost(int64_t actor, int64_t loc, int direction, unsign
     int64_t* blocker, int* type, bool* window)
 {
     (void)actor;
+    traversal_queries++;
+    traversal_trace = (traversal_trace ^ (uint64_t)loc) * UINT64_C(1099511628211);
+    traversal_trace = (traversal_trace ^ (uint64_t)direction ^ ((uint64_t)flags << 8) ^ (uint64_t)actor) * UINT64_C(1099511628211);
+    if (scripted_traversal && traversal_queries % 13 == 0) {
+        lighting_revision++;
+        grid[30][30] = grid[30][30] == 10 ? 0 : 10;
+    }
     int64_t next;
     *blocker = 0; *type = 0;
     if (window != NULL) *window = false;
     if (!location_in_dir(loc, direction, &next)) return 1;
     int value = cell(next);
-    if (window != NULL) *window = value == 5;
+    if (value == 7 && direction == 1) { *type = OBJ_TYPE_WALL; *blocker = 7; return 1; }
+    if (value == 8 && direction != 5) { *type = OBJ_TYPE_PORTAL; *blocker = 8; return 1; }
+    if (window != NULL) *window = value == 5 || (value == 9 && direction == 3);
     if (value == 4 && (flags & OBJ_TRAVERSAL_PORTAL_BLOCKS) != 0) { *type = OBJ_TYPE_PORTAL; *blocker = 4; return 1; }
     if (value == 5 && (flags & OBJ_TRAVERSAL_WINDOW_BLOCKS) != 0) { *type = OBJ_TYPE_WALL; *blocker = 5; return 1; }
     if (value == 6 && (flags & OBJ_TRAVERSAL_IGNORE_CRITTERS) == 0) { *type = OBJ_TYPE_NPC; *blocker = 6; return 1; }
@@ -98,6 +112,126 @@ bool sector_in_dir(int64_t sector, int dir, int64_t* next) { return location_in_
 bool sector_exists(uint64_t id) { (void)id; return true; }
 bool sector_is_blocked(int64_t id) { (void)id; return false; }
 bool terrain_is_blocked(int64_t id) { (void)id; return false; }
+
+
+static void reset_weighted_counters(void)
+{
+    trap_queries = fire_queries = light_queries = traversal_queries = 0;
+    lighting_revision = 0;
+    traversal_trace = UINT64_C(14695981039346656037);
+}
+
+static void test_weighted_compatibility(void)
+{
+    const unsigned int options[] = {
+        PATH_FLAG_STOP_BEFORE_DESTINATION, PATH_FLAG_PORTALS_BLOCK, PATH_FLAG_WINDOWS_BLOCK,
+        PATH_FLAG_IGNORE_TILE_BLOCKING, PATH_FLAG_IGNORE_CRITTERS, PATH_FLAG_IGNORE_BLOCKERS,
+        PATH_FLAG_AVOID_SPOTTED_TRAPS, PATH_FLAG_AVOID_FIRE,
+    };
+    uint64_t baseline_cost_queries = 0, optimized_cost_queries = 0;
+    uint64_t baseline_traversals = 0, optimized_traversals = 0;
+    unsigned char saved_grid[64][64];
+    actor_type = OBJ_TYPE_PC;
+    destination_count = 0;
+    for (int trial = 0; trial < 4096; trial++) {
+        for (int x = 0; x < 64; x++) for (int y = 0; y < 64; y++) {
+            unsigned int value = next_random() >> 16;
+            grid[x][y] = value % 100 < 45 ? (unsigned char)(1 + value % 10) : 0;
+        }
+        int edge = trial % 4;
+        int start_x = edge == 0 ? 0 : edge == 1 ? 63 : 16;
+        int start_y = edge == 2 ? 0 : edge == 3 ? 63 : 16;
+        int target_x = start_x < 32 ? start_x + 24 : start_x - 24;
+        int target_y = start_y < 32 ? start_y + 24 : start_y - 24;
+        grid[start_x][start_y] = grid[target_x][target_y] = 0;
+        memcpy(saved_grid, grid, sizeof(grid));
+        int8_t expected[4096], actual[4096];
+        PathCreateInfo path = { 0 };
+        path.obj = 1;
+        path.from = location_make(start_x, start_y);
+        path.to = location_make(target_x, target_y);
+        path.max_rotations = trial % 5 == 0 ? 8 : trial % 7 == 0 ? 24 : 4095;
+        for (int bit = 0; bit < 8; bit++) if ((trial & (1 << bit)) != 0) path.flags |= options[bit];
+        scripted_traversal = trial % 3 == 0;
+        reset_weighted_counters();
+        path.rotations = expected;
+        int expected_length = path_weighted_baseline(&path);
+        baseline_cost_queries += trap_queries + fire_queries + light_queries;
+        baseline_traversals += traversal_queries;
+        uint64_t expected_traversals = traversal_queries;
+        uint64_t expected_trace = traversal_trace;
+        unsigned int expected_revision = lighting_revision;
+        unsigned char expected_script_cell = grid[30][30];
+        memcpy(grid, saved_grid, sizeof(grid));
+        reset_weighted_counters();
+        path.rotations = actual;
+        int actual_length = path_test_astar(&path);
+        optimized_cost_queries += trap_queries + fire_queries + light_queries;
+        optimized_traversals += traversal_queries;
+        CHECK(expected_length == actual_length);
+        if (expected_length == actual_length && actual_length > 0) CHECK(memcmp(expected, actual, actual_length) == 0);
+        CHECK(traversal_queries == expected_traversals && traversal_trace == expected_trace);
+        CHECK(lighting_revision == expected_revision && grid[30][30] == expected_script_cell);
+    }
+    scripted_traversal = false;
+    reset_weighted_counters();
+    CHECK(optimized_cost_queries < baseline_cost_queries / 2);
+    CHECK(optimized_traversals == baseline_traversals);
+    printf("Weighted compatibility: 4096 maps, 256 flag combinations; cost queries %llu -> %llu; traversal calls %llu -> %llu\n",
+        (unsigned long long)baseline_cost_queries, (unsigned long long)optimized_cost_queries,
+        (unsigned long long)baseline_traversals, (unsigned long long)optimized_traversals);
+}
+
+static void test_weighted_benchmark(void)
+{
+    const char* names[] = { "uniform_detour", "weighted_detour", "directional_obstacles" };
+    for (int scenario = 0; scenario < 3; scenario++) {
+        memset(grid, 0, sizeof(grid));
+        for (int y = 0; y < 52; y++) grid[32][y] = 1;
+        if (scenario != 0) {
+            for (int x = 0; x < 64; x++) for (int y = 0; y < 64; y++) {
+                if (grid[x][y] == 0 && (next_random() >> 16) % 4 == 0) {
+                    grid[x][y] = scenario == 1 ? (unsigned char)(2 + (next_random() >> 16) % 4)
+                        : (unsigned char)(7 + (next_random() >> 16) % 4);
+                }
+            }
+        }
+        grid[16][16] = grid[47][47] = 0;
+        PathCreateInfo path = { 0 };
+        int8_t rotations[4096];
+        path.obj = 1;
+        path.from = location_make(16,16);
+        path.to = location_make(47,47);
+        path.max_rotations = 4095;
+        path.rotations = rotations;
+        path.flags = scenario == 0 ? 0 : PATH_FLAG_AVOID_FIRE | PATH_FLAG_AVOID_SPOTTED_TRAPS;
+        Uint64 durations[2][9];
+        for (int batch = 0; batch < 9; batch++) {
+            for (int order = 0; order < 2; order++) {
+                int algorithm = (batch + order) % 2;
+                Uint64 start = SDL_GetPerformanceCounter();
+                for (int iteration = 0; iteration < 128; iteration++) {
+                    if (algorithm == 0) path_weighted_baseline(&path);
+                    else path_test_astar(&path);
+                }
+                durations[algorithm][batch] = SDL_GetPerformanceCounter() - start;
+            }
+        }
+        for (int algorithm = 0; algorithm < 2; algorithm++) {
+            for (int a = 0; a < 9; a++) for (int b = a + 1; b < 9; b++) {
+                if (durations[algorithm][a] > durations[algorithm][b]) {
+                    Uint64 value = durations[algorithm][a];
+                    durations[algorithm][a] = durations[algorithm][b];
+                    durations[algorithm][b] = value;
+                }
+            }
+        }
+        printf("Weighted benchmark %s: baseline %.3f us, optimized %.3f us (median of 9 x 128 searches)\n", names[scenario],
+            durations[0][4] * 1000000.0 / SDL_GetPerformanceFrequency() / 128,
+            durations[1][4] * 1000000.0 / SDL_GetPerformanceFrequency() / 128);
+    }
+    reset_weighted_counters();
+}
 
 static void test_heap(void)
 {
@@ -168,6 +302,90 @@ static void test_paths(void)
         (unsigned long long)old_checks, (unsigned long long)new_checks);
 }
 
+typedef struct EnginePathFallback {
+    PathCreateInfo* path;
+    int calls;
+} EnginePathFallback;
+
+static PathExperimentResult engine_path_fallback(void* context)
+{
+    EnginePathFallback* fallback = context;
+    fallback->calls++;
+    PathCreateInfo* path = fallback->path;
+    PathExperimentResult result = { 0 };
+    result.steps = path_test_astar(path);
+    result.found = result.steps > 0 || path->from == path->to;
+    int64_t loc = path->from;
+    result.cells[0] = (int)(LOCATION_GET_Y(loc)*64+LOCATION_GET_X(loc));
+    for (int i = 0; i < result.steps; i++) {
+        CHECK(location_in_dir(loc,path->rotations[i],&loc));
+        result.cells[i+1] = (int)(LOCATION_GET_Y(loc)*64+LOCATION_GET_X(loc));
+    }
+    return result;
+}
+
+static void test_jps_engine_costs(void)
+{
+    PathExperimentGrid uniform = { 64, 64, { 0 } };
+    int worse = 0, better = 0, equal = 0, different_paths = 0, safe_fallbacks = 0;
+    actor_type = OBJ_TYPE_PC;
+    destination_count = 0;
+    for (int trial = 0; trial < 500; trial++) {
+        for (int y = 0; y < 64; y++) {
+            for (int x = 0; x < 64; x++) {
+                grid[x][y] = (next_random() >> 16) % 100 < (unsigned int)(trial % 5 * 10);
+                uniform.blocked[y*64+x] = grid[x][y];
+            }
+        }
+        grid[16][16] = grid[47][47] = 0;
+        uniform.blocked[16*64+16] = uniform.blocked[47*64+47] = 0;
+        int8_t rotations[4096];
+        PathCreateInfo path = { 0 };
+        path.obj = 1;
+        path.from = location_make(16,16);
+        path.to = location_make(47,47);
+        path.max_rotations = 4095;
+        path.rotations = rotations;
+        int length = path_test_astar(&path);
+        int8_t engine_rotations[4096];
+        if (length > 0) memcpy(engine_rotations,rotations,length);
+        EnginePathFallback fallback = { &path, 0 };
+        PathExperimentPolicy policy = { 0 };
+        policy.turn_penalty = 1;
+        PathExperimentResult hybrid = path_experiment_hybrid(&uniform,16*64+16,47*64+47,
+            &policy,NULL,engine_path_fallback,&fallback);
+        CHECK(fallback.calls == 1 && hybrid.strategy == PATH_EXPERIMENT_ASTAR && hybrid.precomputed_queries == 0);
+        CHECK(hybrid.steps == length);
+        if (length > 0) CHECK(memcmp(engine_rotations,rotations,length) == 0);
+        safe_fallbacks++;
+        PathExperimentResult candidate = path_experiment_search(&uniform, 16*64+16, 47*64+47, true);
+        CHECK((length > 0) == candidate.found);
+        if (!candidate.found || length <= 0) continue;
+        int engine_cost = 10 * length;
+        for (int i = 1; i < length; i++) engine_cost += rotations[i] != rotations[i-1];
+        int jps_cost = 10 * candidate.steps;
+        int previous_direction = -1;
+        bool same = length == candidate.steps;
+        for (int i = 1; i <= candidate.steps; i++) {
+            int from = candidate.cells[i-1], to = candidate.cells[i];
+            int delta_x = to % 64 - from % 64, delta_y = to / 64 - from / 64;
+            int direction = -1;
+            for (int rot = 0; rot < 8; rot++) if (dx[rot] == delta_x && dy[rot] == delta_y) direction = rot;
+            CHECK(direction >= 0);
+            if (previous_direction != -1 && previous_direction != direction) jps_cost++;
+            previous_direction = direction;
+            if (i > length || rotations[i-1] != direction) same = false;
+        }
+        if (!same) different_paths++;
+        if (jps_cost > engine_cost) worse++;
+        else if (jps_cost < engine_cost) better++;
+        else equal++;
+    }
+    printf("JPS versus actual engine A*, 500 grids: worse weighted cost %d, better %d, equal %d, different paths %d\n",
+        worse, better, equal, different_paths);
+    printf("Hybrid weighted engine: %d A* fallbacks checked, unchanged routes\n",safe_fallbacks);
+}
+
 static void test_turns(void)
 {
     for (int from = 0; from < 8; from++) for (int to = 0; to < 8; to++) {
@@ -235,6 +453,15 @@ static void test_limits_and_public_paths(void)
     path.obj = 1; path.from = location_make(20, 20); path.to = location_make(40, 40);
     path.rotations = rotations; path.max_rotations = 100;
     CHECK(path_make(&path) == 8); // Existing segment-length contract.
+    CHECK(path_make_preview(&path) == 20);
+    int64_t preview_destination = path.from;
+    for (int step = 0; step < 20; step++) CHECK(location_in_dir(preview_destination, rotations[step], &preview_destination));
+    CHECK(preview_destination == path.to);
+    CHECK(path_make(&path) == 8);
+    path.max_rotations = 5;
+    rotations[5] = 99;
+    CHECK(path_make_preview(&path) == 0 && rotations[5] == 99);
+    path.max_rotations = 100;
     grid[21][21] = 1;
     CHECK(path_make(&path) == 8); // Detour through the actual heap-backed solver.
     path.flags = PATH_FLAG_DIRECT_ONLY;
@@ -248,6 +475,10 @@ static void test_limits_and_public_paths(void)
     CHECK(path_test_astar(&path) == 1);
     CHECK(path_test_astar(&path) == 1);
     CHECK(path_test_astar(&path) == 0); // Exactly two admitted requests, not three.
+    path.flags = PATH_FLAG_AVOID_SPOTTED_TRAPS;
+    CHECK(path_make_preview(&path) == 1);
+    CHECK(path_test_astar(&path) == 0);
+    path.flags = 0;
     actor_type = OBJ_TYPE_PC;
     CHECK(path_test_astar(&path) == 1); // NPC budget never blocks player navigation.
     CHECK(path_set_limit(10));
@@ -361,8 +592,11 @@ static void test_transient_occupancy_wait(void)
 int main(void)
 {
     CHECK(SDL_Init(0));
+    test_weighted_compatibility();
     test_heap(); test_paths(); test_turns(); test_destination_blockers(); test_limits_and_public_paths(); test_replaced_follow_goal_and_pivot_scheduler();
     test_transient_occupancy_wait();
+    test_jps_engine_costs();
+    test_weighted_benchmark();
     SDL_Quit();
     printf("Pathfinding and pivots: %s\n", failures == 0 ? "PASS" : "FAIL");
     return failures != 0;

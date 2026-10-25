@@ -1,4 +1,5 @@
 #include "ui/inven_ui.h"
+#include "ui/asset_warmup.h"
 #include "ui/item_compare.h"
 
 #include <stdio.h>
@@ -60,7 +61,7 @@ typedef struct InventoryDeferredDrag {
     /* 0020 */ int mode;
     /* 0024 */ int original_inventory_slot;
     /* 0028 */ int target_scroll_offset;
-    /* 002C */ int field_2C;
+    /* 002C */ int player_scroll_offset;
 } InventoryDeferredDrag;
 
 // Serializeable.
@@ -69,28 +70,31 @@ static_assert(sizeof(InventoryDeferredDrag) == 0x30, "wrong size");
 static bool inven_ui_close_if_created(void);
 static bool inven_ui_message_filter(TigMessage* msg);
 static void inven_ui_follower_cycle(bool next);
-static bool inven_ui_dragged_item_plant(bool* a1);
-static bool inven_ui_dragged_item_steal(bool* a1);
+static bool inven_ui_dragged_item_plant(bool* success_ptr);
+static bool inven_ui_dragged_item_steal(bool* success_ptr);
 static void inven_ui_drop_on_player_inventory(int inventory_location);
 static void inven_ui_drop_on_target_inventory(int inventory_location);
 static void inven_ui_deferred_drag_request(int x, int y);
 static bool inven_ui_deferred_drag_context_free(void* userinfo);
 static bool inven_ui_deferred_drag_complete(void* userinfo);
 static void inven_ui_dragged_item_drop_at_owner(void);
-static int inven_ui_inventory_slot_at_xy(int x, int y, int64_t* a3);
-static int64_t inven_ui_item_at_xy(int x, int y, int64_t* a3);
-static void redraw_inven_fix_bad_inven_obj(int64_t a1);
-static bool redraw_inven_fix_bad_inven(int64_t a1, int64_t a2);
-static void redraw_inven(bool a1);
+static int inven_ui_inventory_slot_at_xy(int x, int y, int64_t* parent_obj_ptr);
+static int64_t inven_ui_item_at_xy(int x, int y, int64_t* parent_obj_ptr);
+static void redraw_inven_fix_bad_inven_obj(int64_t obj);
+static bool inven_ui_invalid_parent_link_remove(int64_t item_obj, int64_t expected_owner);
+static void redraw_inven(bool initial_draw);
 static tig_art_id_t inven_ui_background_art_id_get(void);
-static void inven_ui_trade_offer_refresh(int64_t a1, int64_t a2);
+static void inven_ui_trade_offer_refresh(int64_t item_obj, int64_t owner_obj);
 static void inven_ui_identification_quote_show(int64_t obj);
 static void inven_ui_repair_offer_refresh(int64_t obj);
-static void inven_ui_drag_item_insert_or_transfer(int64_t a1, int64_t a2, int a3, int a4);
+static void inven_ui_drag_item_insert_or_transfer(int64_t item_obj, int64_t target_obj, int new_inventory_location, int transaction_flags);
 static void inven_ui_transfer_visible_items(int64_t from_obj, int64_t to_obj);
-static bool inven_ui_gambling_offer_check(int64_t obj, bool a2);
+static bool inven_ui_gambling_offer_check(int64_t obj, bool silent);
 static void inven_ui_item_gamble(int64_t obj);
 static void inven_ui_target_inventory_scrollbar_create(void);
+static void inven_ui_player_inventory_scrollbar_create(void);
+static void inven_ui_player_scroll_value_changed(int value);
+static void inven_ui_player_background_draw(TigRect* rect);
 static void inven_ui_target_inventory_scrollbar_destroy(void);
 static void inven_ui_target_inventory_scrollbar_show(void);
 static void inven_ui_target_inventory_scrollbar_hide(void);
@@ -232,6 +236,9 @@ static int inven_ui_drag_original_location;
 
 // 0x6810F0
 static ScrollbarId inven_ui_target_inventory_scrollbar;
+static ScrollbarId inven_ui_player_inventory_scrollbar;
+static int inven_ui_player_scroll_offset;
+static bool inven_ui_player_scrollbar_created;
 
 // 0x6810F8
 static mes_file_handle_t inven_ui_mes_file;
@@ -249,7 +256,7 @@ static TigRect inven_ui_gamble_box_frame;
 static bool inven_ui_have_use_box;
 
 // 0x68111C
-static int inven_ui_player_inventory_slots[120];
+static int inven_ui_player_inventory_slots[INVENTORY_CRITTER_CELLS];
 
 // 0x6812FC
 static char inven_ui_transaction_object_id_text[128];
@@ -396,7 +403,7 @@ static bool inven_ui_mouse_down_seen;
 static int inven_ui_drag_slot_offset;
 
 // 0x739F58
-static int dword_739F58;
+static int inven_ui_close_requested;
 
 // 0x739F60
 static int inven_ui_transaction_flags;
@@ -419,6 +426,9 @@ static int inven_ui_transaction_price;
 // 0x572060
 bool inven_ui_init(GameInitInfo* init_info)
 {
+    const int interface_art_numbers[] = { 223, 235, 825, 234, 221, 340, 341, 337, 349, 338, 339, 676, 677, 757, 758, 808 };
+    for (size_t i = 0; i < SDL_arraysize(interface_art_numbers); i++) ui_asset_warmup_register(interface_art_numbers[i]);
+    for (size_t i = 0; i < SDL_arraysize(item_ui_item_silhouette_nums); i++) ui_asset_warmup_register(item_ui_item_silhouette_nums[i]);
     TigFont font;
 
     (void)init_info;
@@ -484,10 +494,10 @@ bool inven_ui_open(int64_t pc_obj, int64_t target_obj, int mode)
 
         pkt.type = 100;
         pkt.subtype = 12;
-        mp_object_id_get_nullable(pc_obj, &(pkt.d.z.field_8));
-        mp_object_id_get_nullable(target_obj, &(pkt.d.z.field_20));
-        pkt.d.z.field_38 = mode;
-        pkt.d.z.field_3C = 0;
+        mp_object_id_get_nullable(pc_obj, &(pkt.d.z.pc_id));
+        mp_object_id_get_nullable(target_obj, &(pkt.d.z.target_id));
+        pkt.d.z.inventory_mode = mode;
+        pkt.d.z.stage = 0;
         tig_net_send_app_all(&pkt, sizeof(pkt));
 
         return true;
@@ -1006,6 +1016,11 @@ bool inven_ui_create(int64_t pc_obj, int64_t target_obj, int mode)
             item_decay_process_disable();
         }
 
+        inven_ui_target_max_scroll_offset =
+            (obj_field_int32_get(inven_ui_target_inventory_owner, OBJ_F_TYPE) == OBJ_TYPE_CONTAINER
+                ? INVENTORY_CONTAINER_ROWS : INVENTORY_CRITTER_ROWS)
+            - (inven_ui_mode == INVEN_UI_MODE_BARTER ? 7 : 8);
+
         item_inventory_slots_get(inven_ui_target_inventory_owner, inven_ui_target_inventory_slots);
     }
 
@@ -1041,6 +1056,7 @@ bool inven_ui_create(int64_t pc_obj, int64_t target_obj, int mode)
     }
 
     inven_ui_target_scroll_offset = 0;
+    inven_ui_player_scroll_offset = 0;
     inven_ui_quoted_item_obj = OBJ_HANDLE_NULL;
 
     multiplayer_inventory_viewer_set(inven_ui_pc_obj, inven_ui_target_inventory_owner);
@@ -1056,6 +1072,7 @@ bool inven_ui_create(int64_t pc_obj, int64_t target_obj, int mode)
     }
 
     inven_ui_target_inventory_scrollbar_create();
+    inven_ui_player_inventory_scrollbar_create();
     redraw_inven(true);
     inven_ui_drag_item_obj = OBJ_HANDLE_NULL;
     location_origin_set(obj_field_int64_get(inven_ui_pc_obj, OBJ_F_LOCATION));
@@ -1081,7 +1098,7 @@ bool inven_ui_create(int64_t pc_obj, int64_t target_obj, int mode)
         intgame_pc_lens_do(PC_LENS_MODE_PASSTHROUGH, &pc_lens);
     }
 
-    dword_739F58 = 0;
+    inven_ui_close_requested = 0;
 
     if (player_is_local_pc_obj(pc_obj)) {
         ui_toggle_primary_button(UI_PRIMARY_BUTTON_INVENTORY, false);
@@ -1142,6 +1159,10 @@ void inven_ui_destroy(void)
     }
 
     intgame_pc_lens_do(PC_LENS_MODE_NONE, NULL);
+    if (inven_ui_player_scrollbar_created) {
+        scrollbar_ui_control_destroy(inven_ui_player_inventory_scrollbar);
+        inven_ui_player_scrollbar_created = false;
+    }
     inven_ui_target_inventory_scrollbar_destroy();
     // CE: drop the near-black alpha before unlocking so the next
     // big-window user (e.g. worldmap) starts opaque.
@@ -1250,7 +1271,7 @@ void inven_ui_mouse_down_clear(void)
 }
 
 // 0x573740
-void inven_ui_item_cursor_begin(int64_t a1, bool a2)
+void inven_ui_item_cursor_begin(int64_t item_obj, bool prompt_for_quantity)
 {
     tig_art_id_t mouse_art_id;
     tig_art_id_t inv_art_id;
@@ -1261,11 +1282,11 @@ void inven_ui_item_cursor_begin(int64_t a1, bool a2)
 
     mouse_art_id = tig_mouse_cursor_get_art_id();
     inven_ui_drag_original_owner = inven_ui_pc_obj;
-    inven_ui_drag_item_obj = a1;
-    inven_ui_drag_original_location = obj_field_int32_get(a1, OBJ_F_ITEM_INV_LOCATION);
+    inven_ui_drag_item_obj = item_obj;
+    inven_ui_drag_original_location = obj_field_int32_get(item_obj, OBJ_F_ITEM_INV_LOCATION);
 
     if (!inven_ui_created) {
-        inven_ui_drag_item_insert_or_transfer(inven_ui_drag_item_obj, OBJ_HANDLE_NULL, -1, a2 ? 4 : 36);
+        inven_ui_drag_item_insert_or_transfer(inven_ui_drag_item_obj, OBJ_HANDLE_NULL, -1, prompt_for_quantity ? 4 : 36);
         if (inven_ui_drag_item_obj == OBJ_HANDLE_NULL) {
             return;
         }
@@ -1418,18 +1439,18 @@ static inline bool inven_ui_mssage_filter_handle_button_hovered(tig_button_handl
 // 0x573C80
 static inline void inven_ui_message_filter_handle_mouse_idle(int x, int y)
 {
-    int64_t v1;
-    int64_t v2;
+    int64_t hovered_item_obj;
+    int64_t owner_obj;
 
     if (inven_ui_drag_item_obj == OBJ_HANDLE_NULL) {
-        v1 = inven_ui_item_at_xy(x, y, &v2);
-        if (v1 != inven_ui_quoted_item_obj) {
-            inven_ui_quoted_item_obj = v1;
+        hovered_item_obj = inven_ui_item_at_xy(x, y, &owner_obj);
+        if (hovered_item_obj != inven_ui_quoted_item_obj) {
+            inven_ui_quoted_item_obj = hovered_item_obj;
             if (inven_ui_quoted_item_obj != OBJ_HANDLE_NULL) {
                 tb_ui_examine_and_select_object(inven_ui_pc_obj, inven_ui_quoted_item_obj);
                 switch (inven_ui_mode) {
                 case INVEN_UI_MODE_BARTER:
-                    inven_ui_trade_offer_refresh(inven_ui_quoted_item_obj, v2);
+                    inven_ui_trade_offer_refresh(inven_ui_quoted_item_obj, owner_obj);
                     break;
                 case INVEN_UI_MODE_NPC_IDENTIFY:
                     inven_ui_identification_quote_show(inven_ui_quoted_item_obj);
@@ -1546,8 +1567,8 @@ static inline bool inven_ui_message_filter_handle_mouse_move(int x, int y)
 // 0x574080
 static inline bool inven_ui_message_filter_handle_mouse_lbutton_down(int x, int y)
 {
-    int64_t v1;
-    int64_t v2;
+    int64_t clicked_item_obj;
+    int64_t owner_obj;
     TargetDescriptor td;
 
     switch (intgame_mode_get()) {
@@ -1559,7 +1580,7 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_down(int x, int 
         if (inven_ui_drag_item_obj == OBJ_HANDLE_NULL) {
             inven_ui_drag_item_obj = inven_ui_item_at_xy(x, y, &inven_ui_drag_original_owner);
             if (inven_ui_drag_item_obj != OBJ_HANDLE_NULL) {
-                inven_ui_drag_slot_offset = inven_ui_inventory_slot_at_xy(x, y, &v2);
+                inven_ui_drag_slot_offset = inven_ui_inventory_slot_at_xy(x, y, &owner_obj);
                 inven_ui_drag_original_location = item_inventory_location_get(inven_ui_drag_item_obj);
                 inven_ui_drag_slot_offset -= inven_ui_drag_original_location;
                 inven_ui_deferred_drag_request(x, y);
@@ -1568,26 +1589,26 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_down(int x, int 
         }
         break;
     case INTGAME_MODE_SKILL:
-        v1 = inven_ui_item_at_xy(x, y, &inven_ui_drag_original_owner);
-        if (v1 != OBJ_HANDLE_NULL) {
-            target_descriptor_set_obj(&td, v1);
+        clicked_item_obj = inven_ui_item_at_xy(x, y, &inven_ui_drag_original_owner);
+        if (clicked_item_obj != OBJ_HANDLE_NULL) {
+            target_descriptor_set_obj(&td, clicked_item_obj);
             skill_ui_apply(&td);
             skill_ui_cancel();
             return true;
         }
         break;
     case INTGAME_MODE_SPELL:
-        v1 = inven_ui_item_at_xy(x, y, &inven_ui_drag_original_owner);
-        if (v1 != OBJ_HANDLE_NULL) {
-            target_descriptor_set_obj(&td, v1);
+        clicked_item_obj = inven_ui_item_at_xy(x, y, &inven_ui_drag_original_owner);
+        if (clicked_item_obj != OBJ_HANDLE_NULL) {
+            target_descriptor_set_obj(&td, clicked_item_obj);
             spell_ui_apply(&td);
             return true;
         }
         break;
     case 16:
-        v1 = inven_ui_item_at_xy(x, y, &inven_ui_drag_original_owner);
-        if (v1 != OBJ_HANDLE_NULL) {
-            target_descriptor_set_obj(&td, v1);
+        clicked_item_obj = inven_ui_item_at_xy(x, y, &inven_ui_drag_original_owner);
+        if (clicked_item_obj != OBJ_HANDLE_NULL) {
+            target_descriptor_set_obj(&td, clicked_item_obj);
             item_ui_apply(&td);
             return true;
         }
@@ -1600,15 +1621,15 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_down(int x, int 
 }
 
 // 0x5747E4
-static inline bool inven_ui_message_filter_handle_mouse_lbutton_up_accept_drop(TigMessage* msg, bool* v45)
+static inline bool inven_ui_message_filter_handle_mouse_lbutton_up_accept_drop(TigMessage* msg, bool* close_requested_ptr)
 {
-    int64_t v3;
-    int64_t v2;
+    int64_t dragged_item_obj;
+    int64_t owner_obj;
     int inventory_location;
     int new_inventory_location;
     int err;
     int64_t old_item_obj;
-    int v5;
+    int returned_item_slot;
 
     if (inven_ui_have_drop_box
         && msg->data.mouse.x >= inven_ui_drop_box_frame.x
@@ -1647,9 +1668,9 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_up_accept_drop(T
         && msg->data.mouse.x < inven_ui_gamble_box_frame.x + inven_ui_gamble_box_frame.width
         && msg->data.mouse.y >= inven_ui_gamble_box_frame.y
         && msg->data.mouse.y < inven_ui_gamble_box_frame.y + inven_ui_gamble_box_frame.height) {
-        v3 = inven_ui_drag_item_obj;
+        dragged_item_obj = inven_ui_drag_item_obj;
         inven_ui_drag_cancel_and_restore();
-        inven_ui_item_gamble(v3);
+        inven_ui_item_gamble(dragged_item_obj);
         inven_ui_drag_item_obj = OBJ_HANDLE_NULL;
         inven_ui_gamble_box_image = 345;
 
@@ -1675,14 +1696,14 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_up_accept_drop(T
 
         if ((obj_field_int32_get(inven_ui_drag_item_obj, OBJ_F_ITEM_FLAGS) & OIF_USE_IS_THROW) == 0
             || inven_ui_mode != INVEN_UI_MODE_INVENTORY) {
-            v3 = inven_ui_drag_item_obj;
+            dragged_item_obj = inven_ui_drag_item_obj;
             inven_ui_drag_cancel_and_restore();
             if (!combat_turn_based_is_active()
                 || combat_turn_based_whos_turn_get() == inven_ui_pc_obj) {
                 if (tig_kb_get_modifier(SDL_KMOD_SHIFT)) {
-                    item_use_on_obj(inven_ui_pc_obj, v3, inven_ui_pc_obj);
+                    item_use_on_obj(inven_ui_pc_obj, dragged_item_obj, inven_ui_pc_obj);
                 } else {
-                    item_use_on_obj(inven_ui_pc_obj, v3, OBJ_HANDLE_NULL);
+                    item_use_on_obj(inven_ui_pc_obj, dragged_item_obj, OBJ_HANDLE_NULL);
                 }
             }
 
@@ -1704,38 +1725,38 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_up_accept_drop(T
         return false;
     }
 
-    inventory_location = inven_ui_inventory_slot_at_xy(msg->data.mouse.x, msg->data.mouse.y, &v2);
+    inventory_location = inven_ui_inventory_slot_at_xy(msg->data.mouse.x, msg->data.mouse.y, &owner_obj);
     if (IS_HOTKEY_INV_LOC(inventory_location)) {
         return false;
     }
 
     if (IS_WEAR_INV_LOC(inventory_location)) {
         if (inven_ui_mode == INVEN_UI_MODE_BARTER) {
-            if (inven_ui_drag_original_owner != inven_ui_pc_obj && v2 != inven_ui_pc_obj && !inven_ui_target_is_follower) {
+            if (inven_ui_drag_original_owner != inven_ui_pc_obj && owner_obj != inven_ui_pc_obj && !inven_ui_target_is_follower) {
                 inven_ui_drag_cancel_and_restore();
                 return false;
             }
         } else {
-            if (inven_ui_mode == INVEN_UI_MODE_STEAL && inven_ui_drag_original_owner != inven_ui_pc_obj && v2 != inven_ui_pc_obj) {
+            if (inven_ui_mode == INVEN_UI_MODE_STEAL && inven_ui_drag_original_owner != inven_ui_pc_obj && owner_obj != inven_ui_pc_obj) {
                 inven_ui_drag_cancel_and_restore();
                 return false;
             }
         }
 
-        err = item_equipment_slot_check(inven_ui_drag_item_obj, inventory_location, v2);
+        err = item_equipment_slot_check(inven_ui_drag_item_obj, inventory_location, owner_obj);
         if (err != 0) {
-            item_error_msg(v2, err);
+            item_error_msg(owner_obj, err);
             inven_ui_drag_cancel_and_restore();
         }
 
-        old_item_obj = item_wield_get(v2, inventory_location);
+        old_item_obj = item_wield_get(owner_obj, inventory_location);
         if (old_item_obj == OBJ_HANDLE_NULL || old_item_obj == inven_ui_drag_item_obj) {
-            if (v2 == inven_ui_pc_obj) {
-                if (!inven_ui_dragged_item_steal(v45)) {
+            if (owner_obj == inven_ui_pc_obj) {
+                if (!inven_ui_dragged_item_steal(close_requested_ptr)) {
                     inven_ui_drop_on_player_inventory(inventory_location);
                 }
             } else {
-                if (!inven_ui_dragged_item_plant(v45)) {
+                if (!inven_ui_dragged_item_plant(close_requested_ptr)) {
                     inven_ui_drop_on_target_inventory(inventory_location);
                 }
             }
@@ -1744,15 +1765,15 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_up_accept_drop(T
             return false;
         }
 
-        if (v2 != inven_ui_pc_obj) {
+        if (owner_obj != inven_ui_pc_obj) {
             inven_ui_drag_cancel_and_restore();
             return false;
         }
 
         err = item_check_remove(old_item_obj);
         if (err != ITEM_CANNOT_OK) {
-            if (v2 == inven_ui_pc_obj) {
-                item_error_msg(v2, err);
+            if (owner_obj == inven_ui_pc_obj) {
+                item_error_msg(owner_obj, err);
             }
             inven_ui_drag_cancel_and_restore();
             return false;
@@ -1760,7 +1781,7 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_up_accept_drop(T
 
         if ((inven_ui_mode == INVEN_UI_MODE_BARTER
                 || inven_ui_mode == INVEN_UI_MODE_STEAL)
-            && inven_ui_drag_original_owner != v2) {
+            && inven_ui_drag_original_owner != owner_obj) {
             inven_ui_drag_cancel_and_restore();
             return false;
         }
@@ -1769,19 +1790,19 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_up_accept_drop(T
         item_remove(inven_ui_drag_item_obj);
         new_inventory_location = item_inventory_location_get(old_item_obj);
         item_remove(old_item_obj);
-        err = item_check_insert(old_item_obj, v2, &v5);
+        err = item_check_insert(old_item_obj, owner_obj, &returned_item_slot);
         if (err == ITEM_CANNOT_OK) {
             item_insert(inven_ui_drag_item_obj, inven_ui_drag_original_owner, inven_ui_drag_original_location);
-            inven_ui_drag_item_insert_or_transfer(inven_ui_drag_item_obj, v2, inventory_location, 1);
-            item_insert(old_item_obj, v2, v5);
+            inven_ui_drag_item_insert_or_transfer(inven_ui_drag_item_obj, owner_obj, inventory_location, 1);
+            item_insert(old_item_obj, owner_obj, returned_item_slot);
             inven_ui_drag_item_obj = old_item_obj;
-            inven_ui_drag_original_location = v5;
-            inven_ui_drag_original_owner = v2;
+            inven_ui_drag_original_location = returned_item_slot;
+            inven_ui_drag_original_owner = owner_obj;
             inven_ui_drag_slot_offset = 0;
             inven_ui_deferred_drag_request(-1, -1);
         } else {
-            item_error_msg(v2, err);
-            item_insert(old_item_obj, v2, new_inventory_location);
+            item_error_msg(owner_obj, err);
+            item_insert(old_item_obj, owner_obj, new_inventory_location);
             inven_ui_drag_item_restore_or_drop();
         }
         critter_encumbrance_recalc_feedback_enable();
@@ -1793,12 +1814,12 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_up_accept_drop(T
         if (!hotkey_ui_inventory_drop_process(TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP)) {
             inven_ui_drag_cancel_and_restore();
         }
-    } else if (v2 == inven_ui_pc_obj) {
-        if (!inven_ui_dragged_item_steal(v45)) {
+    } else if (owner_obj == inven_ui_pc_obj) {
+        if (!inven_ui_dragged_item_steal(close_requested_ptr)) {
             inven_ui_drop_on_player_inventory(inventory_location - inven_ui_drag_slot_offset);
         }
     } else {
-        if (inven_ui_dragged_item_plant(v45)) {
+        if (inven_ui_dragged_item_plant(close_requested_ptr)) {
             inven_ui_drop_on_target_inventory(inventory_location - inven_ui_drag_slot_offset);
         }
     }
@@ -1810,10 +1831,10 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_up_accept_drop(T
 }
 
 // 0x574559
-static inline bool inven_ui_message_filter_handle_mouse_lbutton_up(int x, int y, bool* v45)
+static inline bool inven_ui_message_filter_handle_mouse_lbutton_up(int x, int y, bool* close_requested_ptr)
 {
-    int64_t v1;
-    int64_t v2;
+    int64_t clicked_item_obj;
+    int64_t owner_obj;
     // Capture whether *this* inven_ui session received the matching
     // mouse-down before we clear the flag. Used below to guard the
     // dismiss-on-click paths against a stray mouse-up whose down came
@@ -1840,7 +1861,7 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_up(int x, int y,
             }
 
             if (inven_saw_down) {
-                *v45 = true;
+                *close_requested_ptr = true;
             }
         }
 
@@ -1862,32 +1883,32 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_up(int x, int y,
         int screen_y = y + (hrp_iso_window_height_get() - 600) / 2;
         if (tig_window_data(inven_ui_window_handle, &menu_wd) == TIG_OK
             && intgame_panel_should_dismiss_overlay_click(screen_x, screen_y, &menu_wd.rect)) {
-            *v45 = true;
+            *close_requested_ptr = true;
             return false;
         }
     }
 
     if (inven_ui_drag_item_obj == OBJ_HANDLE_NULL) {
-        v1 = inven_ui_item_at_xy(x, y, &v2);
-        if (v1 == OBJ_HANDLE_NULL) {
+        clicked_item_obj = inven_ui_item_at_xy(x, y, &owner_obj);
+        if (clicked_item_obj == OBJ_HANDLE_NULL) {
             return false;
         }
 
         switch (inven_ui_mode) {
         case INVEN_UI_MODE_NPC_IDENTIFY:
-            inven_ui_identification_quote_show(v1);
+            inven_ui_identification_quote_show(clicked_item_obj);
             if (inven_ui_trade_price > 0
                 && item_gold_get(inven_ui_pc_obj) >= inven_ui_trade_price) {
-                item_perform_identify_service(v1, inven_ui_target_obj, inven_ui_pc_obj, inven_ui_trade_price);
+                item_perform_identify_service(clicked_item_obj, inven_ui_target_obj, inven_ui_pc_obj, inven_ui_trade_price);
             } else {
                 dialog_copy_npc_not_enough_money_msg(inven_ui_target_obj, inven_ui_pc_obj, inven_ui_trade_dialog_text);
             }
             break;
         case INVEN_UI_MODE_NPC_REPAIR:
-            inven_ui_repair_offer_refresh(v1);
+            inven_ui_repair_offer_refresh(clicked_item_obj);
             if (inven_ui_trade_price > 0
                 && item_gold_get(inven_ui_pc_obj) >= inven_ui_trade_price) {
-                skill_perform_repair_service(v1, inven_ui_target_obj, inven_ui_pc_obj, inven_ui_trade_price);
+                skill_perform_repair_service(clicked_item_obj, inven_ui_target_obj, inven_ui_pc_obj, inven_ui_trade_price);
             } else {
                 dialog_copy_npc_not_enough_money_msg(inven_ui_target_obj, inven_ui_pc_obj, inven_ui_trade_dialog_text);
             }
@@ -2023,11 +2044,11 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_up(int x, int y,
                             }
                         } else {
                             if (parent_obj == inven_ui_pc_obj) {
-                                if (!inven_ui_dragged_item_steal(v45)) {
+                                if (!inven_ui_dragged_item_steal(close_requested_ptr)) {
                                     inven_ui_drop_on_player_inventory(inventory_location);
                                 }
                             } else {
-                                if (!inven_ui_dragged_item_plant(v45)) {
+                                if (!inven_ui_dragged_item_plant(close_requested_ptr)) {
                                     inven_ui_drop_on_target_inventory(inventory_location);
                                 }
                             }
@@ -2046,11 +2067,11 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_up(int x, int y,
                         inven_ui_drag_cancel_and_restore();
                     }
                 } else if (parent_obj == inven_ui_pc_obj) {
-                    if (!inven_ui_dragged_item_steal(v45)) {
+                    if (!inven_ui_dragged_item_steal(close_requested_ptr)) {
                         inven_ui_drop_on_player_inventory(inventory_location - inven_ui_drag_slot_offset);
                     }
                 } else {
-                    if (!inven_ui_dragged_item_plant(v45)) {
+                    if (!inven_ui_dragged_item_plant(close_requested_ptr)) {
                         inven_ui_drop_on_target_inventory(inventory_location - inven_ui_drag_slot_offset);
                     }
                 }
@@ -2069,7 +2090,7 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_up(int x, int y,
     if (!inven_ui_drag_item_obj) {
         intgame_refresh_cursor();
     }
-    if (!v45) {
+    if (!close_requested_ptr) {
         return true;
     }
 
@@ -2077,30 +2098,30 @@ static inline bool inven_ui_message_filter_handle_mouse_lbutton_up(int x, int y,
 }
 
 // 0x5742A4
-static inline bool inven_ui_message_filter_handle_mouse_rbutton_up(int x, int y, bool* v45)
+static inline bool inven_ui_message_filter_handle_mouse_rbutton_up(int x, int y, bool* close_requested_ptr)
 {
-    int64_t v1;
-    int64_t v2;
-    int64_t v3;
+    int64_t selected_obj;
+    int64_t owner_obj;
+    int64_t destination_owner;
     int rc;
-    int v5;
-    int64_t v6;
+    int destination_slot;
+    int64_t target_inventory_owner;
     int inventory_location;
 
-    v1 = inven_ui_item_at_xy(x, y, &v2);
-    if (v1 == OBJ_HANDLE_NULL) {
+    selected_obj = inven_ui_item_at_xy(x, y, &owner_obj);
+    if (selected_obj == OBJ_HANDLE_NULL) {
         return false;
     }
 
     if (inven_ui_mode == INVEN_UI_MODE_INVENTORY) {
-        inventory_location = item_inventory_location_get(v1);
+        inventory_location = item_inventory_location_get(selected_obj);
         if (!IS_WEAR_INV_LOC(inventory_location)) {
-            inventory_location = item_location_get(v1);
+            inventory_location = item_location_get(selected_obj);
             if (inventory_location == -1
-                && item_check_use_box_flag(inven_ui_pc_obj, v1) == ITEM_CANNOT_OK) {
+                && item_check_use_box_flag(inven_ui_pc_obj, selected_obj) == ITEM_CANNOT_OK) {
                 if (!combat_turn_based_is_active()
                     || combat_turn_based_whos_turn_get() == inven_ui_pc_obj) {
-                    item_use_on_obj(inven_ui_pc_obj, v1, inven_ui_pc_obj);
+                    item_use_on_obj(inven_ui_pc_obj, selected_obj, inven_ui_pc_obj);
                 }
 
                 if (!inven_ui_created) {
@@ -2111,34 +2132,34 @@ static inline bool inven_ui_message_filter_handle_mouse_rbutton_up(int x, int y,
     } else if (inven_ui_mode == INVEN_UI_MODE_BARTER
         || inven_ui_mode == INVEN_UI_MODE_LOOT
         || inven_ui_mode == INVEN_UI_MODE_STEAL) {
-        v3 = inven_ui_pc_obj;
-        if (v2 == inven_ui_pc_obj) {
-            v3 = inven_ui_target_inventory_owner;
-            v6 = inven_ui_target_inventory_owner;
+        destination_owner = inven_ui_pc_obj;
+        if (owner_obj == inven_ui_pc_obj) {
+            destination_owner = inven_ui_target_inventory_owner;
+            target_inventory_owner = inven_ui_target_inventory_owner;
         } else {
-            v6 = inven_ui_pc_obj;
+            target_inventory_owner = inven_ui_pc_obj;
         }
 
-        rc = item_check_insert(v1, v3, &v5);
+        rc = item_check_insert(selected_obj, destination_owner, &destination_slot);
         if (rc != ITEM_CANNOT_OK) {
-            item_error_msg(v2, rc);
+            item_error_msg(owner_obj, rc);
             return true;
         }
 
-        inven_ui_drag_item_obj = v1;
-        inven_ui_drag_original_owner = v2;
-        inven_ui_drag_slot_offset = inven_ui_inventory_slot_at_xy(x, y, &v1);
+        inven_ui_drag_item_obj = selected_obj;
+        inven_ui_drag_original_owner = owner_obj;
+        inven_ui_drag_slot_offset = inven_ui_inventory_slot_at_xy(x, y, &selected_obj);
         inven_ui_drag_original_location = item_inventory_location_get(inven_ui_drag_item_obj);
         inven_ui_drag_slot_offset -= inven_ui_drag_original_location;
         inven_ui_deferred_drag_request(x, y);
         if (inven_ui_drag_item_obj != OBJ_HANDLE_NULL) {
-            if (v6 == inven_ui_pc_obj) {
-                if (!inven_ui_dragged_item_steal(v45)) {
-                    inven_ui_drop_on_player_inventory(v5);
+            if (target_inventory_owner == inven_ui_pc_obj) {
+                if (!inven_ui_dragged_item_steal(close_requested_ptr)) {
+                    inven_ui_drop_on_player_inventory(destination_slot);
                 }
             } else {
-                if (!inven_ui_dragged_item_plant(v45)) {
-                    inven_ui_drop_on_target_inventory(v5);
+                if (!inven_ui_dragged_item_plant(close_requested_ptr)) {
+                    inven_ui_drop_on_target_inventory(destination_slot);
                 }
             }
             inven_ui_drag_item_obj = OBJ_HANDLE_NULL;
@@ -2155,7 +2176,7 @@ static inline bool inven_ui_message_filter_handle_mouse_rbutton_up(int x, int y,
         intgame_refresh_cursor();
     }
 
-    if (!v45) {
+    if (!close_requested_ptr) {
         return true;
     }
 
@@ -2169,7 +2190,7 @@ static inline bool inven_ui_message_filter_handle_mouse_rbutton_up(int x, int y,
 // 0x573850
 bool inven_ui_message_filter(TigMessage* msg)
 {
-    bool v45 = false;
+    bool close_requested = false;
     TigMessage tmp_msg = *msg;
     msg = &tmp_msg;
 
@@ -2240,7 +2261,7 @@ bool inven_ui_message_filter(TigMessage* msg)
         } else if (msg->data.mouse.event == TIG_MESSAGE_MOUSE_LEFT_BUTTON_UP
             || (msg->data.mouse.event == TIG_MESSAGE_MOUSE_RIGHT_BUTTON_UP && intgame_hotkey_is_dragging())) {
             // 0x574559
-            if (inven_ui_message_filter_handle_mouse_lbutton_up(msg->data.mouse.x, msg->data.mouse.y, &v45)) {
+            if (inven_ui_message_filter_handle_mouse_lbutton_up(msg->data.mouse.x, msg->data.mouse.y, &close_requested)) {
                 return true;
             }
         } else if (msg->data.mouse.event == TIG_MESSAGE_MOUSE_RIGHT_BUTTON_UP
@@ -2250,7 +2271,7 @@ bool inven_ui_message_filter(TigMessage* msg)
                 || inven_ui_mode == INVEN_UI_MODE_LOOT
                 || inven_ui_mode == INVEN_UI_MODE_STEAL)) {
             // 0x5742A4
-            if (inven_ui_message_filter_handle_mouse_rbutton_up(msg->data.mouse.x, msg->data.mouse.y, &v45)) {
+            if (inven_ui_message_filter_handle_mouse_rbutton_up(msg->data.mouse.x, msg->data.mouse.y, &close_requested)) {
                 return true;
             }
         }
@@ -2263,10 +2284,10 @@ bool inven_ui_message_filter(TigMessage* msg)
         && inven_ui_drag_item_obj == OBJ_HANDLE_NULL
         && intgame_mode_get() != INTGAME_MODE_QUANTITY
         && (critter_is_sleeping(inven_ui_target_obj) || !critter_is_active(inven_ui_target_obj))) {
-        v45 = true;
+        close_requested = true;
     }
 
-    if (v45 || dword_739F58) {
+    if (close_requested || inven_ui_close_requested) {
         inven_ui_destroy();
         return true;
     }
@@ -2326,38 +2347,38 @@ bool inven_ui_can_open_inven(int64_t pc_obj, int64_t npc_obj)
 }
 
 // 0x575100
-bool inven_ui_dragged_item_plant(bool* a1)
+bool inven_ui_dragged_item_plant(bool* success_ptr)
 {
-    int64_t v1;
+    int64_t item_obj;
 
     if (inven_ui_mode != INVEN_UI_MODE_STEAL || inven_ui_drag_original_owner != inven_ui_pc_obj) {
         return false;
     }
 
-    v1 = inven_ui_drag_item_obj;
+    item_obj = inven_ui_drag_item_obj;
     inven_ui_drag_cancel_and_restore();
 
-    if (skill_plant_item(inven_ui_pc_obj, inven_ui_target_obj, v1)) {
-        *a1 = true;
+    if (skill_plant_item(inven_ui_pc_obj, inven_ui_target_obj, item_obj)) {
+        *success_ptr = true;
     }
 
     return true;
 }
 
 // 0x575180
-bool inven_ui_dragged_item_steal(bool* a1)
+bool inven_ui_dragged_item_steal(bool* success_ptr)
 {
-    int64_t v1;
+    int64_t item_obj;
 
     if (inven_ui_mode != INVEN_UI_MODE_STEAL || inven_ui_drag_original_owner == inven_ui_pc_obj) {
         return false;
     }
 
-    v1 = inven_ui_drag_item_obj;
+    item_obj = inven_ui_drag_item_obj;
     inven_ui_drag_cancel_and_restore();
 
-    if (skill_steal_item(inven_ui_pc_obj, inven_ui_target_obj, v1)) {
-        *a1 = true;
+    if (skill_steal_item(inven_ui_pc_obj, inven_ui_target_obj, item_obj)) {
+        *success_ptr = true;
     }
 
     return true;
@@ -2444,6 +2465,7 @@ void inven_ui_deferred_drag_request(int x, int y)
     entry->mode = inven_ui_mode;
     entry->original_inventory_slot = inven_ui_drag_original_location;
     entry->target_scroll_offset = inven_ui_target_scroll_offset;
+    entry->player_scroll_offset = inven_ui_player_scroll_offset;
 
     inven_ui_drag_item_obj = OBJ_HANDLE_NULL;
 
@@ -2480,7 +2502,7 @@ bool inven_ui_deferred_drag_complete(void* userinfo)
     } else {
         if (entry->original_owner_obj == entry->player_obj) {
             entry->x -= 368 + 32 * (entry->original_inventory_slot % 10);
-            entry->y -= 49 + 32 * (entry->original_inventory_slot / 10);
+            entry->y -= 49 + 32 * (entry->original_inventory_slot / 10 - entry->player_scroll_offset);
         } else if (entry->mode == 1) {
             entry->x -= 8 + 32 * (entry->original_inventory_slot % 10);
             entry->y -= 209 - 32 * (entry->target_scroll_offset - entry->original_inventory_slot / 10);
@@ -2757,7 +2779,7 @@ int inven_ui_inventory_slot_at_xy(int x, int y, int64_t* parent_obj_ptr)
             col = (x - 368) / 32;
             row = (y - 49) / 32;
             if (col < 10 && row < 12) {
-                return col + 10 * row;
+                return col + 10 * (row + inven_ui_player_scroll_offset);
             }
         }
     }
@@ -2883,7 +2905,7 @@ void redraw_inven_fix_bad_inven_obj(int64_t obj)
 
     for (i = 0; i < cnt; i++) {
         item_obj = obj_arrayfield_handle_get(obj, inventory_list_fld, i);
-        if (redraw_inven_fix_bad_inven(item_obj, obj) && i < cnt - 1) {
+        if (inven_ui_invalid_parent_link_remove(item_obj, obj) && i < cnt - 1) {
             cnt = obj_field_int32_get(obj, inventory_num_fld);
             i--;
         }
@@ -2923,19 +2945,19 @@ void redraw_inven_fix_bad_inven_obj(int64_t obj)
 }
 
 // 0x5764B0
-bool redraw_inven_fix_bad_inven(int64_t a1, int64_t a2)
+bool inven_ui_invalid_parent_link_remove(int64_t item_obj, int64_t expected_owner)
 {
     int64_t parent_obj;
 
-    if (!item_parent(a1, &parent_obj)) {
+    if (!item_parent(item_obj, &parent_obj)) {
         tig_debug_printf("Warning: redraw_inven_fix_bad_inven called on item that doesn't think it has a parent.\n");
-        item_force_remove(a1, a2);
+        item_force_remove(item_obj, expected_owner);
         return true;
     }
 
-    if (parent_obj != a2) {
+    if (parent_obj != expected_owner) {
         tig_debug_printf("Warning: redraw_inven_fix_bad_inven called on item with different parent.\n");
-        item_force_remove(a1, a2);
+        item_force_remove(item_obj, expected_owner);
         return true;
     }
 
@@ -2943,7 +2965,7 @@ bool redraw_inven_fix_bad_inven(int64_t a1, int64_t a2)
 }
 
 // 0x576520
-void redraw_inven(bool a1)
+void redraw_inven(bool initial_draw)
 {
     TigArtBlitInfo art_blit_info;
     TigArtFrameData art_frame_data;
@@ -3034,8 +3056,6 @@ void redraw_inven(bool a1)
         src_rect.height = 30;
 
         if (inven_ui_target_is_follower && inven_ui_trade_dialog_text[0] == '\0') {
-            int encumbrance_level;
-            int carry_weight;
 
             mes_file_entry1.num = 9;
             mes_get_msg(inven_ui_mes_file, &mes_file_entry1);
@@ -3053,14 +3073,9 @@ void redraw_inven(bool a1)
             mes_file_entry1.num = 10;
             mes_get_msg(inven_ui_mes_file, &mes_file_entry1);
 
-            encumbrance_level = critter_encumbrance_level_get(inven_ui_target_obj);
-            carry_weight = stat_level_get(inven_ui_target_obj, STAT_CARRY_WEIGHT);
-
             snprintf(&(inven_ui_trade_dialog_text[pos]), sizeof(inven_ui_trade_dialog_text) - pos,
-                "%s: %s (%d)\n",
-                mes_file_entry1.str,
-                critter_encumbrance_level_name(encumbrance_level),
-                critter_encumbrance_level_ratio(encumbrance_level) * carry_weight / 100);
+                "%s: %lld/%d\n", mes_file_entry1.str,
+                (long long)item_total_bulk(inven_ui_target_obj), item_bulk_capacity(inven_ui_target_obj));
         } else {
             pos = 0;
         }
@@ -3185,8 +3200,6 @@ void redraw_inven(bool a1)
     }
 
     if (text_rects != NULL) {
-        int encumbrance_level;
-        int carry_weight;
 
         tig_font_push(inven_ui_detail_font);
 
@@ -3206,14 +3219,8 @@ void redraw_inven(bool a1)
         mes_file_entry1.num = 10;
         mes_get_msg(inven_ui_mes_file, &mes_file_entry1);
 
-        encumbrance_level = critter_encumbrance_level_get(inven_ui_pc_obj);
-        carry_weight = stat_level_get(inven_ui_pc_obj, STAT_CARRY_WEIGHT);
-
-        snprintf(str, sizeof(str),
-            "%s: %s (%d)",
-            mes_file_entry1.str,
-            critter_encumbrance_level_name(encumbrance_level),
-            critter_encumbrance_level_ratio(encumbrance_level) * carry_weight / 100);
+        snprintf(str, sizeof(str), "%s: %lld/%d", mes_file_entry1.str,
+            (long long)item_total_bulk(inven_ui_pc_obj), item_bulk_capacity(inven_ui_pc_obj));
         tig_window_text_write(inven_ui_window_handle, str, &(text_rects[INVEN_UI_SUMMARY_ENCUMBRANCE]));
 
         mes_file_entry1.num = 11;
@@ -3389,7 +3396,7 @@ void redraw_inven(bool a1)
 
         item_flags = obj_field_int32_get(item_obj, OBJ_F_ITEM_FLAGS);
         if ((item_flags & OIF_NO_DISPLAY) != 0) {
-            if (!a1) {
+            if (!initial_draw) {
                 continue;
             }
             item_flags &= ~OIF_NO_DISPLAY;
@@ -3480,16 +3487,19 @@ void redraw_inven(bool a1)
             int height;
 
             x = 32 * (inventory_location % 10) + 368;
-            y = 32 * (inventory_location / 10) + 8;
+            y = 32 * (inventory_location / 10 - inven_ui_player_scroll_offset) + 8;
             item_inv_icon_size(item_obj, &width, &height);
             width *= 32;
             height *= 32;
+            if (y + height <= 8 || y >= 392) {
+                continue;
+            }
 
             if (item_obj == inven_ui_quoted_item_obj) {
                 dst_rect.x = x;
-                dst_rect.y = y;
+                dst_rect.y = y < 8 ? 8 : y;
                 dst_rect.width = width;
-                dst_rect.height = height;
+                dst_rect.height = (y + height > 392 ? 392 : y + height) - dst_rect.y;
 
                 tig_window_tint(inven_ui_window_handle,
                     &dst_rect,
@@ -3525,7 +3535,20 @@ void redraw_inven(bool a1)
                 dst_rect.width = art_frame_data.width;
                 dst_rect.height = art_frame_data.height;
 
-                tig_window_blit_art(inven_ui_window_handle, &art_blit_info);
+                if (dst_rect.y < 8) {
+                    int clipped = 8 - dst_rect.y;
+                    src_rect.y += clipped;
+                    src_rect.height -= clipped;
+                    dst_rect.y = 8;
+                    dst_rect.height -= clipped;
+                }
+                if (dst_rect.y + dst_rect.height > 392) {
+                    dst_rect.height = 392 - dst_rect.y;
+                    src_rect.height = dst_rect.height;
+                }
+                if (src_rect.height > 0) {
+                    tig_window_blit_art(inven_ui_window_handle, &art_blit_info);
+                }
             }
 
             if (palette_modify_info.dst_palette != NULL) {
@@ -3561,9 +3584,9 @@ void redraw_inven(bool a1)
         && inven_ui_mode != INVEN_UI_MODE_NPC_IDENTIFY
         && inven_ui_mode != INVEN_UI_MODE_NPC_REPAIR) {
         int64_t target_obj;
-        int v102;
-        int v109;
-        int v112;
+        int grid_top;
+        int grid_height;
+        int grid_left;
         int inventory_list_fld;
 
         if (inven_ui_target_panel == INVEN_UI_PANEL_PAPERDOLL) {
@@ -3617,13 +3640,13 @@ void redraw_inven(bool a1)
             tig_font_pop();
         } else {
             target_obj = inven_ui_target_inventory_owner;
-            v112 = 8;
+            grid_left = 8;
             if (inven_ui_mode == INVEN_UI_MODE_BARTER) {
-                v102 = 168;
-                v109 = 224;
+                grid_top = 168;
+                grid_height = 224;
             } else {
-                v102 = 136;
-                v109 = 256;
+                grid_top = 136;
+                grid_height = 256;
             }
         }
 
@@ -3650,7 +3673,7 @@ void redraw_inven(bool a1)
             item_type = obj_field_int32_get(item_obj, OBJ_F_TYPE);
             item_flags = obj_field_int32_get(item_obj, OBJ_F_ITEM_FLAGS);
             if ((item_flags & OIF_NO_DISPLAY) != 0) {
-                if (!a1 || (item_type != OBJ_TYPE_GOLD && item_type != OBJ_TYPE_AMMO)) {
+                if (!initial_draw || (item_type != OBJ_TYPE_GOLD && item_type != OBJ_TYPE_AMMO)) {
                     continue;
                 }
                 item_flags &= ~OIF_NO_DISPLAY;
@@ -3731,10 +3754,10 @@ void redraw_inven(bool a1)
                 int width;
                 int height;
 
-                x = v112 + 32 * (inventory_location % 10);
-                y = v102 + 32 * (inventory_location / 10 - inven_ui_target_scroll_offset);
+                x = grid_left + 32 * (inventory_location % 10);
+                y = grid_top + 32 * (inventory_location / 10 - inven_ui_target_scroll_offset);
 
-                if (y < v109 + v102) {
+                if (y < grid_height + grid_top) {
                     art_blit_info.art_id = obj_field_int32_get(item_obj, OBJ_F_ITEM_INV_AID);
                     if (tig_art_item_id_destroyed_get(obj_field_int32_get(item_obj, OBJ_F_CURRENT_AID))) {
                         art_blit_info.art_id = tig_art_item_id_destroyed_set(art_blit_info.art_id, 0);
@@ -3753,7 +3776,7 @@ void redraw_inven(bool a1)
                     }
 
                     if (tig_art_frame_data(art_blit_info.art_id, &art_frame_data) == TIG_OK) {
-                        if (y + art_frame_data.height > v102) {
+                        if (y + art_frame_data.height > grid_top) {
                             src_rect.x = 0;
                             src_rect.y = 0;
                             src_rect.width = art_frame_data.width;
@@ -3763,17 +3786,17 @@ void redraw_inven(bool a1)
                             x += (32 * width - art_frame_data.width) / 2;
                             y += (32 * height - art_frame_data.height) / 2;
 
-                            if (y < v102) {
-                                height = y - v102 + src_rect.height;
-                                src_rect.y += v102 - y;
+                            if (y < grid_top) {
+                                height = y - grid_top + src_rect.height;
+                                src_rect.y += grid_top - y;
                                 src_rect.height = height;
-                                y = v102;
+                                y = grid_top;
                             } else {
                                 height = src_rect.height;
                             }
 
-                            if (y + height > v102 + v109) {
-                                height = v102 + v109 - y;
+                            if (y + height > grid_top + grid_height) {
+                                height = grid_top + grid_height - y;
                                 src_rect.height = height;
                             }
 
@@ -3815,6 +3838,17 @@ void redraw_inven(bool a1)
 
     intgame_pc_lens_redraw();
     scrollbar_ui_control_redraw(inven_ui_target_inventory_scrollbar);
+    if (inven_ui_player_scrollbar_created) {
+        bool show = inven_ui_mode == INVEN_UI_MODE_INVENTORY
+            || inven_ui_mode == INVEN_UI_MODE_NPC_IDENTIFY || inven_ui_mode == INVEN_UI_MODE_NPC_REPAIR
+            || inven_ui_panel == INVEN_UI_PANEL_INVENTORY;
+        if (show) {
+            scrollbar_ui_control_show(inven_ui_player_inventory_scrollbar);
+            scrollbar_ui_control_redraw(inven_ui_player_inventory_scrollbar);
+        } else {
+            scrollbar_ui_control_hide(inven_ui_player_inventory_scrollbar);
+        }
+    }
 }
 
 // 0x5782D0
@@ -3839,7 +3873,7 @@ tig_art_id_t inven_ui_background_art_id_get(void)
 }
 
 // 0x578330
-void inven_ui_trade_offer_refresh(int64_t a1, int64_t a2)
+void inven_ui_trade_offer_refresh(int64_t item_obj, int64_t owner_obj)
 {
     int gold;
     int pos;
@@ -3849,11 +3883,11 @@ void inven_ui_trade_offer_refresh(int64_t a1, int64_t a2)
         return;
     }
 
-    if (a2 == inven_ui_pc_obj) {
-        inven_ui_trade_price = item_cost(a1, inven_ui_pc_obj, inven_ui_target_obj, 0);
+    if (owner_obj == inven_ui_pc_obj) {
+        inven_ui_trade_price = item_cost(item_obj, inven_ui_pc_obj, inven_ui_target_obj, 0);
         if (inven_ui_trade_price != 0) {
             gold = item_gold_get(inven_ui_target_obj);
-            if (object_script_execute(a1, inven_ui_target_obj, inven_ui_pc_obj, SAP_BUY_OBJECT, 0)) {
+            if (object_script_execute(item_obj, inven_ui_target_obj, inven_ui_pc_obj, SAP_BUY_OBJECT, 0)) {
                 pos = 0;
             } else {
                 dialog_copy_npc_normally_wont_buy_msg(inven_ui_target_obj, inven_ui_pc_obj, inven_ui_trade_dialog_text);
@@ -3873,17 +3907,17 @@ void inven_ui_trade_offer_refresh(int64_t a1, int64_t a2)
                     inven_ui_trade_price);
             }
         } else {
-            if ((obj_field_int32_get(a1, OBJ_F_ITEM_FLAGS) & OIF_STOLEN) == 0) {
+            if ((obj_field_int32_get(item_obj, OBJ_F_ITEM_FLAGS) & OIF_STOLEN) == 0) {
                 dialog_copy_npc_wont_buy_msg(inven_ui_target_obj, inven_ui_pc_obj, inven_ui_trade_dialog_text);
             } else {
                 dialog_copy_npc_wont_buy_stolen_msg(inven_ui_target_obj, inven_ui_pc_obj, inven_ui_trade_dialog_text);
             }
         }
     } else {
-        inven_ui_trade_price = item_cost(a1, inven_ui_target_obj, inven_ui_pc_obj, 0);
+        inven_ui_trade_price = item_cost(item_obj, inven_ui_target_obj, inven_ui_pc_obj, 0);
         if (inven_ui_trade_price != 0) {
-            if ((obj_field_int32_get(a1, OBJ_F_ITEM_FLAGS) & OIF_WONT_SELL) != 0
-                || IS_WEAR_INV_LOC(item_inventory_location_get(a1))) {
+            if ((obj_field_int32_get(item_obj, OBJ_F_ITEM_FLAGS) & OIF_WONT_SELL) != 0
+                || IS_WEAR_INV_LOC(item_inventory_location_get(item_obj))) {
                 dialog_copy_npc_normally_wont_sell_msg(inven_ui_target_obj, inven_ui_pc_obj, inven_ui_trade_dialog_text);
                 pos = (int)strlen(inven_ui_trade_dialog_text);
             } else {
@@ -3899,7 +3933,7 @@ void inven_ui_trade_offer_refresh(int64_t a1, int64_t a2)
                 int worth;
                 int discount;
 
-                worth = item_worth(a1);
+                worth = item_worth(item_obj);
                 discount = 100 * (inven_ui_trade_price - worth) / worth;
                 if (discount == 0) {
                     discount = 1;
@@ -3966,7 +4000,7 @@ void inven_ui_repair_offer_refresh(int64_t obj)
 }
 
 // 0x5788C0
-void inven_ui_drag_item_insert_or_transfer(int64_t item_obj, int64_t target_obj, int new_inventory_location, int a4)
+void inven_ui_drag_item_insert_or_transfer(int64_t item_obj, int64_t target_obj, int new_inventory_location, int transaction_flags)
 {
     int reason;
     int64_t parent_obj;
@@ -3988,12 +4022,12 @@ void inven_ui_drag_item_insert_or_transfer(int64_t item_obj, int64_t target_obj,
             old_inventory_location = item_inventory_location_get(item_obj);
             if (!IS_WEAR_INV_LOC(new_inventory_location)) {
                 if (target_obj == inven_ui_pc_obj) {
-                    item_inventory_slots_set(item_obj, old_inventory_location, inven_ui_player_inventory_slots, 0);
+                    item_inventory_slots_set(item_obj, old_inventory_location, inven_ui_player_inventory_slots, INVENTORY_CRITTER_CELLS, 0);
                     if (!item_inventory_slots_has_room_for(item_obj, target_obj, new_inventory_location, inven_ui_player_inventory_slots)) {
                         return;
                     }
                 } else {
-                    item_inventory_slots_set(item_obj, old_inventory_location, inven_ui_target_inventory_slots, 0);
+                    item_inventory_slots_set(item_obj, old_inventory_location, inven_ui_target_inventory_slots, INVENTORY_CONTAINER_CELLS, 0);
                     if (!item_inventory_slots_has_room_for(item_obj, target_obj, new_inventory_location, inven_ui_target_inventory_slots)) {
                         return;
                     }
@@ -4002,12 +4036,12 @@ void inven_ui_drag_item_insert_or_transfer(int64_t item_obj, int64_t target_obj,
 
             critter_encumbrance_recalc_feedback_disable();
 
-            item_remove(item_obj);
-
-            if (item_check_insert(item_obj, target_obj, NULL)) {
-                item_insert(item_obj, parent_obj, old_inventory_location);
-            } else {
+            reason = item_check_bulk_insert(item_obj, target_obj, new_inventory_location);
+            if (reason == ITEM_CANNOT_OK) {
+                item_remove(item_obj);
                 item_insert(item_obj, target_obj, new_inventory_location);
+            } else {
+                item_error_msg(target_obj, reason);
             }
             critter_encumbrance_recalc_feedback_enable();
         } else {
@@ -4025,12 +4059,12 @@ void inven_ui_drag_item_insert_or_transfer(int64_t item_obj, int64_t target_obj,
         inven_ui_transaction_target_obj = target_obj;
         inven_ui_transaction_item_obj = item_obj;
 
-        if ((a4 & 0x6) != 0) {
+        if ((transaction_flags & 0x6) != 0) {
             inven_ui_trade_price = -1;
         }
 
         inven_ui_transaction_price = inven_ui_trade_price;
-        inven_ui_transaction_flags = a4;
+        inven_ui_transaction_flags = transaction_flags;
 
         if ((obj_type == OBJ_TYPE_GOLD || obj_type == OBJ_TYPE_AMMO)) {
             inven_ui_drag_cancel_and_restore();
@@ -4039,9 +4073,9 @@ void inven_ui_drag_item_insert_or_transfer(int64_t item_obj, int64_t target_obj,
             qty = obj_field_int32_get(item_obj, qty_fld);
             if (qty != 1) {
                 if ((inven_ui_mode == INVEN_UI_MODE_LOOT
-                        && (a4 & 0x01) != 0
+                        && (transaction_flags & 0x01) != 0
                         && target_obj == inven_ui_pc_obj)
-                    || (a4 & 0x20) != 0) {
+                    || (transaction_flags & 0x20) != 0) {
                     inven_ui_item_transaction_send(qty);
                 } else {
                     intgame_mode_set(INTGAME_MODE_QUANTITY);
@@ -4058,81 +4092,81 @@ void inven_ui_drag_item_insert_or_transfer(int64_t item_obj, int64_t target_obj,
 }
 
 // 0x578B80
-void inven_ui_item_transaction_send(int a1)
+void inven_ui_item_transaction_send(int transaction_quantity)
 {
     InventoryTransactionPacket* pkt;
 
     pkt = (InventoryTransactionPacket*)MALLOC(sizeof(*pkt));
     pkt->type = 81;
-    pkt->field_5C = inven_ui_transaction_price;
-    pkt->field_8 = inven_ui_transaction_flags;
+    pkt->price = inven_ui_transaction_price;
+    pkt->transaction_flags = inven_ui_transaction_flags;
 
     if (inven_ui_transaction_source_obj != OBJ_HANDLE_NULL) {
-        pkt->field_28 = obj_get_id(inven_ui_transaction_source_obj);
+        pkt->source_owner_id = obj_get_id(inven_ui_transaction_source_obj);
     } else {
-        pkt->field_28.type = OID_TYPE_NULL;
+        pkt->source_owner_id.type = OID_TYPE_NULL;
     }
 
-    pkt->field_58 = inven_ui_transaction_destination_slot;
+    pkt->destination_slot = inven_ui_transaction_destination_slot;
 
     if (inven_ui_transaction_item_obj != OBJ_HANDLE_NULL) {
-        pkt->field_10 = obj_get_id(inven_ui_transaction_item_obj);
+        pkt->item_id = obj_get_id(inven_ui_transaction_item_obj);
     } else {
-        pkt->field_10.type = OID_TYPE_NULL;
+        pkt->item_id.type = OID_TYPE_NULL;
     }
 
     if (inven_ui_transaction_target_obj != OBJ_HANDLE_NULL) {
-        pkt->field_40 = obj_get_id(inven_ui_transaction_target_obj);
+        pkt->destination_owner_id = obj_get_id(inven_ui_transaction_target_obj);
     } else {
-        pkt->field_40.type = OID_TYPE_NULL;
+        pkt->destination_owner_id.type = OID_TYPE_NULL;
     }
 
     if (inven_ui_target_obj != OBJ_HANDLE_NULL) {
-        pkt->field_70 = obj_get_id(inven_ui_target_obj);
+        pkt->merchant_id = obj_get_id(inven_ui_target_obj);
     } else {
-        pkt->field_70.type = OID_TYPE_NULL;
+        pkt->merchant_id.type = OID_TYPE_NULL;
     }
 
     if (inven_ui_target_inventory_owner != OBJ_HANDLE_NULL) {
-        pkt->field_88 = obj_get_id(inven_ui_target_inventory_owner);
+        pkt->target_inventory_owner_id = obj_get_id(inven_ui_target_inventory_owner);
     } else {
-        pkt->field_88.type = OID_TYPE_NULL;
+        pkt->target_inventory_owner_id.type = OID_TYPE_NULL;
     }
 
     if (inven_ui_pc_obj != OBJ_HANDLE_NULL) {
-        pkt->field_A0 = obj_get_id(inven_ui_pc_obj);
+        pkt->pc_id = obj_get_id(inven_ui_pc_obj);
     } else {
-        pkt->field_A0.type = OID_TYPE_NULL;
+        pkt->pc_id.type = OID_TYPE_NULL;
     }
 
-    pkt->field_60 = a1;
-    pkt->field_68 = tig_net_local_client_id_get();
+    pkt->quantity = transaction_quantity;
+    pkt->client_id = tig_net_local_client_id_get();
 
     if (tig_net_is_active()) {
-        object_examine(obj_pool_perm_lookup(pkt->field_10),
-            obj_pool_perm_lookup(pkt->field_10),
+        object_examine(obj_pool_perm_lookup(pkt->item_id),
+            obj_pool_perm_lookup(pkt->item_id),
             inven_ui_transaction_item_name);
-        objid_id_to_str(inven_ui_transaction_object_id_text, pkt->field_10);
+        objid_id_to_str(inven_ui_transaction_object_id_text, pkt->item_id);
 
-        if (pkt->field_40.type != OID_TYPE_NULL) {
-            object_examine(obj_pool_perm_lookup(pkt->field_40),
-                obj_pool_perm_lookup(pkt->field_40),
+        if (pkt->destination_owner_id.type != OID_TYPE_NULL) {
+            object_examine(obj_pool_perm_lookup(pkt->destination_owner_id),
+                obj_pool_perm_lookup(pkt->destination_owner_id),
                 inven_ui_transaction_target_name);
         } else {
             strcpy(inven_ui_transaction_target_name, "nobody");
         }
 
-        if (pkt->field_28.type != OID_TYPE_NULL) {
-            object_examine(obj_pool_perm_lookup(pkt->field_28),
-                obj_pool_perm_lookup(pkt->field_28),
+        if (pkt->source_owner_id.type != OID_TYPE_NULL) {
+            object_examine(obj_pool_perm_lookup(pkt->source_owner_id),
+                obj_pool_perm_lookup(pkt->source_owner_id),
                 inven_ui_transaction_source_name);
         } else {
             strcpy(inven_ui_transaction_source_name, "nobody");
         }
 
-        if (pkt->field_60 > 1) {
+        if (pkt->quantity > 1) {
             tig_debug_printf("UI: InvenItemTransfer - %d %ss(%s) going from %s to %s\n",
-                pkt->field_60,
+                pkt->quantity,
                 inven_ui_transaction_item_name,
                 inven_ui_transaction_object_id_text,
                 inven_ui_transaction_source_name,
@@ -4152,12 +4186,12 @@ void inven_ui_item_transaction_send(int a1)
 // 0x578EA0
 bool inven_ui_item_transaction_process(InventoryTransactionPacket* pkt)
 {
-    int64_t v1;
-    int64_t v2;
-    int64_t v3;
-    int64_t v4;
-    int64_t v5;
-    int64_t v6;
+    int64_t source_owner;
+    int64_t item_obj;
+    int64_t destination_owner;
+    int64_t merchant_obj;
+    int64_t inventory_target_obj;
+    int64_t pc_obj;
     int qty;
     int gold_amt;
     int ammo_type;
@@ -4168,17 +4202,17 @@ bool inven_ui_item_transaction_process(InventoryTransactionPacket* pkt)
     unsigned int item_type;
     int worth;
 
-    qty = pkt->field_60;
-    flags = pkt->field_8;
-    cost = pkt->field_5C;
-    inventory_location = pkt->field_58;
+    qty = pkt->quantity;
+    flags = pkt->transaction_flags;
+    cost = pkt->price;
+    inventory_location = pkt->destination_slot;
 
-    v1 = obj_pool_perm_lookup(pkt->field_28);
-    v2 = obj_pool_perm_lookup(pkt->field_10);
-    v3 = obj_pool_perm_lookup(pkt->field_40);
-    v4 = obj_pool_perm_lookup(pkt->field_70);
-    v5 = obj_pool_perm_lookup(pkt->field_88);
-    v6 = obj_pool_perm_lookup(pkt->field_A0);
+    source_owner = obj_pool_perm_lookup(pkt->source_owner_id);
+    item_obj = obj_pool_perm_lookup(pkt->item_id);
+    destination_owner = obj_pool_perm_lookup(pkt->destination_owner_id);
+    merchant_obj = obj_pool_perm_lookup(pkt->merchant_id);
+    inventory_target_obj = obj_pool_perm_lookup(pkt->target_inventory_owner_id);
+    pc_obj = obj_pool_perm_lookup(pkt->pc_id);
 
     if (tig_net_is_active()
         && !tig_net_is_host()) {
@@ -4191,119 +4225,119 @@ bool inven_ui_item_transaction_process(InventoryTransactionPacket* pkt)
         return true;
     }
 
-    if (v6 != OBJ_HANDLE_NULL
-        && player_is_local_pc_obj(v6)
+    if (pc_obj != OBJ_HANDLE_NULL
+        && player_is_local_pc_obj(pc_obj)
         && (flags & 0x18) != 0) {
-        gold_amt = qty * item_cost(v2, v4, v6, false);
-        if (gold_amt > item_gold_get(v6)) {
-            dialog_copy_npc_gamble_msg(v4, v6, 4, inven_ui_offer_text_buffer);
+        gold_amt = qty * item_cost(item_obj, merchant_obj, pc_obj, false);
+        if (gold_amt > item_gold_get(pc_obj)) {
+            dialog_copy_npc_gamble_msg(merchant_obj, pc_obj, 4, inven_ui_offer_text_buffer);
             snprintf(inven_ui_trade_dialog_text, sizeof(inven_ui_trade_dialog_text), inven_ui_offer_text_buffer, gold_amt);
             return true;
         }
     }
 
     error = false;
-    item_type = obj_field_int32_get(v2, OBJ_F_TYPE);
+    item_type = obj_field_int32_get(item_obj, OBJ_F_TYPE);
 
     if ((flags & 0x10) == 0) {
         if (item_type == OBJ_TYPE_GOLD) {
             if (!tig_net_is_active() || tig_net_is_host()) {
-                if (!item_gold_transfer(v1, v3, qty, v2)) {
+                if (!item_gold_transfer(source_owner, destination_owner, qty, item_obj)) {
                     return true;
                 }
 
                 if ((flags & 0x06) != 0) {
-                    int64_t loc = obj_field_int64_get(v1, OBJ_F_LOCATION);
+                    int64_t loc = obj_field_int64_get(source_owner, OBJ_F_LOCATION);
                     int64_t gold_obj = item_gold_create(qty, loc);
-                    if (v6 != OBJ_HANDLE_NULL) {
-                        int sound_id = sfx_item_sound(gold_obj, v1, OBJ_HANDLE_NULL, ITEM_SOUND_DROP);
-                        mp_player_sound_play(v6, sound_id);
+                    if (pc_obj != OBJ_HANDLE_NULL) {
+                        int sound_id = sfx_item_sound(gold_obj, source_owner, OBJ_HANDLE_NULL, ITEM_SOUND_DROP);
+                        mp_player_sound_play(pc_obj, sound_id);
                     }
                     if ((flags & 0x04) != 0) {
-                        object_pickup(gold_obj, v1);
-                        if (v6 != OBJ_HANDLE_NULL && player_is_local_pc_obj(v6)) {
+                        object_pickup(gold_obj, source_owner);
+                        if (pc_obj != OBJ_HANDLE_NULL && player_is_local_pc_obj(pc_obj)) {
                             inven_ui_item_drag_begin(gold_obj);
-                            inven_ui_drag_original_owner = v1;
+                            inven_ui_drag_original_owner = source_owner;
                         }
                     } else if ((flags & 0x02) != 0) {
-                        object_pickup(gold_obj, v1);
+                        object_pickup(gold_obj, source_owner);
                         item_drop_into_junk_pile_with_decay(gold_obj, loc);
                     }
                 }
             } else {
                 if ((flags & 0x04) != 0) {
-                    inven_ui_drag_original_owner = v1;
+                    inven_ui_drag_original_owner = source_owner;
                 }
             }
         } else if (item_type == OBJ_TYPE_AMMO) {
-            ammo_type = obj_field_int32_get(v2, OBJ_F_AMMO_TYPE);
+            ammo_type = obj_field_int32_get(item_obj, OBJ_F_AMMO_TYPE);
             if (!tig_net_is_active() || tig_net_is_host()) {
-                if (!item_ammo_transfer(v1, v3, qty, ammo_type, v2)) {
+                if (!item_ammo_transfer(source_owner, destination_owner, qty, ammo_type, item_obj)) {
                     return true;
                 }
 
                 if ((flags & 0x06) != 0) {
-                    int64_t loc = obj_field_int64_get(v1, OBJ_F_LOCATION);
+                    int64_t loc = obj_field_int64_get(source_owner, OBJ_F_LOCATION);
                     int64_t ammo_obj = item_ammo_create(qty, ammo_type, loc);
-                    if (v6 != OBJ_HANDLE_NULL) {
-                        int sound_id = sfx_item_sound(ammo_obj, v1, OBJ_HANDLE_NULL, ITEM_SOUND_PICKUP);
-                        mp_player_sound_play(v6, sound_id);
+                    if (pc_obj != OBJ_HANDLE_NULL) {
+                        int sound_id = sfx_item_sound(ammo_obj, source_owner, OBJ_HANDLE_NULL, ITEM_SOUND_PICKUP);
+                        mp_player_sound_play(pc_obj, sound_id);
                     }
                     if ((flags & 0x04) != 0) {
-                        object_pickup(ammo_obj, v1);
-                        if (v6 != OBJ_HANDLE_NULL && player_is_local_pc_obj(v6)) {
+                        object_pickup(ammo_obj, source_owner);
+                        if (pc_obj != OBJ_HANDLE_NULL && player_is_local_pc_obj(pc_obj)) {
                             inven_ui_item_drag_begin(ammo_obj);
-                            inven_ui_drag_original_owner = v1;
+                            inven_ui_drag_original_owner = source_owner;
                         }
                     } else if ((flags & 0x02) != 0) {
-                        object_pickup(ammo_obj, v1);
+                        object_pickup(ammo_obj, source_owner);
                         item_drop_into_junk_pile_with_decay(ammo_obj, loc);
                     }
                 }
             } else {
                 if ((flags & 0x04) != 0) {
-                    inven_ui_drag_original_owner = v1;
+                    inven_ui_drag_original_owner = source_owner;
                 }
             }
         } else {
             if ((flags & 0x04) != 0) {
                 if (!tig_net_is_active() || tig_net_is_host()) {
-                    if (item_check_remove(v2) == ITEM_CANNOT_OK) {
-                        item_remove(v2);
+                    if (item_check_remove(item_obj) == ITEM_CANNOT_OK) {
+                        item_remove(item_obj);
                     } else {
                         error = true;
                     }
                 }
             } else if ((flags & 0x01) != 0) {
                 if (!tig_net_is_active() || tig_net_is_host()) {
-                    if (v3 != v6) {
+                    if (destination_owner != pc_obj) {
                         if (IS_WEAR_INV_LOC(inventory_location)) {
-                            if (!item_transfer_ex(v2, v4, inventory_location)) {
+                            if (!item_transfer_ex(item_obj, merchant_obj, inventory_location)) {
                                 error = true;
                             }
                         } else {
-                            if (!item_transfer_ex(v2, v5, inventory_location)) {
+                            if (!item_transfer_ex(item_obj, inventory_target_obj, inventory_location)) {
                                 error = true;
                             }
                         }
                     } else {
-                        if (!item_transfer_ex(v2, v3, inventory_location)) {
+                        if (!item_transfer_ex(item_obj, destination_owner, inventory_location)) {
                             error = true;
                         }
                     }
 
-                    if (v6 != OBJ_HANDLE_NULL) {
-                        int sound_id = sfx_item_sound(v2, v3, OBJ_HANDLE_NULL, ITEM_SOUND_DROP);
-                        mp_player_sound_play(v6, sound_id);
+                    if (pc_obj != OBJ_HANDLE_NULL) {
+                        int sound_id = sfx_item_sound(item_obj, destination_owner, OBJ_HANDLE_NULL, ITEM_SOUND_DROP);
+                        mp_player_sound_play(pc_obj, sound_id);
                     }
                 }
             } else if ((flags & 0x02) != 0) {
                 if (!tig_net_is_active() || tig_net_is_host()) {
-                    item_drop(v2);
+                    item_drop(item_obj);
                 }
-                if (v6 != OBJ_HANDLE_NULL) {
-                    int sound_id = sfx_item_sound(v2, v3, OBJ_HANDLE_NULL, ITEM_SOUND_DROP);
-                    mp_player_sound_play(v6, sound_id);
+                if (pc_obj != OBJ_HANDLE_NULL) {
+                    int sound_id = sfx_item_sound(item_obj, destination_owner, OBJ_HANDLE_NULL, ITEM_SOUND_DROP);
+                    mp_player_sound_play(pc_obj, sound_id);
                 }
             }
         }
@@ -4312,34 +4346,34 @@ bool inven_ui_item_transaction_process(InventoryTransactionPacket* pkt)
     // 68
     if ((flags & 0x08) == 0) {
         if ((flags & 0x10) != 0) {
-            cost = item_cost(v2, v4, v6, false);
+            cost = item_cost(item_obj, merchant_obj, pc_obj, false);
         }
     } else {
         cost = 0;
     }
 
-    worth = item_worth(v2) * qty;
+    worth = item_worth(item_obj) * qty;
     if (!error) {
         if (cost > 0) {
             gold_amt = qty * cost;
             if (!tig_net_is_active() || tig_net_is_host()) {
-                if (v3 == v6) {
-                    if (item_gold_transfer(v3, v4, gold_amt, OBJ_HANDLE_NULL)) {
+                if (destination_owner == pc_obj) {
+                    if (item_gold_transfer(destination_owner, merchant_obj, gold_amt, OBJ_HANDLE_NULL)) {
                         if (gold_amt < worth) {
                             gsound_play_sfx(8158, 1);
                         } else {
-                            reaction_adjust_for_trade_surplus(v4, v6, gold_amt - worth);
+                            reaction_adjust_for_trade_surplus(merchant_obj, pc_obj, gold_amt - worth);
                         }
                     } else {
-                        dialog_copy_npc_not_enough_money_msg(v4, v6, inven_ui_trade_dialog_text);
+                        dialog_copy_npc_not_enough_money_msg(merchant_obj, pc_obj, inven_ui_trade_dialog_text);
                         error = true;
                     }
                 } else {
-                    if (item_gold_transfer(v4, v1, gold_amt, OBJ_HANDLE_NULL)) {
+                    if (item_gold_transfer(merchant_obj, source_owner, gold_amt, OBJ_HANDLE_NULL)) {
                         if (worth < gold_amt) {
                             gsound_play_sfx(8158, 1);
                         } else {
-                            reaction_adjust_for_trade_surplus(v4, v6, worth - gold_amt);
+                            reaction_adjust_for_trade_surplus(merchant_obj, pc_obj, worth - gold_amt);
                         }
                     } else {
                         error = true;
@@ -4353,9 +4387,9 @@ bool inven_ui_item_transaction_process(InventoryTransactionPacket* pkt)
         if ((flags & 0x10) == 0) {
             if (!tig_net_is_active() || tig_net_is_host()) {
                 if (item_type == OBJ_TYPE_GOLD) {
-                    item_gold_transfer(v3, v1, qty, OBJ_HANDLE_NULL);
+                    item_gold_transfer(destination_owner, source_owner, qty, OBJ_HANDLE_NULL);
                 } else if (item_type == OBJ_TYPE_AMMO) {
-                    item_ammo_transfer(v3, v1, qty, ammo_type, OBJ_HANDLE_NULL);
+                    item_ammo_transfer(destination_owner, source_owner, qty, ammo_type, OBJ_HANDLE_NULL);
                 }
             }
         } else {
@@ -4365,38 +4399,38 @@ bool inven_ui_item_transaction_process(InventoryTransactionPacket* pkt)
 
     // 85
     if (!error
-        && v3 != OBJ_HANDLE_NULL
-        && v3 != v6
+        && destination_owner != OBJ_HANDLE_NULL
+        && destination_owner != pc_obj
         && inven_ui_mode == INVEN_UI_MODE_BARTER
         && !inven_ui_target_is_follower
         && (!tig_net_is_active() || tig_net_is_host())) {
-        unsigned int item_flags = obj_field_int32_get(v2, OBJ_F_ITEM_FLAGS);
+        unsigned int item_flags = obj_field_int32_get(item_obj, OBJ_F_ITEM_FLAGS);
         if ((item_flags & OIF_IDENTIFIED) == 0) {
             item_flags |= OIF_IDENTIFIED;
-            obj_field_int32_set(v2, OBJ_F_ITEM_FLAGS, item_flags);
+            obj_field_int32_set(item_obj, OBJ_F_ITEM_FLAGS, item_flags);
         }
     }
 
-    if (inven_ui_created && player_is_local_pc_obj(v6)) {
+    if (inven_ui_created && player_is_local_pc_obj(pc_obj)) {
         redraw_inven(false);
-        item_inventory_slots_get(v6, inven_ui_player_inventory_slots);
-        if (v5 != OBJ_HANDLE_NULL) {
-            item_inventory_slots_get(v5, inven_ui_target_inventory_slots);
+        item_inventory_slots_get(pc_obj, inven_ui_player_inventory_slots);
+        if (inventory_target_obj != OBJ_HANDLE_NULL) {
+            item_inventory_slots_get(inventory_target_obj, inven_ui_target_inventory_slots);
         }
     }
 
-    if (v6 != OBJ_HANDLE_NULL
-        && player_is_local_pc_obj(v6)
+    if (pc_obj != OBJ_HANDLE_NULL
+        && player_is_local_pc_obj(pc_obj)
         && (flags & 0x04) != 0
         && !error) {
-        dword_739F58 = 1;
+        inven_ui_close_requested = 1;
     }
 
     if ((flags & 0x08) != 0) {
-        dialog_copy_npc_gamble_msg(v4, v6, 0, inven_ui_trade_dialog_text);
-        reaction_adjust_for_trade_surplus(v4, v6, -worth);
+        dialog_copy_npc_gamble_msg(merchant_obj, pc_obj, 0, inven_ui_trade_dialog_text);
+        reaction_adjust_for_trade_surplus(merchant_obj, pc_obj, -worth);
     } else if ((flags & 0x10) != 0) {
-        dialog_copy_npc_gamble_msg(v4, v6, 1, inven_ui_offer_text_buffer);
+        dialog_copy_npc_gamble_msg(merchant_obj, pc_obj, 1, inven_ui_offer_text_buffer);
         snprintf(inven_ui_trade_dialog_text, sizeof(inven_ui_trade_dialog_text), inven_ui_offer_text_buffer, gold_amt);
     }
 
@@ -4432,39 +4466,39 @@ void inven_ui_transfer_visible_items(int64_t from_obj, int64_t to_obj)
 }
 
 // 0x579840
-bool inven_ui_gambling_offer_check(int64_t obj, bool a2)
+bool inven_ui_gambling_offer_check(int64_t obj, bool silent)
 {
-    int v1;
-    bool v2 = false;
+    int item_price;
+    bool gamble_succeeded = false;
     int training;
     size_t pos;
 
     if (inven_ui_drag_original_owner == inven_ui_pc_obj) {
-        if (!a2) {
+        if (!silent) {
             dialog_copy_npc_gamble_msg(inven_ui_target_obj, inven_ui_pc_obj, 2, inven_ui_trade_dialog_text);
         }
         return false;
     }
 
     if (basic_skill_points_get(inven_ui_target_obj, BASIC_SKILL_GAMBLING) == 0) {
-        if (!a2) {
+        if (!silent) {
             dialog_copy_npc_gamble_msg(inven_ui_target_obj, inven_ui_pc_obj, 9, inven_ui_trade_dialog_text);
         }
         return false;
     }
 
-    v1 = item_cost(obj, inven_ui_target_obj, inven_ui_pc_obj, 0);
-    if (v1 > skill_gambling_max_item_cost(inven_ui_pc_obj)) {
-        if (!a2) {
+    item_price = item_cost(obj, inven_ui_target_obj, inven_ui_pc_obj, 0);
+    if (item_price > skill_gambling_max_item_cost(inven_ui_pc_obj)) {
+        if (!silent) {
             dialog_copy_npc_gamble_msg(inven_ui_target_obj, inven_ui_pc_obj, 3, inven_ui_trade_dialog_text);
         }
         return false;
     }
 
-    if (v1 > item_gold_get(inven_ui_pc_obj)) {
-        if (!a2) {
+    if (item_price > item_gold_get(inven_ui_pc_obj)) {
+        if (!silent) {
             dialog_copy_npc_gamble_msg(inven_ui_target_obj, inven_ui_pc_obj, 4, inven_ui_offer_text_buffer);
-            snprintf(inven_ui_trade_dialog_text, sizeof(inven_ui_trade_dialog_text), inven_ui_offer_text_buffer, v1);
+            snprintf(inven_ui_trade_dialog_text, sizeof(inven_ui_trade_dialog_text), inven_ui_offer_text_buffer, item_price);
         }
         return false;
     }
@@ -4472,28 +4506,28 @@ bool inven_ui_gambling_offer_check(int64_t obj, bool a2)
     training = basic_skill_training_get(inven_ui_target_obj, BASIC_SKILL_GAMBLING);
     if (IS_WEAR_INV_LOC(item_inventory_location_get(obj))) {
         if (training < TRAINING_EXPERT) {
-            if (!a2) {
+            if (!silent) {
                 dialog_copy_npc_gamble_msg(inven_ui_target_obj, inven_ui_pc_obj, 5, inven_ui_trade_dialog_text);
             }
             return false;
         }
 
-        v2 = true;
+        gamble_succeeded = true;
     }
 
     if ((obj_field_int32_get(obj, OBJ_F_ITEM_FLAGS) & OIF_WONT_SELL) != 0) {
         if (training < TRAINING_MASTER) {
-            if (!a2) {
+            if (!silent) {
                 dialog_copy_npc_gamble_msg(inven_ui_target_obj, inven_ui_pc_obj, 6, inven_ui_trade_dialog_text);
             }
             return false;
         }
 
-        v2 = true;
+        gamble_succeeded = true;
     }
 
-    if (!a2) {
-        if (v2) {
+    if (!silent) {
+        if (gamble_succeeded) {
             dialog_copy_npc_gamble_msg(inven_ui_target_obj, inven_ui_pc_obj, 7, inven_ui_trade_dialog_text);
             strcat(inven_ui_trade_dialog_text, " ");
             pos = strlen(inven_ui_trade_dialog_text);
@@ -4504,7 +4538,7 @@ bool inven_ui_gambling_offer_check(int64_t obj, bool a2)
         dialog_copy_npc_gamble_msg(inven_ui_target_obj, inven_ui_pc_obj, 8, inven_ui_offer_text_buffer);
         snprintf(&(inven_ui_trade_dialog_text[pos]), sizeof(inven_ui_trade_dialog_text) - pos,
             inven_ui_offer_text_buffer,
-            v1);
+            item_price);
     }
 
     return true;
@@ -4642,4 +4676,36 @@ void inven_ui_target_background_draw(TigRect* rect)
     blit_info.src_rect = rect;
     blit_info.dst_rect = rect;
     tig_window_blit_art(inven_ui_window_handle, &blit_info);
+}
+
+static void inven_ui_player_scroll_value_changed(int value)
+{
+    inven_ui_player_scroll_offset = value;
+    redraw_inven(false);
+}
+
+static void inven_ui_player_background_draw(TigRect* rect)
+{
+    TigArtBlitInfo info = { 0 };
+    info.art_id = inven_ui_background_art_id_get();
+    info.src_rect = rect;
+    info.dst_rect = rect;
+    tig_window_blit_art(inven_ui_window_handle, &info);
+}
+
+static void inven_ui_player_inventory_scrollbar_create(void)
+{
+    ScrollbarUiControlInfo info = { 0 };
+    info.flags = SB_INFO_VALID | SB_INFO_CONTENT_RECT | SB_INFO_MAX_VALUE | SB_INFO_MIN_VALUE
+        | SB_INFO_VALUE | SB_INFO_LINE_STEP | SB_INFO_PAGE_STEP | SB_INFO_ON_VALUE_CHANGED | SB_INFO_ON_REFRESH;
+    info.scrollbar_rect = (TigRect){ 689, 8, 12, 384 };
+    info.content_rect = (TigRect){ 368, 8, 333, 384 };
+    info.min_value = 0;
+    info.max_value = INVENTORY_CRITTER_ROWS - 12;
+    info.value = inven_ui_player_scroll_offset;
+    info.line_step = 1;
+    info.page_step = 12;
+    info.on_value_changed = inven_ui_player_scroll_value_changed;
+    info.on_refresh = inven_ui_player_background_draw;
+    inven_ui_player_scrollbar_created = scrollbar_ui_control_create(&inven_ui_player_inventory_scrollbar, &info, inven_ui_window_handle);
 }

@@ -13,10 +13,10 @@
 #include "game/stat.h"
 #include "game/ui.h"
 
-static int reaction_get_with_flags(int64_t a1, int64_t a2, unsigned int flags);
-static int reaction_stored_or_base_get(int64_t a1, int64_t a2);
+static int reaction_get_with_flags(int64_t npc_obj, int64_t pc_obj, unsigned int flags);
+static int reaction_stored_or_base_get(int64_t npc_obj, int64_t pc_obj);
 static int reaction_get_base(int64_t obj);
-static bool reaction_stored_lookup(int64_t a1, int64_t a2, bool a3, int* a4);
+static bool reaction_stored_lookup(int64_t npc_obj, int64_t pc_obj, bool include_current_slot, int* reaction_level_ptr);
 static void reaction_stored_remember(int64_t npc_obj, int64_t pc_obj, int value);
 static void reaction_stored_slot_set(int64_t npc_obj, int64_t pc_obj, int level, int index);
 static int reaction_modifiers_get(int64_t npc_obj, int64_t pc_obj, unsigned int flags);
@@ -172,7 +172,7 @@ void reaction_exit(void)
 // 0x4C0C40
 bool reaction_met_before(int64_t npc_obj, int64_t pc_obj)
 {
-    int v1;
+    int stored_reaction;
 
     if (npc_obj == pc_obj) {
         return true;
@@ -188,7 +188,7 @@ bool reaction_met_before(int64_t npc_obj, int64_t pc_obj)
         return false;
     }
 
-    return reaction_stored_lookup(npc_obj, pc_obj, false, &v1);
+    return reaction_stored_lookup(npc_obj, pc_obj, false, &stored_reaction);
 }
 
 // 0x4C0CC0
@@ -339,7 +339,7 @@ const char* reaction_get_name(int reaction)
 // 0x4C1020
 void reaction_begin_conversation(int64_t npc_obj, int64_t pc_obj)
 {
-    int v1;
+    int reaction_level;
 
     if (obj_field_int32_get(pc_obj, OBJ_F_TYPE) != OBJ_TYPE_PC) {
         return;
@@ -349,19 +349,19 @@ void reaction_begin_conversation(int64_t npc_obj, int64_t pc_obj)
         return;
     }
 
-    v1 = reaction_stored_or_base_get(npc_obj, pc_obj);
-    if (v1 < 100 && fate_resolve(pc_obj, FATE_FORCE_GOOD_REACTION)) {
-        v1 = 100;
+    reaction_level = reaction_stored_or_base_get(npc_obj, pc_obj);
+    if (reaction_level < 100 && fate_resolve(pc_obj, FATE_FORCE_GOOD_REACTION)) {
+        reaction_level = 100;
     }
 
-    reaction_stored_slot_set(npc_obj, pc_obj, v1, 0);
+    reaction_stored_slot_set(npc_obj, pc_obj, reaction_level, 0);
 }
 
 // Clears the conversation owner and remembers the reaction for that PC.
 // 0x4C10A0
 void reaction_end_conversation(int64_t npc_obj, int64_t pc_obj)
 {
-    int v1;
+    int reaction_level;
 
     if (obj_field_int32_get(pc_obj, OBJ_F_TYPE) != OBJ_TYPE_PC) {
         return;
@@ -371,9 +371,9 @@ void reaction_end_conversation(int64_t npc_obj, int64_t pc_obj)
         return;
     }
 
-    v1 = reaction_stored_or_base_get(npc_obj, pc_obj);
-    reaction_stored_slot_set(npc_obj, 0, v1, 0);
-    reaction_stored_remember(npc_obj, pc_obj, v1);
+    reaction_level = reaction_stored_or_base_get(npc_obj, pc_obj);
+    reaction_stored_slot_set(npc_obj, 0, reaction_level, 0);
+    reaction_stored_remember(npc_obj, pc_obj, reaction_level);
 }
 
 // Reads the PC handle in reaction slot zero, or null for a non-NPC.
@@ -391,58 +391,58 @@ int64_t reaction_conversation_pc_get(int64_t npc)
 //
 // Scales a price according to the NPC reaction toward the PC.
 // 0x4C1150
-int reaction_adjust_price(int64_t a1, int64_t a2, int a3)
+int reaction_adjust_price(int64_t npc_obj, int64_t pc_obj, int base_price)
 {
-    int v1;
-    int v2;
+    int reaction_level;
+    int price_percent;
 
-    v1 = reaction_get(a1, a2);
-    if (v1 > 100) {
-        v1 = 100;
+    reaction_level = reaction_get(npc_obj, pc_obj);
+    if (reaction_level > 100) {
+        reaction_level = 100;
     } else {
-        if (v1 < 0) {
-            v2 = 200;
-            return a3 * v2 / 100;
+        if (reaction_level < 0) {
+            price_percent = 200;
+            return base_price * price_percent / 100;
         }
 
-        if (v1 < 50) {
-            v2 = 2 * (100 - v1);
-            return a3 * v2 / 100;
+        if (reaction_level < 50) {
+            price_percent = 2 * (100 - reaction_level);
+            return base_price * price_percent / 100;
         }
     }
 
-    v2 = 120 - 2 * v1 / 5;
-    return a3 * v2 / 100;
+    price_percent = 120 - 2 * reaction_level / 5;
+    return base_price * price_percent / 100;
 }
 
 // Adjusts reaction based on the signed surplus value of a trade.
 // 0x4C11D0
-void reaction_adjust_for_trade_surplus(int64_t a1, int64_t a2, int a3)
+void reaction_adjust_for_trade_surplus(int64_t npc_obj, int64_t pc_obj, int trade_surplus)
 {
-    int v1;
+    int reaction_delta;
 
-    if (a3 < 0) {
-        v1 = a3 / 100;
-        if (v1 == 0) {
-            v1 = -2;
-        } else if (v1 < -30) {
-            v1 = -30;
+    if (trade_surplus < 0) {
+        reaction_delta = trade_surplus / 100;
+        if (reaction_delta == 0) {
+            reaction_delta = -2;
+        } else if (reaction_delta < -30) {
+            reaction_delta = -30;
         }
-    } else if (a3 > 50
-        && reaction_translate(reaction_get(a1, a2)) < REACTION_AMIABLE) {
-        if (a3 < 200) {
-            v1 = a3 / 40;
-        } else if (a3 < 1000) {
-            v1 = (a3 - 200) / 100 + 5;
+    } else if (trade_surplus > 50
+        && reaction_translate(reaction_get(npc_obj, pc_obj)) < REACTION_AMIABLE) {
+        if (trade_surplus < 200) {
+            reaction_delta = trade_surplus / 40;
+        } else if (trade_surplus < 1000) {
+            reaction_delta = (trade_surplus - 200) / 100 + 5;
         } else {
-            v1 = 15;
+            reaction_delta = 15;
         }
     } else {
-        v1 = 0;
+        reaction_delta = 0;
     }
 
-    if (v1 != 0) {
-        reaction_adj(a1, a2, v1);
+    if (reaction_delta != 0) {
+        reaction_adj(npc_obj, pc_obj, reaction_delta);
     }
 }
 
@@ -450,10 +450,10 @@ void reaction_adjust_for_trade_surplus(int64_t a1, int64_t a2, int a3)
 // 0x4C1290
 int reaction_stored_or_base_get(int64_t npc_obj, int64_t pc_obj)
 {
-    int v1;
+    int stored_reaction;
 
-    if (reaction_stored_lookup(npc_obj, pc_obj, 1, &v1)) {
-        return v1;
+    if (reaction_stored_lookup(npc_obj, pc_obj, 1, &stored_reaction)) {
+        return stored_reaction;
     }
 
     return reaction_get_base(npc_obj);
@@ -467,14 +467,14 @@ int reaction_get_base(int64_t obj)
 
 // Searches ten reaction slots, optionally including the conversation slot.
 // 0x4C12F0
-bool reaction_stored_lookup(int64_t npc_obj, int64_t pc_obj, bool a3, int* a4)
+bool reaction_stored_lookup(int64_t npc_obj, int64_t pc_obj, bool include_current_slot, int* reaction_level_ptr)
 {
     int index;
 
     for (index = 0; index < 10; index++) {
-        if ((index != 0 || a3)
+        if ((index != 0 || include_current_slot)
             && pc_obj == obj_arrayfield_handle_get(npc_obj, OBJ_F_NPC_REACTION_PC_IDX, index)) {
-            *a4 = obj_arrayfield_uint32_get(npc_obj, OBJ_F_NPC_REACTION_LEVEL_IDX, index);
+            *reaction_level_ptr = obj_arrayfield_uint32_get(npc_obj, OBJ_F_NPC_REACTION_LEVEL_IDX, index);
             return true;
         }
     }
@@ -489,13 +489,13 @@ void reaction_stored_remember(int64_t npc_obj, int64_t pc_obj, int value)
     int index;
     int candidate;
     int64_t obj;
-    int v1;
+    int new_reaction_distance;
     int reaction_level;
-    int v2;
-    int v3;
+    int stored_reaction_distance;
+    int candidate_reaction_distance;
 
     // NOTE: Silence compiler warning.
-    v3 = -1;
+    candidate_reaction_distance = -1;
 
     candidate = -1;
     for (index = 0; index < 10; index++) {
@@ -520,7 +520,7 @@ void reaction_stored_remember(int64_t npc_obj, int64_t pc_obj, int value)
     // FIXME: Unused.
     datetime_current_second();
 
-    v1 = reaction_distance_from_neutral(value);
+    new_reaction_distance = reaction_distance_from_neutral(value);
     for (index = 0; index < 10; index++) {
         if (index != 0) {
             reaction_level = obj_arrayfield_uint32_get(npc_obj, OBJ_F_NPC_REACTION_LEVEL_IDX, index);
@@ -528,10 +528,10 @@ void reaction_stored_remember(int64_t npc_obj, int64_t pc_obj, int value)
             // FIXME: Unused.
             obj_arrayfield_uint32_get(npc_obj, OBJ_F_NPC_REACTION_TIME_IDX, index);
 
-            v2 = reaction_distance_from_neutral(reaction_level);
-            if (v2 < v1 && (candidate == -1 || v2 < v3)) {
+            stored_reaction_distance = reaction_distance_from_neutral(reaction_level);
+            if (stored_reaction_distance < new_reaction_distance && (candidate == -1 || stored_reaction_distance < candidate_reaction_distance)) {
                 candidate = index;
-                v3 = v2;
+                candidate_reaction_distance = stored_reaction_distance;
             }
         }
     }
@@ -560,7 +560,7 @@ void reaction_stored_slot_set(int64_t npc_obj, int64_t pc_obj, int level, int in
 // 0x4C1500
 int reaction_modifiers_get(int64_t npc_obj, int64_t pc_obj, unsigned int flags)
 {
-    int v1 = 0;
+    int total_modifier = 0;
     int modifier;
     int npc_race;
     int pc_race;
@@ -571,17 +571,17 @@ int reaction_modifiers_get(int64_t npc_obj, int64_t pc_obj, unsigned int flags)
         npc_race = stat_level_get(npc_obj, STAT_RACE);
         pc_race = stat_level_get(pc_obj, STAT_RACE);
 
-        v1 = reaction_racial_modifiers[npc_race][pc_race] + modifier;
+        total_modifier = reaction_racial_modifiers[npc_race][pc_race] + modifier;
         if ((flags & 0x1) != 0) {
-            if (v1 < -49) {
-                v1 = -49;
+            if (total_modifier < -49) {
+                total_modifier = -49;
             }
         }
     }
 
-    v1 += reputation_reaction_adj(pc_obj, npc_obj);
+    total_modifier += reputation_reaction_adj(pc_obj, npc_obj);
 
-    return v1;
+    return total_modifier;
 }
 
 // Returns the absolute distance from neutral reaction fifty.

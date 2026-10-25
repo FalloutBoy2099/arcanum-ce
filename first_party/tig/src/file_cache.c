@@ -24,6 +24,8 @@
 
 #include "tig/file_cache.h"
 
+#include <limits.h>
+
 #include "tig/file.h"
 #include "tig/memory.h"
 
@@ -35,24 +37,24 @@ static bool tig_file_cache_prepare_item(TigFileCache* cache, TigFileCacheItem* i
 static TigFileCacheItem* tig_file_cache_slot_acquire(TigFileCache* cache);
 static TigFileCacheItem* tig_file_cache_slot_acquire_random(TigFileCache* cache);
 static TigFileCacheItem* tig_file_cache_slot_acquire_linear(TigFileCache* cache);
-static void tig_file_cache_shrink(TigFileCache* cache, int size);
+static void tig_file_cache_shrink(TigFileCache* cache, size_t size);
 static TigFileCacheEntry* tig_file_cache_acquire_internal(TigFileCache* cache, TigFileCacheItem* item);
 static void tig_file_cache_release_internal(TigFileCache* cache, TigFileCacheItem* entry);
 
 // 0x6364F8
-static int tig_file_cache_hit_count;
+static uint64_t tig_file_cache_hit_count;
 
 // 0x6364FC
-static int tig_file_cache_miss_count;
+static uint64_t tig_file_cache_miss_count;
 
 // 0x636500
-static int tig_file_cache_hit_bytes;
+static uint64_t tig_file_cache_hit_bytes;
 
 // 0x636504
-static int tig_file_cache_miss_bytes;
+static uint64_t tig_file_cache_miss_bytes;
 
 // 0x636508
-static int tig_file_cache_removed_bytes;
+static uint64_t tig_file_cache_removed_bytes;
 
 // 0x538A80
 int tig_file_cache_init(TigInitInfo* init_info)
@@ -71,6 +73,8 @@ void tig_file_cache_exit(void)
 void tig_file_cache_flush(TigFileCache* cache)
 {
     int index;
+
+    if (cache == NULL) return;
 
     for (index = 0; index < cache->capacity; index++) {
         if (cache->items[index].refcount == 0) {
@@ -100,15 +104,22 @@ void tig_file_cache_entry_remove(TigFileCache* cache, TigFileCacheItem* item)
 }
 
 // 0x538B50
-TigFileCache* tig_file_cache_create(int capacity, int max_size)
+TigFileCache* tig_file_cache_create(int capacity, size_t max_size)
 {
     TigFileCache* cache;
 
+    if (capacity <= 0 || (size_t)capacity > SIZE_MAX / sizeof(TigFileCacheItem)) return NULL;
+
     cache = (TigFileCache*)MALLOC(sizeof(*cache));
+    if (cache == NULL) return NULL;
     cache->signature = FOURCC_FILC;
     cache->capacity = capacity;
     cache->max_size = max_size;
     cache->items = (TigFileCacheItem*)CALLOC(capacity, sizeof(*cache->items));
+    if (cache->items == NULL) {
+        FREE(cache);
+        return NULL;
+    }
     cache->items_count = 0;
     cache->bytes = 0;
     return cache;
@@ -117,6 +128,7 @@ TigFileCache* tig_file_cache_create(int capacity, int max_size)
 // 0x538BA0
 void tig_file_cache_destroy(TigFileCache* cache)
 {
+    if (cache == NULL) return;
     tig_file_cache_flush(cache);
     FREE(cache->items);
     FREE(cache);
@@ -132,10 +144,24 @@ bool tig_file_cache_read_contents_into(const char* path, void** data, int* size)
         return false;
     }
 
-    *size = tig_file_filelength(stream);
-    *data = MALLOC(*size);
-    tig_file_fread(*data, *size, 1, stream);
+    int length = tig_file_filelength(stream);
+    if (length <= 0) {
+        tig_file_fclose(stream);
+        return false;
+    }
+    void* contents = MALLOC((size_t)length);
+    if (contents == NULL) {
+        tig_file_fclose(stream);
+        return false;
+    }
+    bool complete = tig_file_fread(contents, 1, (size_t)length, stream) == (size_t)length && !tig_file_ferror(stream);
     tig_file_fclose(stream);
+    if (!complete) {
+        FREE(contents);
+        return false;
+    }
+    *size = length;
+    *data = contents;
 
     return true;
 }
@@ -148,6 +174,12 @@ bool tig_file_cache_prepare_item(TigFileCache* cache, TigFileCacheItem* item, co
     }
 
     item->entry.path = STRDUP(path);
+    if (item->entry.path == NULL || (size_t)item->entry.size > SIZE_MAX - cache->bytes) {
+        if (item->entry.path != NULL) FREE(item->entry.path);
+        FREE(item->entry.data);
+        memset(item, 0, sizeof(*item));
+        return false;
+    }
 
     cache->items_count++;
     cache->bytes += item->entry.size;
@@ -160,17 +192,20 @@ bool tig_file_cache_prepare_item(TigFileCache* cache, TigFileCacheItem* item, co
 TigFileCacheEntry* tig_file_cache_acquire(TigFileCache* cache, const char* path)
 {
     // 0x6364E8
-    static TigFileCacheEntry null_entry;
+    static TigFileCacheEntry null_entry = { .index = -1 };
 
     int index;
     TigFileCacheItem* item;
     TigFileCacheItem* new_item = NULL;
     TigFileCacheEntry* entry;
 
+    if (cache == NULL || path == NULL || path[0] == '\0') return &null_entry;
+
     for (index = 0; index < cache->capacity; index++) {
         item = &(cache->items[index]);
         if (item->entry.data != NULL) {
             if (SDL_strcasecmp(item->entry.path, path) == 0) {
+                if (item->refcount == INT_MAX) return &null_entry;
                 tig_file_cache_hit_count++;
                 tig_file_cache_hit_bytes += item->entry.size;
                 return tig_file_cache_acquire_internal(cache, item);
@@ -214,11 +249,11 @@ TigFileCacheItem* tig_file_cache_slot_acquire(TigFileCache* cache)
 // 0x538D90
 TigFileCacheItem* tig_file_cache_slot_acquire_random(TigFileCache* cache)
 {
-    int attempt;
+    size_t attempt;
     int index;
     TigFileCacheItem* entry;
 
-    for (attempt = 0; attempt < 4 * cache->capacity; attempt++) {
+    for (attempt = 0; attempt < (size_t)4 * cache->capacity; attempt++) {
         index = rand() % cache->capacity;
         entry = &(cache->items[index]);
         if (entry->entry.data == NULL) {
@@ -256,21 +291,12 @@ TigFileCacheItem* tig_file_cache_slot_acquire_linear(TigFileCache* cache)
 }
 
 // 0x538E40
-void tig_file_cache_shrink(TigFileCache* cache, int size)
+void tig_file_cache_shrink(TigFileCache* cache, size_t size)
 {
-    int attempt;
-
-    if (size > cache->bytes) {
-        tig_file_cache_flush(cache);
-    } else {
-        tig_file_cache_removed_bytes = 0;
-
-        for (attempt = 0; attempt < 4 * cache->capacity; attempt++) {
-            tig_file_cache_slot_acquire_random(cache);
-            if (tig_file_cache_removed_bytes >= size) {
-                break;
-            }
-        }
+    size_t target = size >= cache->bytes ? 0 : cache->bytes - size;
+    for (int index = 0; index < cache->capacity && cache->bytes > target; index++) {
+        TigFileCacheItem* item = &cache->items[index];
+        if (item->refcount == 0) tig_file_cache_entry_remove(cache, item);
     }
 }
 
@@ -286,7 +312,10 @@ TigFileCacheEntry* tig_file_cache_acquire_internal(TigFileCache* cache, TigFileC
 // 0x538EA0
 void tig_file_cache_release(TigFileCache* cache, TigFileCacheEntry* entry)
 {
-    tig_file_cache_release_internal(cache, &(cache->items[entry->index]));
+    if (cache == NULL || entry == NULL || entry->index < 0 || entry->index >= cache->capacity) return;
+    TigFileCacheItem* item = &cache->items[entry->index];
+    if (&item->entry != entry || item->entry.data == NULL || item->refcount <= 0) return;
+    tig_file_cache_release_internal(cache, item);
 }
 
 // 0x538EC0

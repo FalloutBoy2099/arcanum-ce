@@ -1,4 +1,5 @@
 #include "game/item.h"
+#include "game/item_private.h"
 
 #include "game/anim.h"
 #include "game/background.h"
@@ -32,32 +33,27 @@
 #define FIRST_AMMUNITION_TYPE_ID 0
 #define FIRST_ARMOR_COVERAGE_TYPE_ID (FIRST_AMMUNITION_TYPE_ID + TIG_ART_AMMO_TYPE_COUNT)
 
-static bool item_transfer_with_equipment_swap(int64_t item_obj, int64_t critter_obj, int inventory_location);
 static bool item_check_sell(int64_t item_obj, int64_t seller_pc_obj, int64_t buyer_npc_obj);
 static bool item_check_buy(int64_t item_obj, int64_t seller_npc_obj, int64_t buyer_pc_obj);
 static bool item_inventory_has_matching_key(int64_t critter_obj, int lock_id);
 static bool item_key_matches_lock(int lock_id, int key_id);
 static bool item_inventory_respawn_event_matches(TimeEvent* timeevent);
 static int64_t item_gold_obj(int64_t obj);
-static int64_t item_find_key_ring(int64_t critter_obj);
 static bool item_check_invensource_buy_list(int64_t item_obj, int64_t buyer_npc_obj);
 static int item_unwield_check_stub(int64_t obj);
 static tig_art_id_t item_equipped_critter_idle_art_id_get(int64_t critter_obj);
-static int64_t item_ammo_obj(int64_t obj, int ammo_type);
-static bool item_critter_armor_art_id_build(int64_t a1, int64_t a2, tig_art_id_t* art_id_ptr);
+static bool item_critter_armor_art_id_build(int64_t armor_obj, int64_t critter_obj, tig_art_id_t* art_id_ptr);
 static bool item_key_collect_into_existing_ring(int64_t critter_obj, int64_t key_obj);
 static void item_key_ring_add_key(int64_t key_obj, int64_t key_ring_obj);
 static void item_key_ring_collect_inventory(int64_t critter_obj, int64_t key_ring_obj);
 static void item_key_ring_update_icon(int64_t key_ring_obj);
 static bool item_junk_pile_insert_or_create(int64_t obj, int64_t loc);
-static char* item_error_str(int reason);
 static int find_free_inv_loc_horizontal(int64_t item_obj, int64_t parent_obj, int* slots);
 static int find_free_inv_loc_vertical(int64_t item_obj, int64_t parent_obj, int* slots);
 static void item_equipped(int64_t item_obj, int64_t parent_obj, int inventory_location);
 static void item_unequipped(int64_t item_obj, int64_t parent_obj, int inventory_location);
 static bool item_remove_side_effect_flag_consume(void);
 static void item_recalc_light(int64_t item_obj, int64_t parent_obj);
-static bool item_cancel_decay(int64_t obj);
 static bool item_decay_timeevent_check(TimeEvent* timeevent);
 
 // 0x5B32A0
@@ -376,7 +372,9 @@ int item_weight(int64_t item_obj, int64_t owner_obj)
 
     if (owner_obj != OBJ_HANDLE_NULL) {
         weight_adj = obj_field_int32_get(item_obj, OBJ_F_ITEM_MAGIC_WEIGHT_ADJ);
-        weight += item_adjust_magic(item_obj, owner_obj, weight_adj);
+        if (weight_adj != 0) {
+            weight += item_adjust_magic(item_obj, owner_obj, weight_adj);
+        }
     }
 
     if (item_stack_counter_field(item_obj, &quantity_fld) != -1) {
@@ -600,93 +598,6 @@ void item_inv_icon_size(int64_t item_id, int* width, int* height)
     }
 }
 
-// 0x4617F0
-bool item_transfer(int64_t item_obj, int64_t critter_obj)
-{
-    return item_transfer_ex(item_obj, critter_obj, -1);
-}
-
-// 0x461810
-bool item_transfer_ex(int64_t item_obj, int64_t critter_obj, int inventory_location)
-{
-    int64_t existing_item_obj;
-    bool v1;
-    int rc;
-    int new_inventory_location;
-    int slots[960];
-
-    if (tig_net_is_active()
-        && !tig_net_is_host()) {
-        Packet28 pkt;
-
-        pkt.type = 28;
-        mp_object_id_get_nullable(item_obj, &(pkt.item_oid));
-        mp_object_id_get_nullable(critter_obj, &(pkt.critter_oid));
-        pkt.inventory_location = inventory_location;
-        tig_net_send_app_all(&pkt, sizeof(pkt));
-
-        return true;
-    }
-
-    if (item_parent(item_obj, NULL)) {
-        return item_transfer_with_equipment_swap(item_obj, critter_obj, inventory_location);
-    }
-
-    if (!object_script_execute(critter_obj, item_obj, OBJ_HANDLE_NULL, SAP_GET, 0)) {
-        return false;
-    }
-
-    existing_item_obj = OBJ_HANDLE_NULL;
-    v1 = false;
-
-    if (inventory_location != -1
-        && IS_WEAR_INV_LOC(inventory_location)) {
-        existing_item_obj = item_wield_get(critter_obj, inventory_location);
-        v1 = true;
-    }
-
-    rc = item_check_insert(item_obj, critter_obj, &new_inventory_location);
-    if (rc != ITEM_CANNOT_OK
-        && (rc != ITEM_CANNOT_NO_ROOM
-            || existing_item_obj != OBJ_HANDLE_NULL
-            || !v1)) {
-        switch (obj_field_int32_get(critter_obj, OBJ_F_TYPE)) {
-        case OBJ_TYPE_PC:
-            item_error_msg(critter_obj, rc);
-            break;
-        case OBJ_TYPE_NPC:
-            tf_add(critter_obj, TF_TYPE_WHITE, item_error_str(rc));
-            break;
-        }
-        return false;
-    }
-
-    object_pickup(item_obj, critter_obj);
-
-    if (inventory_location != -1) {
-        if (!v1) {
-            item_inventory_slots_get(critter_obj, slots);
-            if (item_inventory_slots_has_room_for(item_obj, critter_obj, inventory_location, slots)) {
-                item_insert(item_obj, critter_obj, inventory_location);
-            } else {
-                item_insert(item_obj, critter_obj, new_inventory_location);
-            }
-        } else {
-            if (existing_item_obj == OBJ_HANDLE_NULL) {
-                item_insert(item_obj, critter_obj, inventory_location);
-            } else {
-                item_insert(item_obj, critter_obj, new_inventory_location);
-            }
-        }
-    } else {
-        item_insert(item_obj, critter_obj, new_inventory_location);
-    }
-
-    item_cancel_decay(item_obj);
-
-    return true;
-}
-
 // 0x461A70
 bool item_drop(int64_t item_obj)
 {
@@ -716,7 +627,7 @@ bool item_drop_ex(int64_t item_obj, int distance)
 
         pkt.type = 26;
         mp_object_id_get_nullable(item_obj, &(pkt.oid));
-        pkt.field_20 = distance;
+        pkt.distance = distance;
         tig_net_send_app_all(&pkt, sizeof(pkt));
         return true;
     }
@@ -769,76 +680,6 @@ bool item_drop_ex(int64_t item_obj, int distance)
     return true;
 }
 
-// 0x461CA0
-bool item_transfer_with_equipment_swap(int64_t item_obj, int64_t critter_obj, int inventory_location)
-{
-    int64_t parent_obj;
-    int64_t existing_item_obj;
-    bool v1;
-    int rc;
-    int new_inventory_location;
-    int slots[960];
-
-    if (!item_parent(item_obj, &parent_obj)) {
-        return item_transfer_ex(item_obj, critter_obj, inventory_location);
-    }
-
-    if (!object_script_execute(parent_obj, critter_obj, item_obj, SAP_TRANSFER, 0)) {
-        return false;
-    }
-
-    existing_item_obj = OBJ_HANDLE_NULL;
-    v1 = false;
-
-    if (inventory_location != -1
-        && IS_WEAR_INV_LOC(inventory_location)) {
-        existing_item_obj = item_wield_get(critter_obj, inventory_location);
-        v1 = true;
-    }
-
-    rc = item_check_insert(item_obj, critter_obj, &new_inventory_location);
-    if (rc != ITEM_CANNOT_OK
-        && (rc != ITEM_CANNOT_NO_ROOM
-            || existing_item_obj != OBJ_HANDLE_NULL
-            || !v1)) {
-        if (obj_field_int32_get(parent_obj, OBJ_F_TYPE) == OBJ_TYPE_PC) {
-            item_error_msg(parent_obj, rc);
-        }
-
-        if (obj_field_int32_get(critter_obj, OBJ_F_TYPE) == OBJ_TYPE_PC) {
-            item_error_msg(critter_obj, rc);
-        }
-
-        return false;
-    }
-
-    item_remove(item_obj);
-
-    if (inventory_location != -1) {
-        if (!v1) {
-            item_inventory_slots_get(critter_obj, slots);
-            if (item_inventory_slots_has_room_for(item_obj, critter_obj, inventory_location, slots)) {
-                item_insert(item_obj, critter_obj, inventory_location);
-            } else {
-                item_insert(item_obj, critter_obj, new_inventory_location);
-            }
-        } else {
-            if (existing_item_obj == OBJ_HANDLE_NULL) {
-                item_insert(item_obj, critter_obj, inventory_location);
-            } else {
-                item_insert(item_obj, critter_obj, new_inventory_location);
-            }
-        }
-    } else {
-        item_insert(item_obj, critter_obj, new_inventory_location);
-    }
-
-    item_cancel_decay(item_obj);
-    item_decay(item_obj, 172800000);
-
-    return true;
-}
-
 // 0x461F20
 int item_worth(int64_t item_id)
 {
@@ -864,7 +705,7 @@ bool item_has_zero_worth(int64_t item_id)
 }
 
 // 0x461F80
-int item_cost(int64_t item_obj, int64_t seller_obj, int64_t buyer_obj, bool a4)
+int item_cost(int64_t item_obj, int64_t seller_obj, int64_t buyer_obj, bool ignore_trade_restrictions)
 {
     int worth;
     int mult;
@@ -874,7 +715,7 @@ int item_cost(int64_t item_obj, int64_t seller_obj, int64_t buyer_obj, bool a4)
     int hp_max;
 
     if (obj_field_int32_get(item_obj, OBJ_F_TYPE) == OBJ_TYPE_GOLD) {
-        if (a4) {
+        if (ignore_trade_restrictions) {
             return item_gold_get(item_obj);
         } else {
             return 0;
@@ -883,7 +724,7 @@ int item_cost(int64_t item_obj, int64_t seller_obj, int64_t buyer_obj, bool a4)
 
     worth = item_worth(item_obj);
     if (player_is_pc_obj(seller_obj)) {
-        if (!a4) {
+        if (!ignore_trade_restrictions) {
             if (!item_check_sell(item_obj, seller_obj, buyer_obj)) {
                 return 0;
             }
@@ -911,7 +752,7 @@ int item_cost(int64_t item_obj, int64_t seller_obj, int64_t buyer_obj, bool a4)
             return 2;
         }
     } else {
-        if (!a4) {
+        if (!ignore_trade_restrictions) {
             if (!item_check_buy(item_obj, seller_obj, buyer_obj)) {
                 return 0;
             }
@@ -1326,7 +1167,7 @@ int64_t item_find_first_matching_prototype(int64_t parent_obj, int64_t existing_
 }
 
 // 0x462A30
-int64_t item_find_matching_hotkey_item(int64_t obj, int64_t a2)
+int64_t item_find_matching_hotkey_item(int64_t obj, int64_t reference_item)
 {
     int inventory_num_fld;
     int inventory_list_fld;
@@ -1336,7 +1177,7 @@ int64_t item_find_matching_hotkey_item(int64_t obj, int64_t a2)
     int64_t item_obj;
     int inventory_location;
 
-    if (proto_number_from_instance(a2) == BP_GENERIC_ITEM_1A) {
+    if (proto_number_from_instance(reference_item) == BP_GENERIC_ITEM_1A) {
         return OBJ_HANDLE_NULL;
     }
 
@@ -1349,11 +1190,11 @@ int64_t item_find_matching_hotkey_item(int64_t obj, int64_t a2)
     }
 
     cnt = obj_field_int32_get(obj, inventory_num_fld);
-    prototype_obj = obj_field_handle_get(a2, OBJ_F_PROTOTYPE_HANDLE);
+    prototype_obj = obj_field_handle_get(reference_item, OBJ_F_PROTOTYPE_HANDLE);
 
     for (index = 0; index < cnt; index++) {
         item_obj = obj_arrayfield_handle_get(obj, inventory_list_fld, index);
-        if (item_obj != a2
+        if (item_obj != reference_item
             && obj_field_handle_get(item_obj, OBJ_F_PROTOTYPE_HANDLE) == prototype_obj) {
             inventory_location = obj_field_int32_get(item_obj, OBJ_F_ITEM_INV_LOCATION);
             if (IS_HOTKEY_INV_LOC(inventory_location)) {
@@ -1366,7 +1207,7 @@ int64_t item_find_matching_hotkey_item(int64_t obj, int64_t a2)
 }
 
 // 0x462B40
-int item_count_items_matching_prototype(int64_t obj, int64_t a2)
+int item_count_items_matching_prototype(int64_t obj, int64_t reference_item)
 {
     int inventory_num_fld;
     int inventory_list_fld;
@@ -1376,7 +1217,7 @@ int item_count_items_matching_prototype(int64_t obj, int64_t a2)
     int64_t item_obj;
     int ret = 1;
 
-    if (proto_number_from_instance(a2) == BP_GENERIC_ITEM_1A) {
+    if (proto_number_from_instance(reference_item) == BP_GENERIC_ITEM_1A) {
         return ret;
     }
 
@@ -1389,11 +1230,11 @@ int item_count_items_matching_prototype(int64_t obj, int64_t a2)
     }
 
     cnt = obj_field_int32_get(obj, inventory_num_fld);
-    prototype_obj = obj_field_handle_get(a2, OBJ_F_PROTOTYPE_HANDLE);
+    prototype_obj = obj_field_handle_get(reference_item, OBJ_F_PROTOTYPE_HANDLE);
 
     for (index = 0; index < cnt; index++) {
         item_obj = obj_arrayfield_handle_get(obj, inventory_list_fld, index);
-        if (item_obj != a2
+        if (item_obj != reference_item
             && obj_field_handle_get(item_obj, OBJ_F_PROTOTYPE_HANDLE) == prototype_obj) {
             ret++;
         }
@@ -1403,10 +1244,10 @@ int item_count_items_matching_prototype(int64_t obj, int64_t a2)
 }
 
 // 0x462C30
-int item_check_use_box_flag(int64_t a1, int64_t a2)
+int item_check_use_box_flag(int64_t unused_actor_obj, int64_t item_obj)
 {
-    if (a2 == OBJ_HANDLE_NULL
-        || (obj_field_int32_get(a2, OBJ_F_ITEM_FLAGS) & OIF_CAN_USE_BOX) == 0) {
+    if (item_obj == OBJ_HANDLE_NULL
+        || (obj_field_int32_get(item_obj, OBJ_F_ITEM_FLAGS) & OIF_CAN_USE_BOX) == 0) {
         return ITEM_CANNOT_NOT_USABLE;
     }
 
@@ -1829,7 +1670,7 @@ void item_inventory_mark_summoned(int64_t obj)
 }
 
 // 0x463730
-void item_inventory_drop_all(int64_t obj, bool a2)
+void item_inventory_drop_all(int64_t obj, bool use_decaying_junk_pile)
 {
     int inventory_num_fld;
     int inventory_list_fld;
@@ -1859,7 +1700,7 @@ void item_inventory_drop_all(int64_t obj, bool a2)
         item_force_remove(item_obj, obj);
 
         if (!item_remove_side_effect_flag_consume()) {
-            if (a2) {
+            if (use_decaying_junk_pile) {
                 item_drop_into_junk_pile_with_decay(item_obj, loc);
             } else {
                 object_drop(item_obj, loc);
@@ -1869,7 +1710,7 @@ void item_inventory_drop_all(int64_t obj, bool a2)
 }
 
 // 0x463860
-void item_inventory_drop_or_destroy_summoned(int64_t obj, bool a2)
+void item_inventory_drop_or_destroy_summoned(int64_t obj, bool use_decaying_junk_pile)
 {
     int inventory_num_fld;
     int inventory_list_fld;
@@ -1906,7 +1747,7 @@ void item_inventory_drop_or_destroy_summoned(int64_t obj, bool a2)
         if (!item_remove_side_effect_flag_consume()) {
             if ((spell_flags & OSF_SUMMONED) == 0
                 && (item_flags & OIF_NO_DISPLAY) == 0) {
-                if (a2) {
+                if (use_decaying_junk_pile) {
                     item_drop_into_junk_pile_with_decay(item_obj, loc);
                 } else {
                     object_drop(item_obj, loc);
@@ -1920,7 +1761,7 @@ void item_inventory_drop_or_destroy_summoned(int64_t obj, bool a2)
 }
 
 // 0x4639E0
-void item_inventory_drop_invulnerable(int64_t obj, bool a2)
+void item_inventory_drop_invulnerable(int64_t obj, bool use_decaying_junk_pile)
 {
     int inventory_num_fld;
     int inventory_list_fld;
@@ -1954,7 +1795,7 @@ void item_inventory_drop_invulnerable(int64_t obj, bool a2)
         if ((obj_field_int32_get(item_obj, OBJ_F_FLAGS) & OF_INVULNERABLE) != 0) {
             item_force_remove(item_obj, obj);
 
-            if (a2) {
+            if (use_decaying_junk_pile) {
                 item_drop_into_junk_pile_with_decay(item_obj, loc);
             } else {
                 object_drop(item_obj, loc);
@@ -1964,7 +1805,7 @@ void item_inventory_drop_invulnerable(int64_t obj, bool a2)
 }
 
 // 0x463B30
-void item_inventory_destroy_except_persistent(int64_t obj, bool a2)
+void item_inventory_destroy_except_persistent(int64_t obj, bool preserve_persistent)
 {
     int inventory_num_fld;
     int inventory_list_fld;
@@ -1993,7 +1834,7 @@ void item_inventory_destroy_except_persistent(int64_t obj, bool a2)
     while (cnt > idx) {
         item_obj = obj_arrayfield_handle_get(obj, inventory_list_fld, idx);
 
-        if (a2 && (obj_field_int32_get(item_obj, OBJ_F_ITEM_FLAGS) & OIF_PERSISTENT) != 0) {
+        if (preserve_persistent && (obj_field_int32_get(item_obj, OBJ_F_ITEM_FLAGS) & OIF_PERSISTENT) != 0) {
             idx++;
         } else {
             item_force_remove(item_obj, obj);
@@ -2012,8 +1853,8 @@ void item_inventory_spawn_prepare(int64_t obj)
     TigRect obj_rect;
     ObjectList objects;
     ObjectNode* node;
-    bool v1;
-    int64_t v2;
+    bool no_active_inventory_owner;
+    int64_t substitute_inventory_owner;
 
     if (obj == OBJ_HANDLE_NULL) {
         return;
@@ -2048,15 +1889,15 @@ void item_inventory_spawn_prepare(int64_t obj)
             || obj_rect.y >= item_iso_content_rect.height + item_iso_content_rect.y
             || item_iso_content_rect.x >= obj_rect.x + obj_rect.width
             || item_iso_content_rect.y >= obj_rect.y + obj_rect.height) {
-            v1 = true;
+            no_active_inventory_owner = true;
             object_list_vicinity(obj, OBJ_TM_NPC, &objects);
             node = objects.head;
             while (node != NULL) {
                 if (critter_substitute_inventory_get(node->obj) == obj) {
-                    v2 = node->obj;
+                    substitute_inventory_owner = node->obj;
                     if (!critter_is_dead(node->obj)
                         && critter_pc_leader_get(node->obj) == OBJ_HANDLE_NULL) {
-                        v1 = false;
+                        no_active_inventory_owner = false;
                     }
                     break;
                 }
@@ -2064,8 +1905,8 @@ void item_inventory_spawn_prepare(int64_t obj)
             }
             object_list_destroy(&objects);
 
-            if (!v1) {
-                item_inventory_spawn_prepare(v2);
+            if (!no_active_inventory_owner) {
+                item_inventory_spawn_prepare(substitute_inventory_owner);
                 item_inventory_source_spawn(obj);
             }
         } else {
@@ -2330,7 +2171,7 @@ void item_identify_all(int64_t obj)
 }
 
 // 0x464470
-void item_inventory_parent_links_restore(int64_t obj, int* a2, int* a3)
+void item_inventory_parent_links_restore(int64_t obj, int* repaired_count, int* visited_count)
 {
     int obj_type;
     int inventory_num_fld;
@@ -2338,8 +2179,8 @@ void item_inventory_parent_links_restore(int64_t obj, int* a2, int* a3)
     int index;
     int cnt;
     int64_t item_obj;
-    int v1 = 0;
-    int v2 = 0;
+    int repaired_links = 0;
+    int visited_items = 0;
 
     obj_type = obj_field_int32_get(obj, OBJ_F_TYPE);
     if (obj_type == OBJ_TYPE_CONTAINER) {
@@ -2362,18 +2203,18 @@ void item_inventory_parent_links_restore(int64_t obj, int* a2, int* a3)
 
             if ((obj_field_int32_get(item_obj, OBJ_F_FLAGS) & OF_INVENTORY) == 0) {
                 object_pickup(item_obj, obj);
-                v2++;
+                visited_items++;
             }
             cnt--;
         }
     }
 
-    if (a2 != NULL) {
-        *a2 += v1;
+    if (repaired_count != NULL) {
+        *repaired_count += repaired_links;
     }
 
-    if (a3 != NULL) {
-        *a3 += v2;
+    if (visited_count != NULL) {
+        *visited_count += visited_items;
     }
 }
 
@@ -2383,8 +2224,8 @@ int item_total_attack(int64_t critter_obj)
     int64_t weapon_obj;
     int skill;
     int effectiveness;
-    int v2;
-    int v3;
+    int total_score_weight;
+    int weighted_attack_score;
     DamageType damage_type;
     int min_dam;
     int max_dam;
@@ -2397,8 +2238,8 @@ int item_total_attack(int64_t critter_obj)
         effectiveness = basic_skill_effectiveness(critter_obj, GET_BASIC_SKILL(skill), OBJ_HANDLE_NULL);
     }
 
-    v3 = effectiveness * item_weapon_effectiveness_score_weight;
-    v2 = item_weapon_effectiveness_score_weight;
+    weighted_attack_score = effectiveness * item_weapon_effectiveness_score_weight;
+    total_score_weight = item_weapon_effectiveness_score_weight;
 
     for (damage_type = 0; damage_type < DAMAGE_TYPE_COUNT; damage_type++) {
         item_weapon_damage(weapon_obj,
@@ -2409,29 +2250,29 @@ int item_total_attack(int64_t critter_obj)
             &min_dam,
             &max_dam);
 
-        v3 += item_damage_score_weights[damage_type] * ((min_dam + max_dam) / 2);
-        v2 += item_damage_score_weights[damage_type];
+        weighted_attack_score += item_damage_score_weights[damage_type] * ((min_dam + max_dam) / 2);
+        total_score_weight += item_damage_score_weights[damage_type];
     }
 
-    return v3 / (v2 + 6);
+    return weighted_attack_score / (total_score_weight + 6);
 }
 
 // 0x464700
 int item_total_defence(int64_t obj)
 {
-    int v1;
-    int v2;
+    int weighted_defence;
+    int total_score_weight;
     int resistance_type;
 
-    v1 = item_armor_class_score_weight * object_get_ac(obj, true);
-    v2 = item_armor_class_score_weight;
+    weighted_defence = item_armor_class_score_weight * object_get_ac(obj, true);
+    total_score_weight = item_armor_class_score_weight;
 
     for (resistance_type = 0; resistance_type < RESISTANCE_TYPE_COUNT; resistance_type++) {
-        v1 += item_resistance_score_weights[resistance_type] * object_get_resistance(obj, resistance_type, true);
-        v2 += item_resistance_score_weights[resistance_type];
+        weighted_defence += item_resistance_score_weights[resistance_type] * object_get_resistance(obj, resistance_type, true);
+        total_score_weight += item_resistance_score_weights[resistance_type];
     }
 
-    return 2 * (v1 / (v2 + 6));
+    return 2 * (weighted_defence / (total_score_weight + 6));
 }
 
 // 0x464780
@@ -2577,7 +2418,7 @@ bool item_wield_set(int64_t item_obj, int inventory_location)
     int64_t owner_obj;
     int64_t cur_item_obj;
     int saved_inventory_location;
-    int v1;
+    int inventory_insert_location;
 
     item_parent(item_obj, &owner_obj);
 
@@ -2600,13 +2441,13 @@ bool item_wield_set(int64_t item_obj, int inventory_location)
             item_remove(item_obj);
             item_remove(cur_item_obj);
 
-            if (item_check_insert(cur_item_obj, owner_obj, &v1) != ITEM_CANNOT_OK) {
+            if (item_check_insert(cur_item_obj, owner_obj, &inventory_insert_location) != ITEM_CANNOT_OK) {
                 item_insert(item_obj, owner_obj, saved_inventory_location);
                 item_insert(cur_item_obj, owner_obj, inventory_location);
                 return false;
             }
 
-            item_insert(cur_item_obj, owner_obj, v1);
+            item_insert(cur_item_obj, owner_obj, inventory_insert_location);
         } else {
             item_remove(item_obj);
         }
@@ -2641,7 +2482,7 @@ bool item_unequip(int64_t item_obj)
 {
     int inventory_location;
     int64_t owner_obj;
-    int v1;
+    int bag_location;
 
     inventory_location = item_inventory_location_get(item_obj);
     if (IS_WEAR_INV_LOC(inventory_location)) {
@@ -2650,12 +2491,12 @@ bool item_unequip(int64_t item_obj)
         }
 
         item_parent(item_obj, &owner_obj);
-        if (item_check_insert(item_obj, owner_obj, &v1) != ITEM_CANNOT_OK) {
+        if (item_check_insert(item_obj, owner_obj, &bag_location) != ITEM_CANNOT_OK) {
             return false;
         }
 
         item_remove(item_obj);
-        item_insert(item_obj, owner_obj, v1);
+        item_insert(item_obj, owner_obj, bag_location);
     }
 
     return true;
@@ -3118,66 +2959,10 @@ int64_t item_ammo_obj(int64_t obj, int ammo_type)
 }
 
 // 0x4658E0
-bool item_ammo_transfer(int64_t from_obj, int64_t to_obj, int qty, int ammo_type, int64_t ammo_obj)
-{
-    int remaining_qty;
-    int64_t to_ammo_obj;
-
-    if (qty == 0) {
-        return true;
-    }
-
-    if (tig_net_is_active()
-        && !tig_net_is_host()) {
-        return false;
-    }
-
-    if (from_obj != OBJ_HANDLE_NULL) {
-        if (ammo_obj == OBJ_HANDLE_NULL) {
-            ammo_obj = item_ammo_obj(from_obj, ammo_type);
-        }
-
-        if (ammo_obj != OBJ_HANDLE_NULL) {
-            remaining_qty = obj_field_int32_get(ammo_obj, OBJ_F_AMMO_QUANTITY);
-            if (remaining_qty < qty) {
-                return false;
-            }
-
-            if (to_obj != OBJ_HANDLE_NULL) {
-                object_script_execute(to_obj, ammo_obj, OBJ_HANDLE_NULL, SAP_INSERT_ITEM, 0);
-            }
-
-            if (remaining_qty == qty) {
-                object_destroy(ammo_obj);
-            } else {
-                obj_field_int32_set(ammo_obj, OBJ_F_AMMO_QUANTITY, remaining_qty - qty);
-            }
-        }
-    }
-
-    if (to_obj != OBJ_HANDLE_NULL) {
-        to_ammo_obj = item_ammo_obj(to_obj, ammo_type);
-        if (to_ammo_obj != OBJ_HANDLE_NULL) {
-            remaining_qty = obj_field_int32_get(to_ammo_obj, OBJ_F_AMMO_QUANTITY);
-            obj_field_int32_set(to_ammo_obj, OBJ_F_AMMO_QUANTITY, remaining_qty + qty);
-        } else {
-            to_ammo_obj = item_ammo_create(qty,
-                ammo_type,
-                obj_field_int64_get(to_obj, OBJ_F_LOCATION));
-            item_transfer(to_ammo_obj, to_obj);
-        }
-    }
-
-    item_inventory_change_notify(from_obj);
-    item_inventory_change_notify(to_obj);
-
-    return true;
-}
-
 // 0x465A40
 int64_t item_ammo_create(int quantity, int ammo_type, int64_t loc)
 {
-    int64_t ammo_obj;
+    int64_t ammo_obj = OBJ_HANDLE_NULL;
 
     if (mp_object_create(item_ammo_prototypes[ammo_type], loc, &ammo_obj)) {
         obj_field_int32_set(ammo_obj, OBJ_F_AMMO_QUANTITY, quantity);
@@ -3199,16 +2984,16 @@ size_t armor_coverage_type_get_name_length(int coverage_type)
 }
 
 // 0x465AE0
-bool item_critter_armor_art_id_build(int64_t a1, int64_t a2, tig_art_id_t* art_id_ptr)
+bool item_critter_armor_art_id_build(int64_t armor_obj, int64_t critter_obj, tig_art_id_t* art_id_ptr)
 {
     tig_art_id_t current_aid;
     tig_art_id_t use_aid_fragment;
     int subtype;
     tig_art_id_t aid;
 
-    if (a1 != OBJ_HANDLE_NULL) {
-        current_aid = obj_field_int32_get(a2, OBJ_F_CURRENT_AID);
-        use_aid_fragment = obj_field_int32_get(a1, OBJ_F_ITEM_USE_AID_FRAGMENT);
+    if (armor_obj != OBJ_HANDLE_NULL) {
+        current_aid = obj_field_int32_get(critter_obj, OBJ_F_CURRENT_AID);
+        use_aid_fragment = obj_field_int32_get(armor_obj, OBJ_F_ITEM_USE_AID_FRAGMENT);
         subtype = tig_art_item_id_subtype_get(use_aid_fragment);
         aid = tig_art_critter_id_armor_set(current_aid, subtype);
         if (tig_art_critter_id_armor_get(aid) != subtype) {
@@ -3219,15 +3004,15 @@ bool item_critter_armor_art_id_build(int64_t a1, int64_t a2, tig_art_id_t* art_i
         return true;
     }
 
-    current_aid = obj_field_int32_get(a2, OBJ_F_CURRENT_AID);
-    use_aid_fragment = obj_field_int32_get(a2, OBJ_F_AID);
+    current_aid = obj_field_int32_get(critter_obj, OBJ_F_CURRENT_AID);
+    use_aid_fragment = obj_field_int32_get(critter_obj, OBJ_F_AID);
     aid = tig_art_critter_id_armor_set(current_aid, TIG_ART_ARMOR_TYPE_UNDERWEAR);
     *art_id_ptr = tig_art_id_palette_set(aid, tig_art_id_palette_get(use_aid_fragment));
     return true;
 }
 
 // 0x465BA0
-int item_armor_ac_adj(int64_t item_obj, int64_t owner_obj, bool a3)
+int item_armor_ac_adj(int64_t item_obj, int64_t owner_obj, bool require_identification)
 {
     int ac_adj;
     int magic_ac_adj;
@@ -3238,7 +3023,7 @@ int item_armor_ac_adj(int64_t item_obj, int64_t owner_obj, bool a3)
 
     ac_adj = obj_field_int32_get(item_obj, OBJ_F_ARMOR_AC_ADJ);
 
-    if (!a3
+    if (!require_identification
         || -obj_field_int32_get(item_obj, OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY) > 0
         || item_is_identified(item_obj)) {
         magic_ac_adj = obj_field_int32_get(item_obj, OBJ_F_ARMOR_MAGIC_AC_ADJ);
@@ -3404,19 +3189,19 @@ int item_weapon_min_strength(int64_t item_obj, int64_t critter_obj)
 // TODO: Lots of jumps, check.
 //
 // 0x465F70
-void item_weapon_damage(int64_t weapon_obj, int64_t critter_obj, int damage_type, int skill, bool a5, int* min_dam_ptr, int* max_dam_ptr)
+void item_weapon_damage(int64_t weapon_obj, int64_t critter_obj, int damage_type, int skill, bool ignore_weapon_effects, int* min_dam_ptr, int* max_dam_ptr)
 {
     int min_dam;
     int max_dam;
     int massive_dam;
     int bonus_dam;
-    int v1;
+    int melee_damage_range_percent;
     int64_t gauntlet_obj;
     int unarmed_dam;
 
     if (skill == SKILL_MELEE) {
         bonus_dam = stat_level_get(critter_obj, STAT_DAMAGE_BONUS);
-        v1 = skill_melee_damage_range_percent(critter_obj);
+        melee_damage_range_percent = skill_melee_damage_range_percent(critter_obj);
     }
 
     if (weapon_obj != OBJ_HANDLE_NULL) {
@@ -3456,8 +3241,8 @@ void item_weapon_damage(int64_t weapon_obj, int64_t critter_obj, int damage_type
     }
 
     if (skill == SKILL_MELEE) {
-        if (v1 != 100) {
-            max_dam = min_dam + (v1 * (max_dam - min_dam) + 50) / 100;
+        if (melee_damage_range_percent != 100) {
+            max_dam = min_dam + (melee_damage_range_percent * (max_dam - min_dam) + 50) / 100;
         }
     }
 
@@ -3482,7 +3267,7 @@ void item_weapon_damage(int64_t weapon_obj, int64_t critter_obj, int damage_type
         }
     }
 
-    if (weapon_obj != OBJ_HANDLE_NULL && !a5) {
+    if (weapon_obj != OBJ_HANDLE_NULL && !ignore_weapon_effects) {
         if (obj_field_int32_get(weapon_obj, OBJ_F_TYPE) == OBJ_TYPE_WEAPON) {
             int adj = obj_arrayfield_int32_get(weapon_obj, OBJ_F_WEAPON_MAGIC_DAMAGE_ADJ_IDX, damage_type);
             adj = item_adjust_magic(weapon_obj, critter_obj, adj);
@@ -3539,11 +3324,11 @@ void item_inventory_slots_get(int64_t obj, int* slots)
     if (obj_field_int32_get(obj, OBJ_F_TYPE) == OBJ_TYPE_CONTAINER) {
         inventory_num_fld = OBJ_F_CONTAINER_INVENTORY_NUM;
         inventory_list_fld = OBJ_F_CONTAINER_INVENTORY_LIST_IDX;
-        capacity = 960;
+        capacity = INVENTORY_CONTAINER_CELLS;
     } else {
         inventory_num_fld = OBJ_F_CRITTER_INVENTORY_NUM;
         inventory_list_fld = OBJ_F_CRITTER_INVENTORY_LIST_IDX;
-        capacity = 120;
+        capacity = INVENTORY_CRITTER_CELLS;
     }
 
     memset(slots, 0, sizeof(*slots) * capacity);
@@ -3552,12 +3337,12 @@ void item_inventory_slots_get(int64_t obj, int* slots)
     for (idx = 0; idx < cnt; idx++) {
         item_obj = obj_arrayfield_handle_get(obj, inventory_list_fld, idx);
         inventory_location = item_inventory_location_get(item_obj);
-        item_inventory_slots_set(item_obj, inventory_location, slots, idx + 1);
+        item_inventory_slots_set(item_obj, inventory_location, slots, capacity, idx + 1);
     }
 }
 
 // 0x466310
-void item_inventory_slots_set(int64_t item_obj, int inventory_location, int* slots, int value)
+void item_inventory_slots_set(int64_t item_obj, int inventory_location, int* slots, int capacity, int value)
 {
     int x;
     int y;
@@ -3574,6 +3359,9 @@ void item_inventory_slots_set(int64_t item_obj, int inventory_location, int* slo
 
     item_inv_icon_size(item_obj, &width, &height);
 
+    if (!inventory_grid_fits(inventory_location, width, height, capacity)) {
+        return;
+    }
     slots += inventory_location;
 
     for (y = 0; y < height; y++) {
@@ -3601,7 +3389,11 @@ bool item_inventory_slots_has_room_for(int64_t item_obj, int64_t parent_obj, int
         return false;
     }
 
-    num_rows = obj_field_int32_get(parent_obj, OBJ_F_TYPE) == OBJ_TYPE_CONTAINER ? 96 : 12;
+    num_rows = obj_field_int32_get(parent_obj, OBJ_F_TYPE) == OBJ_TYPE_CONTAINER ? INVENTORY_CONTAINER_ROWS : INVENTORY_CRITTER_ROWS;
+
+    if (inventory_location < 0 || inventory_location >= num_rows * INVENTORY_COLUMNS) {
+        return false;
+    }
 
     if (item_stack_counter_field(item_obj, NULL) != -1) {
         existing_item_obj = item_find_first_matching_prototype(parent_obj, item_obj);
@@ -3644,46 +3436,6 @@ int item_find_free_inv_loc_for_insertion(int64_t item_obj, int64_t parent_obj)
 }
 
 // 0x466510
-int item_check_insert(int64_t item_obj, int64_t parent_obj, int* inventory_location_ptr)
-{
-    int inventory_location;
-
-    inventory_location = -1;
-    if (obj_type_is_critter(obj_field_int32_get(parent_obj, OBJ_F_TYPE))) {
-        if (obj_field_int32_get(item_obj, OBJ_F_TYPE) == OBJ_TYPE_KEY
-            && item_find_key_ring(parent_obj) != OBJ_HANDLE_NULL) {
-            inventory_location = 0;
-        } else {
-            if (item_total_weight(parent_obj) + item_weight(item_obj, parent_obj) > stat_level_get(parent_obj, STAT_CARRY_WEIGHT)) {
-                return ITEM_CANNOT_TOO_HEAVY;
-            }
-        }
-
-        if (obj_field_int32_get(item_obj, OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY) < 0
-            && background_get(parent_obj) == BACKGROUND_TECHNOPHOBIA) {
-            return ITEM_CANNOT_PICKUP_TECH_ITEMS;
-        }
-    }
-
-    if (item_stack_counter_field(item_obj, NULL) != -1
-        && item_find_first_matching_prototype(parent_obj, item_obj) != OBJ_HANDLE_NULL) {
-        inventory_location = 0;
-    } else {
-        if (inventory_location == -1) {
-            inventory_location = item_find_free_inv_loc_for_insertion(item_obj, parent_obj);
-            if (inventory_location == -1) {
-                return ITEM_CANNOT_NO_ROOM;
-            }
-        }
-    }
-
-    if (inventory_location_ptr != NULL) {
-        *inventory_location_ptr = inventory_location;
-    }
-
-    return ITEM_CANNOT_OK;
-}
-
 // 0x466640
 void item_insert(int64_t item_obj, int64_t parent_obj, int inventory_location)
 {
@@ -3819,7 +3571,7 @@ void item_key_ring_add_key(int64_t key_obj, int64_t key_ring_obj)
 
 // Merges an incoming ring into an existing ring, or collects loose inventory keys into it.
 // 0x466AA0
-void item_key_ring_collect_inventory(int64_t critter_obj, int64_t a2)
+void item_key_ring_collect_inventory(int64_t critter_obj, int64_t destination_key_ring_obj)
 {
     int64_t key_ring_obj;
     int cnt;
@@ -3830,26 +3582,26 @@ void item_key_ring_collect_inventory(int64_t critter_obj, int64_t a2)
     key_ring_obj = item_find_key_ring(critter_obj);
     if (key_ring_obj != OBJ_HANDLE_NULL) {
         index = obj_arrayfield_length_get(key_ring_obj, OBJ_F_KEY_RING_LIST_IDX);
-        cnt = obj_arrayfield_length_get(a2, OBJ_F_KEY_RING_LIST_IDX);
+        cnt = obj_arrayfield_length_get(destination_key_ring_obj, OBJ_F_KEY_RING_LIST_IDX);
         while (cnt > 0) {
-            key_id = obj_arrayfield_uint32_get(a2, OBJ_F_KEY_RING_LIST_IDX, cnt - 1);
-            obj_arrayfield_length_set(a2, OBJ_F_KEY_RING_LIST_IDX, cnt - 1);
+            key_id = obj_arrayfield_uint32_get(destination_key_ring_obj, OBJ_F_KEY_RING_LIST_IDX, cnt - 1);
+            obj_arrayfield_length_set(destination_key_ring_obj, OBJ_F_KEY_RING_LIST_IDX, cnt - 1);
             obj_arrayfield_uint32_set(key_ring_obj, OBJ_F_KEY_RING_LIST_IDX, index++, key_id);
             cnt--;
         }
 
         item_key_ring_update_icon(key_ring_obj);
-        item_key_ring_update_icon(a2);
+        item_key_ring_update_icon(destination_key_ring_obj);
     } else {
         cnt = obj_field_int32_get(critter_obj, OBJ_F_CRITTER_INVENTORY_NUM);
         while (cnt > 0) {
             item_obj = obj_arrayfield_handle_get(critter_obj, OBJ_F_CRITTER_INVENTORY_LIST_IDX, cnt - 1);
             if (obj_field_int32_get(item_obj, OBJ_F_TYPE) == OBJ_TYPE_KEY) {
-                item_key_ring_add_key(item_obj, a2);
+                item_key_ring_add_key(item_obj, destination_key_ring_obj);
             }
             cnt--;
         }
-        item_key_ring_update_icon(a2);
+        item_key_ring_update_icon(destination_key_ring_obj);
     }
 }
 
@@ -3875,7 +3627,11 @@ void item_inventory_change_notify(int64_t obj)
         return;
     }
 
-    anim_speed_recalc(obj);
+    if (obj_type_is_critter(obj_field_int32_get(obj, OBJ_F_TYPE))) {
+        critter_encumbrance_level_recalc(obj, critter_encumbrance_level_get(obj));
+    } else {
+        anim_speed_recalc(obj);
+    }
 
     if (player_is_local_pc_obj(obj)) {
         ui_counters_refresh();
@@ -4000,9 +3756,9 @@ void item_arrange_inventory(int64_t parent_obj, bool vertical)
     int cnt;
     int idx;
     int64_t item_obj;
-    int64_t items[960];
+    int64_t* items;
     int slots[960];
-    int inventory_locations[960];
+    int* inventory_locations;
     int inventory_location;
 
     if (obj_field_int32_get(parent_obj, OBJ_F_TYPE) == OBJ_TYPE_CONTAINER) {
@@ -4018,6 +3774,8 @@ void item_arrange_inventory(int64_t parent_obj, bool vertical)
         return;
     }
 
+    items = (int64_t*)MALLOC(sizeof(*items) * cnt);
+    inventory_locations = (int*)MALLOC(sizeof(*inventory_locations) * cnt);
     for (idx = 0; idx < cnt; idx++) {
         items[idx] = obj_arrayfield_handle_get(parent_obj, inventory_list_fld, idx);
     }
@@ -4035,6 +3793,8 @@ void item_arrange_inventory(int64_t parent_obj, bool vertical)
     }
 
     if (cnt == 0) {
+        FREE(items);
+        FREE(inventory_locations);
         return;
     }
 
@@ -4064,16 +3824,21 @@ void item_arrange_inventory(int64_t parent_obj, bool vertical)
             ? find_free_inv_loc_vertical(items[idx], parent_obj, slots)
             : find_free_inv_loc_horizontal(items[idx], parent_obj, slots);
         if (inventory_locations[idx] == -1) {
+            FREE(items);
+            FREE(inventory_locations);
             return;
         }
 
-        item_inventory_slots_set(items[idx], inventory_locations[idx], slots, 1);
+        item_inventory_slots_set(items[idx], inventory_locations[idx], slots,
+            obj_field_int32_get(parent_obj, OBJ_F_TYPE) == OBJ_TYPE_CONTAINER ? INVENTORY_CONTAINER_CELLS : INVENTORY_CRITTER_CELLS, 1);
     }
 
     for (idx = 0; idx < cnt; idx++) {
         obj_field_int32_set(items[idx], OBJ_F_ITEM_INV_LOCATION, inventory_locations[idx]);
     }
 
+    FREE(items);
+    FREE(inventory_locations);
     mp_ui_update_inven(parent_obj);
 }
 
@@ -4176,9 +3941,9 @@ int find_free_inv_loc_horizontal(int64_t item_obj, int64_t parent_obj, int* slot
     item_inv_icon_size(item_obj, &width, &height);
 
     if (obj_field_int32_get(parent_obj, OBJ_F_TYPE) == OBJ_TYPE_CONTAINER) {
-        rows = 96;
+        rows = INVENTORY_CONTAINER_ROWS;
     } else {
-        rows = 12;
+        rows = INVENTORY_CRITTER_ROWS;
     }
 
     max_x = 10 - width;
@@ -4226,9 +3991,9 @@ int find_free_inv_loc_vertical(int64_t item_obj, int64_t parent_obj, int* slots)
     item_inv_icon_size(item_obj, &width, &height);
 
     if (obj_field_int32_get(parent_obj, OBJ_F_TYPE) == OBJ_TYPE_CONTAINER) {
-        rows = 96;
+        rows = INVENTORY_CONTAINER_ROWS;
     } else {
-        rows = 12;
+        rows = INVENTORY_CRITTER_ROWS;
     }
 
     max_x = 10 - width;

@@ -14,7 +14,7 @@ void skill_ui_action_activate(int64_t obj, int type);
 void skill_ui_preprocess(int64_t obj, int type);
 void skill_ui_cancel(void);
 void skill_ui_apply(TargetDescriptor* td);
-void skill_ui_activate(TargetDescriptor* td, int64_t obj, int a3);
+void skill_ui_activate(TargetDescriptor* td, int64_t obj, int requested_skill);
 int skill_ui_action_skill_get(int index);
 int skill_ui_target_skill_resolve(int skill, TargetDescriptor* td);
 char* skill_ui_action_name_get(int index);

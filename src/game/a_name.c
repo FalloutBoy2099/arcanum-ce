@@ -29,7 +29,7 @@ typedef struct WallStructure {
     /* 001C */ int wall_proto;
 } WallStructure;
 
-static bool build_tile_file_name(const char* name1, const char* name2, int a3, int a4, char* fname, size_t maxlen);
+static bool build_tile_file_name(const char* name1, const char* name2, int transition_mask, int variant, char* fname, size_t maxlen);
 static bool a_name_tile_base_filename_get(int num, int type, int flippable, char** name_ptr);
 static bool a_name_tile_fname_to_aid(const char* name, tig_art_id_t* art_id_ptr);
 static bool count_tile_names(void);
@@ -37,11 +37,11 @@ static bool load_tile_names(void);
 static bool load_tile_edges(void);
 static bool a_name_outdoor_tile_pair_parse(char* name, int* first_tile_index, int* second_tile_index);
 static bool a_name_outdoor_tile_index_find(const char* name, int* index_ptr);
-static bool a_name_tile_transition_first_step_find(int a1, int a2, bool* a3, int* a4);
-static bool a_name_tile_transition_path_search(int* a1, int a2, int a3, bool* a4);
+static bool a_name_tile_transition_first_step_find(int from_tile, int to_tile, bool* transitions, int* next_tile_ptr);
+static bool a_name_tile_transition_path_search(int* path, int path_depth, int destination_index, bool* adjacency_matrix);
 static tig_art_id_t a_name_tile_transition_base_get(tig_art_id_t a, tig_art_id_t b);
 static uint8_t a_name_tile_id_flags(tig_art_id_t aid);
-static int8_t a_name_tile_variant_count_scan(int a1, int a2, int a3, int a4, int a5, int a6);
+static int8_t a_name_tile_variant_count_scan(int first_tile_index, int second_tile_index, int transition_mask, int outdoor, int first_flippable, int second_flippable);
 static bool a_name_tile_variant_cache_load(void);
 static bool a_name_tile_variant_cache_save(void);
 static int a_name_tile_art_files_count(void);
@@ -257,8 +257,8 @@ bool a_name_tile_aid_to_fname(tig_art_id_t aid, char* fname, size_t maxlen)
 {
     int num1;
     int num2;
-    int v1;
-    int v2;
+    int transition_mask;
+    int variant;
     int type;
     int flippable1;
     int flippable2;
@@ -273,8 +273,8 @@ bool a_name_tile_aid_to_fname(tig_art_id_t aid, char* fname, size_t maxlen)
 
     num1 = tig_art_tile_id_num1_get(aid);
     num2 = tig_art_tile_id_num2_get(aid);
-    v1 = tig_art_tile_id_transition_mask_get(aid);
-    v2 = tig_art_tile_id_variant_get(aid);
+    transition_mask = tig_art_tile_id_transition_mask_get(aid);
+    variant = tig_art_tile_id_variant_get(aid);
     type = tig_art_tile_id_type_get(aid);
     flippable1 = tig_art_tile_id_flippable1_get(aid);
     flippable2 = tig_art_tile_id_flippable2_get(aid);
@@ -284,72 +284,72 @@ bool a_name_tile_aid_to_fname(tig_art_id_t aid, char* fname, size_t maxlen)
         return false;
     }
 
-    return build_tile_file_name(name1, name2, v1, v2, fname, maxlen);
+    return build_tile_file_name(name1, name2, transition_mask, variant, fname, maxlen);
 }
 
 // 0x4EAF70
-bool build_tile_file_name(const char* name1, const char* name2, int a3, int a4, char* fname, size_t maxlen)
+bool build_tile_file_name(const char* name1, const char* name2, int transition_mask, int variant, char* fname, size_t maxlen)
 {
     // 0x5BB4E4
     static const char tile_transition_filename_codes[] = "06b489237ea5dc10";
 
-    int v1;
-    int v2;
+    int first_tile_index;
+    int second_tile_index;
 
-    if (a4 >= 8) {
-        a4 -= 8;
+    if (variant >= 8) {
+        variant -= 8;
     }
 
-    if (a3 == 15 || SDL_strcasecmp(name1, name2) == 0) {
+    if (transition_mask == 15 || SDL_strcasecmp(name1, name2) == 0) {
         snprintf(fname, maxlen,
             "art\\tile\\%sbse%c%c.art",
             name1,
-            tile_transition_filename_codes[a3],
-            a4 + 'a');
+            tile_transition_filename_codes[transition_mask],
+            variant + 'a');
         return true;
     }
 
-    if (a3 == 0) {
+    if (transition_mask == 0) {
         snprintf(fname, maxlen,
             "art\\tile\\%sbse%c%c.art",
             name2,
             tile_transition_filename_codes[0],
-            a4 + 'a');
+            variant + 'a');
         return true;
     }
 
-    if (!a_name_outdoor_tile_index_find(name1, &v1)) {
+    if (!a_name_outdoor_tile_index_find(name1, &first_tile_index)) {
         snprintf(fname, maxlen,
             "art\\tile\\%sbse%c%c.art",
             name1,
-            tile_transition_filename_codes[a3],
-            a4 + 'a');
+            tile_transition_filename_codes[transition_mask],
+            variant + 'a');
         return true;
     }
 
-    if (!a_name_outdoor_tile_index_find(name2, &v2)) {
+    if (!a_name_outdoor_tile_index_find(name2, &second_tile_index)) {
         snprintf(fname, maxlen,
             "art\\tile\\%sbse%c%c.art",
             name2,
-            tile_transition_filename_codes[15 - a3],
-            a4 + 'a');
+            tile_transition_filename_codes[15 - transition_mask],
+            variant + 'a');
         return true;
     }
 
-    if (v1 < v2) {
+    if (first_tile_index < second_tile_index) {
         snprintf(fname, maxlen,
             "art\\tile\\%s%s%c%c.art",
             name1,
             name2,
-            tile_transition_filename_codes[a3],
-            a4 + 'a');
+            tile_transition_filename_codes[transition_mask],
+            variant + 'a');
     } else {
         snprintf(fname, maxlen,
             "art\\tile\\%s%s%c%c.art",
             name2,
             name1,
-            tile_transition_filename_codes[15 - a3],
-            a4 + 'a');
+            tile_transition_filename_codes[15 - transition_mask],
+            variant + 'a');
     }
     return true;
 }
@@ -436,6 +436,7 @@ bool load_tile_names(void)
 {
     MesFileEntry mes_file_entry;
     uint8_t flags;
+    int previous_category = -1;
     char* pch;
     int sound_type;
     int index;
@@ -445,15 +446,15 @@ bool load_tile_names(void)
     indoor_flippable_tile_names = (char**)MALLOC(sizeof(char*) * num_indoor_flippable_names);
     indoor_non_flippable_tile_names = (char**)MALLOC(sizeof(char*) * num_indoor_non_flippable_names);
 
-    outdoor_flippable_tile_flags = (uint8_t*)MALLOC(sizeof(uint8_t*) * num_outdoor_flippable_names);
-    outdoor_non_flippable_tile_flags = (uint8_t*)MALLOC(sizeof(uint8_t*) * num_outdoor_non_flippable_names);
-    indoor_flippable_tile_flags = (uint8_t*)MALLOC(sizeof(uint8_t*) * num_indoor_flippable_names);
-    indoor_non_flippable_tile_flags = (uint8_t*)MALLOC(sizeof(uint8_t*) * num_indoor_non_flippable_names);
+    outdoor_flippable_tile_flags = (uint8_t*)MALLOC(sizeof(*outdoor_flippable_tile_flags) * num_outdoor_flippable_names);
+    outdoor_non_flippable_tile_flags = (uint8_t*)MALLOC(sizeof(*outdoor_non_flippable_tile_flags) * num_outdoor_non_flippable_names);
+    indoor_flippable_tile_flags = (uint8_t*)MALLOC(sizeof(*indoor_flippable_tile_flags) * num_indoor_flippable_names);
+    indoor_non_flippable_tile_flags = (uint8_t*)MALLOC(sizeof(*indoor_non_flippable_tile_flags) * num_indoor_non_flippable_names);
 
-    outdoor_flippable_tile_sounds = (int*)MALLOC(sizeof(int*) * num_outdoor_flippable_names);
-    outdoor_non_flippable_tile_sounds = (int*)MALLOC(sizeof(char*) * num_outdoor_non_flippable_names);
-    indoor_flippable_tile_sounds = (int*)MALLOC(sizeof(char*) * num_indoor_flippable_names);
-    indoor_non_flippable_tile_sounds = (int*)MALLOC(sizeof(char*) * num_indoor_non_flippable_names);
+    outdoor_flippable_tile_sounds = (int*)MALLOC(sizeof(*outdoor_flippable_tile_sounds) * num_outdoor_flippable_names);
+    outdoor_non_flippable_tile_sounds = (int*)MALLOC(sizeof(*outdoor_non_flippable_tile_sounds) * num_outdoor_non_flippable_names);
+    indoor_flippable_tile_sounds = (int*)MALLOC(sizeof(*indoor_flippable_tile_sounds) * num_indoor_flippable_names);
+    indoor_non_flippable_tile_sounds = (int*)MALLOC(sizeof(*indoor_non_flippable_tile_sounds) * num_indoor_non_flippable_names);
 
     mes_file_entry.num = 0;
     if (!mes_search(tilename_mes_file, &mes_file_entry)) {
@@ -502,6 +503,11 @@ bool load_tile_names(void)
             sound_type = atoi(mes_file_entry.str + 3);
         }
 
+        int category = mes_file_entry.num / 100;
+        if (category != previous_category) {
+            index = 0;
+            previous_category = category;
+        }
         if (mes_file_entry.num < 100) {
             outdoor_flippable_tile_flags[index] = flags;
             outdoor_flippable_tile_names[index] = mes_file_entry.str;
@@ -544,11 +550,11 @@ bool load_tile_names(void)
 bool load_tile_edges(void)
 {
     MesFileEntry mes_file_entry;
-    bool* v1;
+    bool* adjacency_matrix;
     int cnt;
-    int v2;
-    int v3;
-    int v4;
+    int first_tile_index;
+    int second_tile_index;
+    int first_step_index;
 
     mes_file_entry.num = 400;
     if (!mes_search(tilename_mes_file, &mes_file_entry)) {
@@ -556,36 +562,36 @@ bool load_tile_edges(void)
     }
 
     cnt = num_outdoor_non_flippable_names + num_outdoor_flippable_names;
-    v1 = (bool*)MALLOC(sizeof(*v1) * cnt * cnt);
+    adjacency_matrix = (bool*)MALLOC(sizeof(*adjacency_matrix) * cnt * cnt);
 
-    for (v2 = 0; v2 < cnt; v2++) {
-        for (v3 = 0; v3 < cnt; v3++) {
-            v1[cnt * v2 + v3] = false;
+    for (first_tile_index = 0; first_tile_index < cnt; first_tile_index++) {
+        for (second_tile_index = 0; second_tile_index < cnt; second_tile_index++) {
+            adjacency_matrix[cnt * first_tile_index + second_tile_index] = false;
         }
     }
 
     do {
-        if (!a_name_outdoor_tile_pair_parse(mes_file_entry.str, &v2, &v3)) {
-            FREE(v1);
+        if (!a_name_outdoor_tile_pair_parse(mes_file_entry.str, &first_tile_index, &second_tile_index)) {
+            FREE(adjacency_matrix);
             return false;
         }
 
-        v1[cnt * v3 + v2] = true;
-        v1[cnt * v2 + v3] = true;
+        adjacency_matrix[cnt * second_tile_index + first_tile_index] = true;
+        adjacency_matrix[cnt * first_tile_index + second_tile_index] = true;
     } while (mes_find_next(tilename_mes_file, &mes_file_entry));
 
     a_name_outdoor_tile_transition_next_steps = MALLOC(sizeof(*a_name_outdoor_tile_transition_next_steps) * cnt * cnt);
 
-    for (v2 = 0; v2 < cnt; v2++) {
-        for (v3 = 0; v3 < cnt; v3++) {
-            if (!a_name_tile_transition_first_step_find(v2, v3, v1, &v4)) {
-                FREE(v1);
+    for (first_tile_index = 0; first_tile_index < cnt; first_tile_index++) {
+        for (second_tile_index = 0; second_tile_index < cnt; second_tile_index++) {
+            if (!a_name_tile_transition_first_step_find(first_tile_index, second_tile_index, adjacency_matrix, &first_step_index)) {
+                FREE(adjacency_matrix);
                 return false;
             }
         }
     }
 
-    FREE(v1);
+    FREE(adjacency_matrix);
 
     return true;
 }
@@ -594,7 +600,7 @@ bool load_tile_edges(void)
 bool a_name_outdoor_tile_pair_parse(char* name, int* first_tile_index, int* second_tile_index)
 {
     char ch;
-    bool v1;
+    bool first_tile_found;
 
     if (strlen(name) != 6) {
         return false;
@@ -602,10 +608,10 @@ bool a_name_outdoor_tile_pair_parse(char* name, int* first_tile_index, int* seco
 
     ch = name[3];
     name[3] = '\0';
-    v1 = a_name_outdoor_tile_index_find(name, first_tile_index);
+    first_tile_found = a_name_outdoor_tile_index_find(name, first_tile_index);
     name[3] = ch;
 
-    if (!v1) {
+    if (!first_tile_found) {
         return false;
     }
 
@@ -635,51 +641,51 @@ bool a_name_outdoor_tile_index_find(const char* name, int* index_ptr)
 }
 
 // 0x4EB860
-bool a_name_tile_transition_first_step_find(int a1, int a2, bool* a3, int* a4)
+bool a_name_tile_transition_first_step_find(int from_tile, int to_tile, bool* transitions, int* next_tile_ptr)
 {
     bool rc;
-    int* v1;
+    int* path;
 
-    if (a1 == a2) {
-        *a4 = a1;
+    if (from_tile == to_tile) {
+        *next_tile_ptr = from_tile;
         return true;
     }
 
-    v1 = (int*)MALLOC(sizeof(int) * (num_outdoor_non_flippable_names + num_outdoor_flippable_names));
-    v1[0] = a1;
-    rc = a_name_tile_transition_path_search(v1, 0, a2, a3);
-    *a4 = v1[1];
-    FREE(v1);
+    path = (int*)MALLOC(sizeof(int) * (num_outdoor_non_flippable_names + num_outdoor_flippable_names));
+    path[0] = from_tile;
+    rc = a_name_tile_transition_path_search(path, 0, to_tile, transitions);
+    *next_tile_ptr = path[1];
+    FREE(path);
 
     return rc;
 }
 
 // 0x4EB8D0
-bool a_name_tile_transition_path_search(int* a1, int a2, int a3, bool* a4)
+bool a_name_tile_transition_path_search(int* path, int path_depth, int destination_index, bool* adjacency_matrix)
 {
     int cnt;
     int index;
     int offset;
-    int v1;
+    int visited_index;
 
     cnt = num_outdoor_non_flippable_names + num_outdoor_flippable_names;
 
     offset = 0;
     for (index = 0; index < cnt; index++) {
-        if (a4[offset + a1[a2]]) {
-            for (v1 = 0; v1 <= a2; v1++) {
-                if (index == a1[v1]) {
+        if (adjacency_matrix[offset + path[path_depth]]) {
+            for (visited_index = 0; visited_index <= path_depth; visited_index++) {
+                if (index == path[visited_index]) {
                     break;
                 }
             }
 
-            if (v1 > a2) {
-                a1[a2 + 1] = index;
-                if (index == a3) {
+            if (visited_index > path_depth) {
+                path[path_depth + 1] = index;
+                if (index == destination_index) {
                     return true;
                 }
 
-                if (a_name_tile_transition_path_search(a1, a2 + 1, a3, a4)) {
+                if (a_name_tile_transition_path_search(path, path_depth + 1, destination_index, adjacency_matrix)) {
                     return true;
                 }
             }
@@ -694,9 +700,9 @@ bool a_name_tile_transition_path_search(int* a1, int a2, int a3, bool* a4)
 // 0x4EB970
 tig_art_id_t a_name_tile_transition_base_get(tig_art_id_t a, tig_art_id_t b)
 {
-    int v1;
-    int v2;
-    int v3;
+    int first_tile_index;
+    int second_tile_index;
+    int transition_tile_index;
     tig_art_id_t art_id;
 
     if (!tig_art_tile_id_type_get(a)) {
@@ -707,22 +713,22 @@ tig_art_id_t a_name_tile_transition_base_get(tig_art_id_t a, tig_art_id_t b)
         return b;
     }
 
-    v1 = tig_art_tile_id_num1_get(a);
+    first_tile_index = tig_art_tile_id_num1_get(a);
     if (!tig_art_tile_id_flippable1_get(a)) {
-        v1 += num_outdoor_flippable_names;
+        first_tile_index += num_outdoor_flippable_names;
     }
 
-    v2 = tig_art_tile_id_num1_get(b);
+    second_tile_index = tig_art_tile_id_num1_get(b);
     if (!tig_art_tile_id_flippable1_get(b)) {
-        v2 += num_outdoor_flippable_names;
+        second_tile_index += num_outdoor_flippable_names;
     }
 
-    v3 = a_name_outdoor_tile_transition_next_steps[v2 + v1 * (num_outdoor_flippable_names + num_outdoor_non_flippable_names)];
-    if (v3 < num_outdoor_flippable_names) {
-        tig_art_tile_id_create(v3, v3, 15, 0, 1, 1, 1, 0, &art_id);
+    transition_tile_index = a_name_outdoor_tile_transition_next_steps[second_tile_index + first_tile_index * (num_outdoor_flippable_names + num_outdoor_non_flippable_names)];
+    if (transition_tile_index < num_outdoor_flippable_names) {
+        tig_art_tile_id_create(transition_tile_index, transition_tile_index, 15, 0, 1, 1, 1, 0, &art_id);
     } else {
-        v3 -= num_outdoor_flippable_names;
-        tig_art_tile_id_create(v3, v3, 15, 0, 1, 0, 0, 0, &art_id);
+        transition_tile_index -= num_outdoor_flippable_names;
+        tig_art_tile_id_create(transition_tile_index, transition_tile_index, 15, 0, 1, 0, 0, 0, &art_id);
     }
 
     return art_id;
@@ -841,47 +847,47 @@ int a_name_tile_sound(tig_art_id_t aid)
 void a_name_tile_variant_counts_init(void)
 {
     int index;
-    int v1;
-    int v2;
-    int v3;
+    int transition_mask;
+    int first_tile_index;
+    int second_tile_index;
 
     for (index = 0; index < 7; index++) {
         a_name_tile_variant_counts[index] = (uint8_t*)MALLOC(a_name_tile_variant_cache_sizes[index]);
     }
 
     if (!a_name_tile_variant_cache_load()) {
-        for (v1 = 0; v1 < 16; v1++) {
+        for (transition_mask = 0; transition_mask < 16; transition_mask++) {
             for (index = 0; index < num_outdoor_flippable_names; index++) {
-                a_name_tile_variant_counts[0][v1 * num_outdoor_flippable_names + index] = a_name_tile_variant_count_scan(index, index, v1, 1, 1, 1);
+                a_name_tile_variant_counts[0][transition_mask * num_outdoor_flippable_names + index] = a_name_tile_variant_count_scan(index, index, transition_mask, 1, 1, 1);
             }
 
             for (index = 0; index < num_outdoor_flippable_names; index++) {
-                a_name_tile_variant_counts[1][v1 * num_outdoor_non_flippable_names + index] = a_name_tile_variant_count_scan(index, index, v1, 1, 0, 0);
+                a_name_tile_variant_counts[1][transition_mask * num_outdoor_non_flippable_names + index] = a_name_tile_variant_count_scan(index, index, transition_mask, 1, 0, 0);
             }
 
             for (index = 0; index < num_indoor_flippable_names; index++) {
-                a_name_tile_variant_counts[2][v1 * num_indoor_flippable_names + index] = a_name_tile_variant_count_scan(index, index, v1, 0, 1, 1);
+                a_name_tile_variant_counts[2][transition_mask * num_indoor_flippable_names + index] = a_name_tile_variant_count_scan(index, index, transition_mask, 0, 1, 1);
             }
 
             for (index = 0; index < num_indoor_non_flippable_names; index++) {
-                a_name_tile_variant_counts[3][v1 * num_indoor_non_flippable_names + index] = a_name_tile_variant_count_scan(index, index, v1, 0, 0, 0);
+                a_name_tile_variant_counts[3][transition_mask * num_indoor_non_flippable_names + index] = a_name_tile_variant_count_scan(index, index, transition_mask, 0, 0, 0);
             }
 
-            for (v2 = 0; v2 < num_outdoor_flippable_names; v2++) {
-                for (v3 = 0; v3 < num_outdoor_flippable_names; v3++) {
-                    a_name_tile_variant_counts[4][(v1 * num_outdoor_flippable_names + v3) * num_outdoor_flippable_names + v2] = a_name_tile_variant_count_scan(v2, v3, v1, 1, 1, 1);
+            for (first_tile_index = 0; first_tile_index < num_outdoor_flippable_names; first_tile_index++) {
+                for (second_tile_index = 0; second_tile_index < num_outdoor_flippable_names; second_tile_index++) {
+                    a_name_tile_variant_counts[4][(transition_mask * num_outdoor_flippable_names + second_tile_index) * num_outdoor_flippable_names + first_tile_index] = a_name_tile_variant_count_scan(first_tile_index, second_tile_index, transition_mask, 1, 1, 1);
                 }
             }
 
-            for (v2 = 0; v2 < num_outdoor_non_flippable_names; v2++) {
-                for (v3 = 0; v3 < num_outdoor_non_flippable_names; v3++) {
-                    a_name_tile_variant_counts[5][(v1 * num_outdoor_non_flippable_names + v3) * num_outdoor_non_flippable_names + v2] = a_name_tile_variant_count_scan(v2, v3, v1, 1, 0, 0);
+            for (first_tile_index = 0; first_tile_index < num_outdoor_non_flippable_names; first_tile_index++) {
+                for (second_tile_index = 0; second_tile_index < num_outdoor_non_flippable_names; second_tile_index++) {
+                    a_name_tile_variant_counts[5][(transition_mask * num_outdoor_non_flippable_names + second_tile_index) * num_outdoor_non_flippable_names + first_tile_index] = a_name_tile_variant_count_scan(first_tile_index, second_tile_index, transition_mask, 1, 0, 0);
                 }
             }
 
-            for (v2 = 0; v2 < num_outdoor_flippable_names; v2++) {
-                for (v3 = 0; v3 < num_outdoor_non_flippable_names; v3++) {
-                    a_name_tile_variant_counts[6][(v1 * num_outdoor_non_flippable_names + v3) * num_outdoor_flippable_names + v2] = a_name_tile_variant_count_scan(v2, v3, v1, 1, 1, 0);
+            for (first_tile_index = 0; first_tile_index < num_outdoor_flippable_names; first_tile_index++) {
+                for (second_tile_index = 0; second_tile_index < num_outdoor_non_flippable_names; second_tile_index++) {
+                    a_name_tile_variant_counts[6][(transition_mask * num_outdoor_non_flippable_names + second_tile_index) * num_outdoor_flippable_names + first_tile_index] = a_name_tile_variant_count_scan(first_tile_index, second_tile_index, transition_mask, 1, 1, 0);
                 }
             }
         }
@@ -893,13 +899,13 @@ void a_name_tile_variant_counts_init(void)
 }
 
 // 0x4EBE90
-int8_t a_name_tile_variant_count_scan(int a1, int a2, int a3, int a4, int a5, int a6)
+int8_t a_name_tile_variant_count_scan(int first_tile_index, int second_tile_index, int transition_mask, int outdoor, int first_flippable, int second_flippable)
 {
     int8_t index;
     tig_art_id_t art_id;
 
     for (index = 8; index > 0; index--) {
-        if (tig_art_tile_id_create(a1, a2, a3, index - 1, a4, a5, a6, 0, &art_id) == TIG_OK
+        if (tig_art_tile_id_create(first_tile_index, second_tile_index, transition_mask, index - 1, outdoor, first_flippable, second_flippable, 0, &art_id) == TIG_OK
             && tig_art_exists(art_id) == TIG_OK) {
             break;
         }
@@ -909,38 +915,38 @@ int8_t a_name_tile_variant_count_scan(int a1, int a2, int a3, int a4, int a5, in
 }
 
 // 0x4EBEF0
-int a_name_tile_variant_count_get(int a1, int a2, int a3, int a4, int a5, int a6)
+int a_name_tile_variant_count_get(int first_tile_index, int second_tile_index, int transition_mask, int outdoor, int first_flippable, int second_flippable)
 {
     if (!a_name_tile_variant_cache_loaded) {
         return 1;
     }
 
-    if (a1 == a2 && a5 == a6) {
-        if (a4) {
-            if (a5) {
-                return a_name_tile_variant_counts[0][a3 * num_outdoor_flippable_names + a1];
+    if (first_tile_index == second_tile_index && first_flippable == second_flippable) {
+        if (outdoor) {
+            if (first_flippable) {
+                return a_name_tile_variant_counts[0][transition_mask * num_outdoor_flippable_names + first_tile_index];
             } else {
-                return a_name_tile_variant_counts[1][a3 * num_outdoor_non_flippable_names + a1];
+                return a_name_tile_variant_counts[1][transition_mask * num_outdoor_non_flippable_names + first_tile_index];
             }
         } else {
-            if (a5) {
-                return a_name_tile_variant_counts[2][a3 * num_indoor_flippable_names + a1];
+            if (first_flippable) {
+                return a_name_tile_variant_counts[2][transition_mask * num_indoor_flippable_names + first_tile_index];
             } else {
-                return a_name_tile_variant_counts[3][a3 * num_indoor_non_flippable_names + a1];
+                return a_name_tile_variant_counts[3][transition_mask * num_indoor_non_flippable_names + first_tile_index];
             }
         }
     } else {
-        if (a5) {
-            if (a6) {
-                return a_name_tile_variant_counts[4][num_outdoor_flippable_names * (a2 + a3 * num_outdoor_flippable_names) + a1];
+        if (first_flippable) {
+            if (second_flippable) {
+                return a_name_tile_variant_counts[4][num_outdoor_flippable_names * (second_tile_index + transition_mask * num_outdoor_flippable_names) + first_tile_index];
             } else {
-                return a_name_tile_variant_counts[6][num_outdoor_flippable_names * (a2 + a3 * num_outdoor_non_flippable_names) + a1];
+                return a_name_tile_variant_counts[6][num_outdoor_flippable_names * (second_tile_index + transition_mask * num_outdoor_non_flippable_names) + first_tile_index];
             }
         } else {
-            if (a6) {
-                return a_name_tile_variant_counts[6][num_outdoor_flippable_names * (a1 + a3 * num_outdoor_non_flippable_names) + a2];
+            if (second_flippable) {
+                return a_name_tile_variant_counts[6][num_outdoor_flippable_names * (first_tile_index + transition_mask * num_outdoor_non_flippable_names) + second_tile_index];
             } else {
-                return a_name_tile_variant_counts[5][num_outdoor_flippable_names * (a2 + a3 * num_outdoor_flippable_names) + a1];
+                return a_name_tile_variant_counts[5][num_outdoor_flippable_names * (second_tile_index + transition_mask * num_outdoor_flippable_names) + first_tile_index];
             }
         }
     }
@@ -950,8 +956,8 @@ int a_name_tile_variant_count_get(int a1, int a2, int a3, int a4, int a5, int a6
 bool a_name_tile_variant_cache_load(void)
 {
     TigFile* stream;
-    int v1;
-    int v2;
+    int art_file_count;
+    int cached_art_file_count;
     int index;
 
     stream = tig_file_fopen("art\\tile\\tilevariant.dat", "rb");
@@ -959,8 +965,8 @@ bool a_name_tile_variant_cache_load(void)
         return false;
     }
 
-    v1 = a_name_tile_art_files_count();
-    if (tig_file_fread(&v2, sizeof(v2), 1, stream) != 1 || v2 != v1) {
+    art_file_count = a_name_tile_art_files_count();
+    if (tig_file_fread(&cached_art_file_count, sizeof(cached_art_file_count), 1, stream) != 1 || cached_art_file_count != art_file_count) {
         tig_file_fclose(stream);
         return false;
     }
@@ -1500,7 +1506,7 @@ bool a_name_wall_aid_to_fname(tig_art_id_t art_id, char* path, size_t maxlen)
     int damage;
     int variation;
     int new_damage;
-    int v1;
+    int wall_name_index;
 
     if (tig_art_type(art_id) != TIG_ART_TYPE_WALL) {
         return false;
@@ -1547,16 +1553,16 @@ bool a_name_wall_aid_to_fname(tig_art_id_t art_id, char* path, size_t maxlen)
     }
 
     if (rotation / 2 == 0 || rotation / 2 == 3) {
-        v1 = wall_structures[num].interior;
+        wall_name_index = wall_structures[num].interior;
     } else {
-        v1 = wall_structures[num].exterior;
+        wall_name_index = wall_structures[num].exterior;
     }
 
-    if (v1 >= num_wall_file_names) {
+    if (wall_name_index >= num_wall_file_names) {
         return false;
     }
 
-    return build_wall_file_name(wall_file_names[v1], p_piece, new_damage, variation, path, maxlen);
+    return build_wall_file_name(wall_file_names[wall_name_index], p_piece, new_damage, variation, path, maxlen);
 }
 
 // 0x4ECFC0

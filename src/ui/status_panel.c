@@ -11,11 +11,16 @@ static uint64_t panel_style(tig_font_handle_t handle, tig_color_t background, ti
     if (handle != TIG_FONT_HANDLE_INVALID) {
         const TigFont* font = (const TigFont*)handle;
 #define FIELD(name) ui_cache_key_bytes(&key, &font->name, sizeof(font->name))
-        FIELD(flags); FIELD(art_id); FIELD(color); FIELD(underline_color);
-        FIELD(strike_through_color); FIELD(scale); FIELD(modern_font);
-        FIELD(modern_font_size); FIELD(modern_shadow_color); FIELD(modern_shadow_opacity);
-        FIELD(bracket_dim_percent); FIELD(modern_shadow_distance);
-        ui_cache_key_string(&key, font->modern_font_path);
+        FIELD(flags); FIELD(art_id); FIELD(color);
+        if ((font->flags & TIG_FONT_UNDERLINE) != 0) { FIELD(underline_color); }
+        if ((font->flags & TIG_FONT_STRIKE_THROUGH) != 0) { FIELD(strike_through_color); }
+        if ((font->flags & TIG_FONT_SCALE) != 0) { FIELD(scale); }
+        if ((font->flags & TIG_FONT_DIM_BRACKETS) != 0) { FIELD(bracket_dim_percent); }
+        if ((font->flags & TIG_FONT_MODERN) != 0) {
+            FIELD(modern_font); FIELD(modern_font_size); FIELD(modern_shadow_color);
+            FIELD(modern_shadow_opacity); FIELD(modern_shadow_distance);
+            if (font->modern_font_path != NULL) ui_cache_key_string(&key, font->modern_font_path);
+        }
 #undef FIELD
     }
     return key;

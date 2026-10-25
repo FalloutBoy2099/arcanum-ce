@@ -562,9 +562,9 @@ void broadcast_follower_shortcut_labels_load(void)
 }
 
 // 0x4C3BE0
-void broadcast_follower_shortcut_execute(unsigned int a1, int64_t loc)
+void broadcast_follower_shortcut_execute(unsigned int shortcut_index, int64_t loc)
 {
-    BroadcastCommandType command = broadcast_follower_shortcut_command(a1);
+    BroadcastCommandType command = broadcast_follower_shortcut_command(shortcut_index);
     int64_t pc_obj = player_get_local_pc_obj();
     int64_t target_obj = object_hover_obj_get();
     ObjectList followers;
@@ -576,7 +576,7 @@ void broadcast_follower_shortcut_execute(unsigned int a1, int64_t loc)
 
     // These strings are feedback only. Never parse translated shortcut labels.
     if (broadcast_float_line_func != NULL) {
-        broadcast_float_line_func(pc_obj, OBJ_HANDLE_NULL, follower_shortcut_labels[a1], -1);
+        broadcast_float_line_func(pc_obj, OBJ_HANDLE_NULL, follower_shortcut_labels[shortcut_index], -1);
     }
     object_list_followers(pc_obj, &followers);
     for (node = followers.head; node != NULL; node = node->next) {

@@ -176,7 +176,7 @@ bool skill_check_stat(int64_t obj, int stat, int value);
 bool skill_use(int64_t obj, int skill, int64_t target_obj, unsigned int flags);
 bool skill_steal_item(int64_t obj, int64_t target_obj, int64_t item_obj);
 bool skill_plant_item(int64_t obj, int64_t target_obj, int64_t item_obj);
-bool skill_disarm_trap(int64_t obj, int a2, int64_t target_obj);
+bool skill_disarm_trap(int64_t obj, int skill_use_flag_shift, int64_t target_obj);
 void skill_invocation_init(SkillInvocation* skill_invocation);
 bool skill_invocation_recover(SkillInvocation* skill_invocation);
 bool skill_invocation_run(SkillInvocation* skill_invocation);

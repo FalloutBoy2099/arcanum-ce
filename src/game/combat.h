@@ -5,10 +5,10 @@
 #include "game/damage_type.h"
 #include "game/timeevent.h"
 
-typedef void (*CombatModeChangeNotify)(int a1);
+typedef void (*CombatModeChangeNotify)(int active);
 typedef void (*CombatUiCreate)(void);
 typedef void (*CombatUiDestroy)(void);
-typedef void (*CombatActionPointsDraw)(int a1);
+typedef void (*CombatActionPointsDraw)(int preview_action_point_cost);
 typedef void (*CombatObjectNotifyStub)(int64_t obj);
 
 typedef struct CombatCallbacks {
@@ -100,8 +100,8 @@ bool combat_save(TigFile* stream);
 bool combat_load(GameLoadInfo* load_info);
 void combat_context_init(int64_t attacker_obj, int64_t target_obj, CombatContext* combat);
 int64_t combat_critter_weapon(int64_t critter_obj);
-void combat_projectile_finish_from_context(int64_t a1, int64_t a2, CombatContext* combat);
-bool combat_projectile_step_resolve(int64_t attacker_obj, int64_t target_obj, int64_t target_loc, int64_t projectile_obj, int range, int64_t cur_loc, int64_t a7);
+void combat_projectile_finish_from_context(int64_t projectile_obj, int64_t attacker_obj, CombatContext* combat);
+bool combat_projectile_step_resolve(int64_t attacker_obj, int64_t target_obj, int64_t target_loc, int64_t projectile_obj, int range, int64_t cur_loc, int64_t original_target_obj);
 int combat_attack_resolve(CombatContext* combat);
 void combat_weapon_wear_attack(int64_t attacker_obj, int64_t target_obj, int hit_loc);
 void combat_throw(int64_t attacker_obj, int64_t weapon_obj, int64_t target_obj, int64_t target_loc, int hit_loc);

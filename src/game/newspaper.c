@@ -103,6 +103,7 @@ bool newspaper_load(GameLoadInfo* load_info)
 {
     if (tig_file_fread(newspaper_queue, sizeof(*newspaper_queue) * QUEUE_SIZE, 1, load_info->stream) != 1) return false;
     if (tig_file_fread(&newspaper_queue_size, sizeof(newspaper_queue_size), 1, load_info->stream) != 1) return false;
+    if (newspaper_queue_size < 0 || newspaper_queue_size > QUEUE_SIZE) return false;
 
     return true;
 }

@@ -1,4 +1,5 @@
 #include "tig/scale_region.h"
+#include "tig/pixel_buffer.h"
 
 #if defined(_M_IX86) || defined(_M_X64) || defined(__SSE2__)
 #include <emmintrin.h>
@@ -120,6 +121,10 @@ bool tig_scale_region(SDL_Surface* src, SDL_Rect source, SDL_Surface* dst,
         || destination.x < 0 || destination.y < 0 || (Sint64)destination.x + destination.w > dst->w
         || (Sint64)destination.y + destination.h > dst->h
         || (mode != SDL_SCALEMODE_LINEAR && mode != SDL_SCALEMODE_NEAREST)) return false;
+    size_t source_bytes, destination_bytes;
+    if (src->pixels == NULL || dst->pixels == NULL
+        || !tig_pixel_buffer_size(src->w, src->h, 32, src->pitch, &source_bytes)
+        || !tig_pixel_buffer_size(dst->w, dst->h, 32, dst->pitch, &destination_bytes)) return false;
     SDL_BlendMode blend;
     Uint8 red, green, blue, alpha;
     if (!SDL_GetSurfaceBlendMode(src, &blend) || blend != SDL_BLENDMODE_NONE || SDL_SurfaceHasColorKey(src)

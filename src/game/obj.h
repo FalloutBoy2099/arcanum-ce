@@ -392,7 +392,7 @@ void obj_load_postprocess(int64_t obj);
 bool obj_write(TigFile* stream, int64_t obj);
 bool obj_read(TigFile* stream, int64_t* obj_ptr);
 void obj_write_mem(uint8_t** data_ptr, int* size_ptr, int64_t obj);
-bool obj_read_mem(uint8_t* data, int64_t* obj_ptr);
+bool obj_read_mem(const uint8_t* data, size_t size, int64_t* obj_ptr);
 int obj_is_modified(int64_t obj);
 bool obj_dif_write(TigFile* stream, int64_t obj);
 bool obj_dif_read(TigFile* stream, int64_t obj);
@@ -426,7 +426,7 @@ void obj_arrayfield_pc_rumor_copy_to_flat(int64_t obj, int fld, int cnt, void* d
 void obj_arrayfield_pc_quest_copy_to_flat(int64_t obj, int fld, int cnt, void* data);
 void obj_field_reset(int64_t obj, int fld);
 ObjectID obj_get_id(int64_t obj);
-ObjectID obj_id_a_replace(int64_t obj, int a2);
+ObjectID obj_id_a_replace(int64_t obj, int allocated_id);
 bool obj_inst_first(int64_t* obj_ptr, int* iter_ptr);
 bool obj_inst_next(int64_t* obj_ptr, int* iter_ptr);
 

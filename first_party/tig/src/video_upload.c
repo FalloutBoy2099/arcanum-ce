@@ -1,4 +1,5 @@
 #include "tig/video_upload.h"
+#include "tig/pixel_buffer.h"
 
 void tig_video_upload_reset(TigVideoUpload* upload, int width, int height)
 {
@@ -35,8 +36,18 @@ void tig_video_upload_mark(TigVideoUpload* upload, SDL_Rect rect)
 bool tig_video_upload_flush(TigVideoUpload* upload, SDL_Texture* texture, SDL_Surface* surface, Uint64* bytes)
 {
     if (bytes != NULL) *bytes = 0;
-    if (surface == NULL || SDL_BYTESPERPIXEL(surface->format) != 4
+    size_t surface_bytes;
+    if (upload == NULL || surface == NULL || surface->pixels == NULL
+        || upload->count < 0 || upload->count > TIG_VIDEO_UPLOAD_RECTS
+        || !tig_pixel_buffer_size(surface->w, surface->h, 32, surface->pitch, &surface_bytes)
+        || SDL_BYTESPERPIXEL(surface->format) != 4
         || surface->w != upload->bounds.w || surface->h != upload->bounds.h) return false;
+    for (int i = 0; i < upload->count; i++) {
+        const SDL_Rect* rect = &upload->rects[i];
+        if (rect->x < 0 || rect->y < 0 || rect->w <= 0 || rect->h <= 0
+            || rect->w > surface->w || rect->h > surface->h
+            || rect->x > surface->w - rect->w || rect->y > surface->h - rect->h) return false;
+    }
     for (int i = 0; i < upload->count; i++) {
         const SDL_Rect* rect = &upload->rects[i];
         const Uint8* pixels = (const Uint8*)surface->pixels + (size_t)rect->y * surface->pitch + rect->x * 4;

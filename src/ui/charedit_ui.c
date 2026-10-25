@@ -1,5 +1,6 @@
 #include "ui/charedit_ui.h"
 #include "game/activity_time.h"
+#include "game/progression_rules.h"
 
 #include <stdio.h>
 
@@ -134,7 +135,7 @@ static void charedit_refresh_stat(int stat);
 static int charedit_stat_map_to_critter_stat(int stat);
 static int charedit_stat_value_get(int64_t obj, int stat);
 static void charedit_stat_value_set(int64_t obj, int stat, int value);
-static void charedit_category_list_draw(tig_window_handle_t window_handle, tig_font_handle_t font, CharacterEditorTextEntry* a3, const char** list, int a5, int a6);
+static void charedit_category_list_draw(tig_window_handle_t window_handle, tig_font_handle_t font, CharacterEditorTextEntry* text_entries, const char** list, int text_x, int entry_count);
 static bool charedit_create_skills_win(void);
 static void charedit_skill_group_select(int group);
 static void charedit_refresh_skills_win(void);
@@ -142,7 +143,7 @@ static bool charedit_create_tech_win(void);
 static void charedit_draw_tech_degree_icon(int index);
 static void charedit_refresh_tech_win(void);
 static bool charedit_create_spells_win(void);
-static void charedit_spell_icon_draw(int a1, int a2);
+static void charedit_spell_icon_draw(int spell_tier, int learned_tiers);
 static void charedit_refresh_spells_win(void);
 static bool charedit_scheme_win_create(void);
 static void charedit_scheme_win_refresh(void);
@@ -165,7 +166,7 @@ static void charedit_scheme_scrollbar_refresh_rect(TigRect* rect);
 static struct {
     int x;
     int y;
-    int field_8;
+    int reserved_layout_value;
 } charedit_stat_text_positions[CHAREDIT_STAT_COUNT] = {
     { 337, 94, 3 },
     { 337, 75, 2 },
@@ -307,7 +308,7 @@ static CharacterEditorTextEntry charedit_skill_text[SKILL_COUNT] = {
 };
 
 // 0x5C83F0
-static CharacterEditorTextEntry stru_5C83F0[4] = {
+static CharacterEditorTextEntry charedit_basic_info_text_rows[4] = {
     { NULL, 517, 206, -1 },
     { NULL, 517, 261, -1 },
     { NULL, 517, 316, -1 },
@@ -437,10 +438,10 @@ static CharacterEditorTextEntry charedit_alignment_aptitude_text[3] = {
 };
 
 // 0x5C8970
-static TigRect stru_5C8970 = { 756, 68, 30, 16 };
+static TigRect charedit_gauge_top_cap_rect = { 756, 68, 30, 16 };
 
 // 0x5C8980
-static TigRect stru_5C8980 = { 756, 367, 30, 16 };
+static TigRect charedit_gauge_bottom_cap_rect = { 756, 367, 30, 16 };
 
 // 0x5C8E40
 static CharacterEditorTextEntry charedit_auto_level_scheme_name_text = { 0, -620, 125, 0 };
@@ -792,7 +793,7 @@ static tig_button_handle_t spell_minus_bid;
 static int charedit_player_stats_tbl[8][CHAREDIT_STAT_COUNT];
 
 // 0x64D714
-static char byte_64D714[2000];
+static char charedit_unused_text_buffer[2000];
 
 // 0x64DEE4
 static bool charedit_scheme_scrollbar_initialized;
@@ -1250,6 +1251,11 @@ bool charedit_is_created(void)
     return charedit_created;
 }
 
+bool charedit_is_editing(int64_t obj)
+{
+    return charedit_created && obj != OBJ_HANDLE_NULL && charedit_obj == obj;
+}
+
 // 0x55A230
 void charedit_refresh(void)
 {
@@ -1517,7 +1523,7 @@ bool charedit_window_message_filter(TigMessage* msg)
                     }
 
                     unspent_points = stat_level_get(charedit_obj, STAT_UNSPENT_POINTS);
-                    stat_base_set(charedit_obj, STAT_UNSPENT_POINTS, unspent_points + cost);
+                    stat_base_set(charedit_obj, STAT_UNSPENT_POINTS, progression_points_add(unspent_points, cost));
                     activity_time_record(charedit_obj, ACTIVITY_TIME_STAT_POINTS, -cost);
                     charedit_refresh_internal();
                     intgame_message_window_clear();
@@ -1569,7 +1575,7 @@ bool charedit_window_message_filter(TigMessage* msg)
                 value = stat_base_get(charedit_obj, STAT_LEVEL) + 1;
                 if (stat_base_set(charedit_obj, STAT_LEVEL, value) == value) {
                     unspent_points = stat_base_get(charedit_obj, STAT_UNSPENT_POINTS);
-                    stat_base_set(charedit_obj, STAT_UNSPENT_POINTS, unspent_points + 1);
+                    stat_base_set(charedit_obj, STAT_UNSPENT_POINTS, progression_points_add(unspent_points, 1));
                     charedit_refresh_internal();
                 }
                 return true;
@@ -1955,7 +1961,7 @@ void charedit_stat_value_set(int64_t obj, int stat, int value)
 }
 
 // 0x55B880
-void charedit_category_list_draw(tig_window_handle_t window_handle, tig_font_handle_t font, CharacterEditorTextEntry* a3, const char** list, int a5, int a6)
+void charedit_category_list_draw(tig_window_handle_t window_handle, tig_font_handle_t font, CharacterEditorTextEntry* text_entries, const char** list, int text_x, int entry_count)
 {
     TigWindowData window_data;
     TigArtBlitInfo art_blit_info;
@@ -1989,13 +1995,13 @@ void charedit_category_list_draw(tig_window_handle_t window_handle, tig_font_han
     font_desc.str = NULL;
 
     tig_font_push(font);
-    for (index = 0; index < a6; index++) {
-        if (a5 == -1) {
-            font_desc.str = a3[index].str;
+    for (index = 0; index < entry_count; index++) {
+        if (text_x == -1) {
+            font_desc.str = text_entries[index].str;
             font_desc.width = 0;
             tig_font_measure(&font_desc);
 
-            x = a3[index].x;
+            x = text_entries[index].x;
             if (x < 0) {
                 x = -x - font_desc.width / 2;
             }
@@ -2003,27 +2009,27 @@ void charedit_category_list_draw(tig_window_handle_t window_handle, tig_font_han
             rect.width = font_desc.width;
             rect.height = font_desc.height;
         }
-        rect.y = a3[index].y - window_data.rect.y;
+        rect.y = text_entries[index].y - window_data.rect.y;
 
         if (list != NULL) {
             font_desc.str = list[index];
-            if (a5 == -1) {
-                if (a3[index].str != NULL) {
+            if (text_x == -1) {
+                if (text_entries[index].str != NULL) {
                     rect.x += font_desc.width;
                 }
-            } else if (a5 < 0) {
+            } else if (text_x < 0) {
                 font_desc.width = 0;
                 tig_font_measure(&font_desc);
-                rect.x = -window_data.rect.x - font_desc.width / 2 - a5;
+                rect.x = -window_data.rect.x - font_desc.width / 2 - text_x;
             } else {
-                rect.x = a5 - window_data.rect.x;
+                rect.x = text_x - window_data.rect.x;
             }
 
             font_desc.width = 0;
             tig_font_measure(&font_desc);
 
-            if (a5 == -1 && a3[index].str == NULL) {
-                x = a3[index].x;
+            if (text_x == -1 && text_entries[index].str == NULL) {
+                x = text_entries[index].x;
                 if (x < 0) {
                     x = -x - font_desc.width / 2;
                 }
@@ -2140,8 +2146,8 @@ void charedit_skill_group_select(int group)
     TigArtBlitInfo art_blit_info;
     TigRect rect;
     int training;
-    char v1[4][80];
-    const char* v2[4];
+    char training_suffix_buffers[4][80];
+    const char* training_labels[4];
     int trainings[4];
 
     for (index = 0; index < SKILL_COUNT; index++) {
@@ -2187,21 +2193,21 @@ void charedit_skill_group_select(int group)
                 charedit_skill_text[4 * charedit_selected_skill_group + index].value);
         }
 
-        v2[index] = charedit_training_names[training];
+        training_labels[index] = charedit_training_names[training];
         trainings[index] = training;
     }
 
     for (index = 0; index < 4; index++) {
         if (trainings[index] != 0) {
-            snprintf(v1[index], sizeof(v1[index]), " (%s)", v2[index]);
+            snprintf(training_suffix_buffers[index], sizeof(training_suffix_buffers[index]), " (%s)", training_labels[index]);
         } else {
-            v1[index][0] = '\0';
+            training_suffix_buffers[index][0] = '\0';
         }
 
-        v2[index] = v1[index];
+        training_labels[index] = training_suffix_buffers[index];
     }
 
-    charedit_category_list_draw(charedit_skills_win, charedit_morph15_white_font, &charedit_skill_text[4 * charedit_selected_skill_group], v2, -1, 4);
+    charedit_category_list_draw(charedit_skills_win, charedit_morph15_white_font, &charedit_skill_text[4 * charedit_selected_skill_group], training_labels, -1, 4);
     charedit_refresh_skills_win();
 }
 
@@ -2598,7 +2604,7 @@ bool charedit_create_spells_win(void)
 }
 
 // 0x55CA70
-void charedit_spell_icon_draw(int a1, int a2)
+void charedit_spell_icon_draw(int spell_tier, int learned_tiers)
 {
     int art_num;
     tig_art_id_t art_id;
@@ -2610,7 +2616,7 @@ void charedit_spell_icon_draw(int a1, int a2)
     TigPaletteModifyInfo palette_modify_info;
     TigPalette* tmp_palette;
 
-    art_num = spell_icon(a1 + 5 * charedit_selected_spell_college);
+    art_num = spell_icon(spell_tier + 5 * charedit_selected_spell_college);
     if (art_num != -1) {
         tig_art_interface_id_create(art_num, 0, 0, 0, &art_id);
         tig_art_frame_data(art_id, &art_frame_data);
@@ -2623,7 +2629,7 @@ void charedit_spell_icon_draw(int a1, int a2)
         art_blit_info.art_id = art_id;
         art_blit_info.src_rect = &src_rect;
 
-        if (a1 < a2) {
+        if (spell_tier < learned_tiers) {
             art_blit_info.flags = 0;
             tmp_palette = NULL;
         } else {
@@ -2639,8 +2645,8 @@ void charedit_spell_icon_draw(int a1, int a2)
             art_blit_info.palette = tmp_palette;
         }
 
-        dst_rect.x = charedit_spell_icon_x_positions[a1] - 503;
-        dst_rect.y = charedit_spell_icon_y_positions[a1] - 104;
+        dst_rect.x = charedit_spell_icon_x_positions[spell_tier] - 503;
+        dst_rect.y = charedit_spell_icon_y_positions[spell_tier] - 104;
         dst_rect.width = art_frame_data.width;
         dst_rect.height = art_frame_data.height;
 
@@ -2663,7 +2669,7 @@ void charedit_refresh_spells_win(void)
     TigRect rect;
     int index;
     int cnt;
-    int v1;
+    int visible_tier_count;
     int spells[5];
     char spell_minimum_levels[5][80];
     int rc;
@@ -2706,9 +2712,9 @@ void charedit_refresh_spells_win(void)
     cnt = spell_college_level_get(charedit_obj, charedit_selected_spell_college);
 
     // TODO: Refactor v1.
-    v1 = cnt;
-    if (v1 < 5) {
-        v1++;
+    visible_tier_count = cnt;
+    if (visible_tier_count < 5) {
+        visible_tier_count++;
     }
 
     for (index = 0; index < 5; index++) {
@@ -2720,13 +2726,13 @@ void charedit_refresh_spells_win(void)
         charedit_spell_title_labels[index].str = spell_name(spells[index]);
     }
 
-    if (v1 > cnt) {
+    if (visible_tier_count > cnt) {
         if (cnt > 0) {
             charedit_category_list_draw(charedit_spells_win, charedit_morph15_white_font, &(charedit_spell_title_labels[0]), NULL, -1, cnt);
         }
 
         charedit_category_list_draw(charedit_spells_win,
-            charedit_mode == CHAREDIT_MODE_PASSIVE ? charedit_morph15_gray_font : charedit_morph15_yellow_font,
+            (charedit_mode == CHAREDIT_MODE_PASSIVE && !charedit_follower_editable()) ? charedit_morph15_gray_font : charedit_morph15_yellow_font,
             &charedit_spell_title_labels[cnt], NULL, -1, 1);
 
         if (cnt + 1 < 5) {
@@ -2744,13 +2750,13 @@ void charedit_refresh_spells_win(void)
         charedit_spell_minimum_level_labels[index].str = spell_minimum_levels[index];
     }
 
-    if (v1 > cnt) {
+    if (visible_tier_count > cnt) {
         if (cnt > 0) {
             charedit_category_list_draw(charedit_spells_win, charedit_pork12_white_font, &(charedit_spell_minimum_level_labels[0]), 0, -1, cnt);
         }
 
         charedit_category_list_draw(charedit_spells_win,
-            charedit_mode == CHAREDIT_MODE_PASSIVE ? charedit_pork12_gray_font : charedit_pork12_yellow_font,
+            (charedit_mode == CHAREDIT_MODE_PASSIVE && !charedit_follower_editable()) ? charedit_pork12_gray_font : charedit_pork12_yellow_font,
             &(charedit_spell_minimum_level_labels[cnt]), NULL, -1, 1);
 
         if (cnt + 1 < 5) {
@@ -2767,12 +2773,12 @@ void charedit_refresh_spells_win(void)
     button_data.mouse_enter_snd_id = -1;
     button_data.mouse_exit_snd_id = -1;
 
-    if (v1 > cnt) {
+    if (visible_tier_count > cnt) {
         if (charedit_mode != CHAREDIT_MODE_PASSIVE
             || charedit_follower_editable()) {
             tig_art_interface_id_create(647, 0, 0, 0, &(button_data.art_id));
-            button_data.x = charedit_spell_icon_x_positions[v1 - 1] - 503;
-            button_data.y = charedit_spell_icon_y_positions[v1 - 1] - 104;
+            button_data.x = charedit_spell_icon_x_positions[visible_tier_count - 1] - 503;
+            button_data.y = charedit_spell_icon_y_positions[visible_tier_count - 1] - 104;
 
             rc = tig_button_create(&button_data, &spell_plus_bid);
             if (rc != TIG_OK) {
@@ -2912,7 +2918,7 @@ void charedit_scheme_win_refresh(void)
 
     charedit_auto_level_scheme_name_text.str = auto_level_scheme_name(auto_level_scheme_get(charedit_obj));
 
-    cnt = charedit_num_schemes;
+    cnt = charedit_num_schemes - charedit_top_scheme_index;
     if (cnt >= 15) {
         cnt = 15;
     }
@@ -3108,7 +3114,7 @@ bool charedit_tech_skill_buttons_message_filter(TigMessage* msg)
 bool charedit_tech_win_message_filter(TigMessage* msg)
 {
     int index;
-    int v1;
+    int current_degree;
 
     if (msg->type == TIG_MESSAGE_MOUSE) {
         if (msg->data.mouse.event == TIG_MESSAGE_MOUSE_IDLE) {
@@ -3139,14 +3145,14 @@ bool charedit_tech_win_message_filter(TigMessage* msg)
             }
 
             if (msg->data.button.button_handle == charedit_inc_tech_degree_btn) {
-                v1 = tech_degree_get(charedit_obj, charedit_selected_tech);
-                charedit_tech_hint = 5001 + 8 * charedit_selected_tech + v1;
+                current_degree = tech_degree_get(charedit_obj, charedit_selected_tech);
+                charedit_tech_hint = 5001 + 8 * charedit_selected_tech + current_degree;
                 return true;
             }
 
             if (msg->data.button.button_handle == charedit_dec_tech_degree_btn) {
-                v1 = tech_degree_get(charedit_obj, charedit_selected_tech);
-                charedit_tech_hint = 5000 + 8 * charedit_selected_tech + v1;
+                current_degree = tech_degree_get(charedit_obj, charedit_selected_tech);
+                charedit_tech_hint = 5000 + 8 * charedit_selected_tech + current_degree;
                 return true;
             }
 
@@ -3203,8 +3209,8 @@ bool charedit_tech_win_message_filter(TigMessage* msg)
             }
 
             if (msg->data.button.button_handle == charedit_dec_tech_degree_btn) {
-                // TODO: Missing check for accepted level, check.
                 tech_ui_dec_degree(charedit_obj, charedit_selected_tech);
+                return true;
             }
         }
 
@@ -3218,7 +3224,7 @@ bool charedit_tech_win_message_filter(TigMessage* msg)
 bool charedit_spells_win_message_filter(TigMessage* msg)
 {
     int index;
-    int v1;
+    int current_college_level;
 
     if (msg->type == TIG_MESSAGE_MOUSE) {
         if (msg->data.mouse.event == TIG_MESSAGE_MOUSE_IDLE) {
@@ -3302,18 +3308,18 @@ bool charedit_spells_win_message_filter(TigMessage* msg)
             }
 
             if (msg->data.button.button_handle == spell_plus_bid) {
-                v1 = spell_college_level_get(charedit_obj, charedit_selected_spell_college);
-                spell_ui_add(charedit_obj, 5 * charedit_selected_spell_college + v1);
+                current_college_level = spell_college_level_get(charedit_obj, charedit_selected_spell_college);
+                spell_ui_add(charedit_obj, 5 * charedit_selected_spell_college + current_college_level);
                 return true;
             }
 
             if (msg->data.button.button_handle == spell_minus_bid) {
-                v1 = spell_college_level_get(charedit_obj, charedit_selected_spell_college);
-                if (v1 == charedit_initial_spell_college_levels[charedit_selected_spell_college]) {
+                current_college_level = spell_college_level_get(charedit_obj, charedit_selected_spell_college);
+                if (current_college_level == charedit_initial_spell_college_levels[charedit_selected_spell_college]) {
                     charedit_error_msg.str = charedit_errors[CHAREDIT_ERR_SPELL_AT_ACCEPTED_LEVEL];
                     intgame_message_window_display_msg(&charedit_error_msg);
                 } else {
-                    spell_ui_remove(charedit_obj, 5 * charedit_selected_spell_college + v1 - 1);
+                    spell_ui_remove(charedit_obj, 5 * charedit_selected_spell_college + current_college_level - 1);
                 }
                 return true;
             }
@@ -3336,7 +3342,7 @@ bool charedit_scheme_win_message_filter(TigMessage* msg)
         if (msg->data.button.state == TIG_BUTTON_STATE_MOUSE_INSIDE) {
             for (index = 0; index < 15; index++) {
                 if (msg->data.button.button_handle == charedit_auto_level_scheme_buttons[index]) {
-                    if (index < charedit_num_schemes) {
+                    if (index + charedit_top_scheme_index < charedit_num_schemes) {
                         charedit_category_list_draw(charedit_scheme_win, charedit_flare12_blue_font, &charedit_schematic_list_text[index], NULL, -1, 1);
                     }
 
@@ -3350,7 +3356,7 @@ bool charedit_scheme_win_message_filter(TigMessage* msg)
         if (msg->data.button.state == TIG_BUTTON_STATE_MOUSE_OUTSIDE) {
             for (index = 0; index < 15; index++) {
                 if (msg->data.button.button_handle == charedit_auto_level_scheme_buttons[index]) {
-                    if (index < charedit_num_schemes) {
+                    if (index + charedit_top_scheme_index < charedit_num_schemes) {
                         charedit_category_list_draw(charedit_scheme_win, charedit_flare12_white_font, &charedit_schematic_list_text[index], NULL, -1, 1);
                     }
 
@@ -3362,9 +3368,12 @@ bool charedit_scheme_win_message_filter(TigMessage* msg)
         }
 
         if (msg->data.button.state == TIG_BUTTON_STATE_PRESSED) {
+            if (charedit_mode == CHAREDIT_MODE_PASSIVE && !charedit_follower_editable()) {
+                return false;
+            }
             for (index = 0; index < 15; index++) {
                 if (msg->data.button.button_handle == charedit_auto_level_scheme_buttons[index]) {
-                    if (index < charedit_num_schemes) {
+                    if (index + charedit_top_scheme_index < charedit_num_schemes) {
                         auto_level_scheme_set(charedit_obj, charedit_scheme_ids[index + charedit_top_scheme_index]);
                         charedit_scheme_win_refresh();
                     }
@@ -3478,7 +3487,7 @@ bool charedit_labels_init(void)
     }
 
     for (index = 0; index < 4; index++) {
-        stru_5C83F0[index].str = charedit_basic_info_text[0].str;
+        charedit_basic_info_text_rows[index].str = charedit_basic_info_text[0].str;
     }
 
     font_desc.flags = 0;
@@ -3712,13 +3721,13 @@ void charedit_refresh_alignment_aptitude_bars(void)
 
     tig_art_interface_id_create(22, 0, 0, 0, &(art_blit_info.art_id));
 
-    art_blit_info.src_rect = &stru_5C8970;
-    art_blit_info.dst_rect = &stru_5C8970;
+    art_blit_info.src_rect = &charedit_gauge_top_cap_rect;
+    art_blit_info.dst_rect = &charedit_gauge_top_cap_rect;
     art_blit_info.flags = 0;
     tig_window_blit_art(charedit_window_handle, &art_blit_info);
 
-    art_blit_info.src_rect = &stru_5C8980;
-    art_blit_info.dst_rect = &stru_5C8980;
+    art_blit_info.src_rect = &charedit_gauge_bottom_cap_rect;
+    art_blit_info.dst_rect = &charedit_gauge_bottom_cap_rect;
     tig_window_blit_art(charedit_window_handle, &art_blit_info);
 
     charedit_category_list_draw(charedit_window_handle, charedit_cloister18_white_font, charedit_alignment_aptitude_text, labels, -1, 3);

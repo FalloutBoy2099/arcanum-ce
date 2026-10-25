@@ -1,11 +1,20 @@
 #include "game/world_composition.h"
+#include <limits.h>
 
 int world_composition_present(TigVideoBuffer* world, TigRect source, TigVideoBuffer* output,
     TigRect destination, TigVideoUpload* damage, bool linear)
 {
     if (world == NULL || output == NULL || world == output || damage == NULL
         || source.width <= 0 || source.height <= 0
-        || destination.width <= 0 || destination.height <= 0) return TIG_ERR_INVALID_PARAM;
+        || destination.width <= 0 || destination.height <= 0
+        || damage->count < 0 || damage->count > TIG_VIDEO_UPLOAD_RECTS) return TIG_ERR_INVALID_PARAM;
+
+    for (int part = 0; part < damage->count; part++) {
+        const SDL_Rect* rect = &damage->rects[part];
+        if (rect->x < 0 || rect->y < 0 || rect->w <= 0 || rect->h <= 0
+            || rect->w > damage->bounds.w || rect->h > damage->bounds.h
+            || rect->x > damage->bounds.w - rect->w || rect->y > damage->bounds.h - rect->h) return TIG_ERR_INVALID_PARAM;
+    }
 
     TigVideoBufferBlitInfo blit = { 0 };
     blit.src_video_buffer = world;
@@ -43,6 +52,8 @@ int world_composition_present(TigVideoBuffer* world, TigRect source, TigVideoBuf
 int world_composition_scroll(TigVideoBuffer* world, TigRect bounds, int dx, int dy)
 {
     if (world == NULL || bounds.width <= 0 || bounds.height <= 0) return TIG_ERR_INVALID_PARAM;
+    if (bounds.x < 0 || bounds.y < 0
+        || bounds.x > INT_MAX - bounds.width || bounds.y > INT_MAX - bounds.height) return TIG_ERR_INVALID_PARAM;
     if (dx <= -bounds.width || dx >= bounds.width || dy <= -bounds.height || dy >= bounds.height) {
         return TIG_ERR_INVALID_PARAM;
     }

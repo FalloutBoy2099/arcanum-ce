@@ -1,4 +1,5 @@
 #include "game/level.h"
+#include "game/progression_rules.h"
 
 #include <stdio.h>
 
@@ -13,14 +14,6 @@
 #include "game/stat.h"
 #include "game/tech.h"
 #include "game/ui.h"
-
-/**
- * Maximum level a character can achieve.
- *
- * This value can be increased, be sure to modify `stat_max_values` as well,
- * and populate `xp_level.mes` accordingly.
- */
-#define LEVEL_MAX 51
 
 /**
  * The size of log during auto level up.
@@ -232,7 +225,7 @@ static mes_file_handle_t game_level_mes_file;
 static mes_file_handle_t user_level_mes_file;
 
 /**
- * Array of experience points required for each level (up to `LEVEL_MAX`).
+ * Array of experience points required for each level (up to `LEVEL_LIMIT`).
  *
  * 0x5F5C94
  */
@@ -270,23 +263,34 @@ bool level_init(GameInitInfo* init_info)
         return false;
     }
 
-    level_xp_tbl = (int*)CALLOC(LEVEL_MAX, sizeof(*level_xp_tbl));
+    level_xp_tbl = (int*)CALLOC(LEVEL_LIMIT, sizeof(*level_xp_tbl));
 
     // NOTE: Unclear why log strs have static storage duration, but associated
     // values are dynamically allocated on heap.
     auto_level_log_values = (int*)CALLOC(AUTO_LEVEL_LOG_SIZE, sizeof(*auto_level_log_values));
 
+    if (level_xp_tbl == NULL || auto_level_log_values == NULL) {
+        mes_unload(xp_level_mes_file);
+        FREE(level_xp_tbl);
+        FREE(auto_level_log_values);
+        return false;
+    }
+    const char* experience_entries[LEVEL_LIMIT] = { 0 };
     // Populate experience points table for each level.
-    for (index = 0; index < LEVEL_MAX; index++) {
+    for (index = 0; index < LEVEL_LIMIT; index++) {
         msg.num = index + 1;
         if (mes_search(xp_level_mes_file, &msg)) {
-            level_xp_tbl[index] = atoi(msg.str);
-        } else {
-            level_xp_tbl[index] = 0;
+            experience_entries[index] = msg.str;
         }
     }
-
+    bool valid_experience = level_progression_build(level_xp_tbl, experience_entries, LEVEL_LIMIT);
     mes_unload(xp_level_mes_file);
+    if (!valid_experience) {
+        tig_debug_println("Invalid or incomplete experience progression in rules/xp_level.mes.");
+        FREE(level_xp_tbl);
+        FREE(auto_level_log_values);
+        return false;
+    }
 
     // Level 1 must always be 0 experience points, no matter what was specified
     // in the file. This requirement is also mentioned in `xp_level.mes` itself.
@@ -370,7 +374,7 @@ int level_experience_points_to_next_level(int64_t obj)
     level = stat_level_get(obj, STAT_LEVEL);
 
     // Clamp at maximum.
-    if (level >= LEVEL_MAX) {
+    if (level < 0 || level >= LEVEL_LIMIT) {
         return 999999;
     }
 
@@ -391,25 +395,8 @@ int level_experience_points_to_next_level(int64_t obj)
  */
 int level_progress_towards_next_level(int64_t obj)
 {
-    int level;
-    int xp;
-
-    level = stat_level_get(obj, STAT_LEVEL);
-
-    // Clamp at maximum.
-    if (level >= LEVEL_MAX) {
-        return 0;
-    }
-
-    if (level != 0 && level_xp_tbl[level] != 0) {
-        xp = level_experience_points_to_next_level(obj);
-        if (xp >= 0) {
-            return 1000 - 1000 * xp / (level_xp_tbl[level] - level_xp_tbl[level - 1]);
-        }
-    }
-
-    // Something's wrong.
-    return 999;
+    return level_progression_percent(stat_level_get(obj, STAT_LEVEL),
+        stat_level_get(obj, STAT_EXPERIENCE_POINTS), level_xp_tbl);
 }
 
 /**
@@ -431,19 +418,7 @@ int level_progress_towards_next_level(int64_t obj)
  */
 int calculate_bonus_character_points(int old_level, int new_level)
 {
-    int points = 0;
-    int level;
-
-    for (level = old_level + 1; level <= new_level; level++) {
-        points++;
-
-        // Extra point every 5 levels.
-        if ((level % 5) == 0) {
-            points++;
-        }
-    }
-
-    return points;
+    return level_progression_bonus_points(old_level, new_level);
 }
 
 /**
@@ -494,14 +469,14 @@ void level_recalc(int64_t pc_obj)
 
         if (cur_level == max_level) {
             // Max level reached - cap experience at the maximum level's requirement.
-            stat_base_set(pc_obj, STAT_EXPERIENCE_POINTS, level_xp_tbl[cur_level - 1]);
+            obj_arrayfield_int32_set(pc_obj, OBJ_F_CRITTER_STAT_BASE_IDX, STAT_EXPERIENCE_POINTS, level_xp_tbl[cur_level - 1]);
         } else {
             // Update level.
             stat_base_set(pc_obj, STAT_LEVEL, cur_level);
 
             // Grant character points for level up.
             unspent_points = stat_base_get(pc_obj, STAT_UNSPENT_POINTS);
-            unspent_points += calculate_bonus_character_points(cur_level - 1, cur_level);
+            unspent_points = progression_points_add(unspent_points, calculate_bonus_character_points(cur_level - 1, cur_level));
             stat_base_set(pc_obj, STAT_UNSPENT_POINTS, unspent_points);
 
             ui_message.primary_value = cur_level;
@@ -597,7 +572,7 @@ void update_follower_level(int64_t follower_obj, int old_pc_level, int new_pc_le
         // Grant character points for level up.
         bonus_points = calculate_bonus_character_points(curr_level, new_level);
         curr_points = stat_base_get(follower_obj, STAT_UNSPENT_POINTS);
-        stat_base_set(follower_obj, STAT_UNSPENT_POINTS, bonus_points + curr_points);
+        stat_base_set(follower_obj, STAT_UNSPENT_POINTS, progression_points_add(curr_points, bonus_points));
 
         // Apply auto-leveling scheme.
         auto_level_apply(follower_obj, NULL);
@@ -717,8 +692,8 @@ void level_set(int64_t obj, int level)
     // Clamp level to valid range.
     if (level < 0) {
         level = 0;
-    } else if (level > LEVEL_MAX) {
-        level = LEVEL_MAX;
+    } else if (level > LEVEL_PLAYABLE_MAX) {
+        level = LEVEL_PLAYABLE_MAX;
     }
 
     // Preserve character's "natural" attributes (that are independent of level).
@@ -752,7 +727,7 @@ void level_set(int64_t obj, int level)
         // Grant character points for level up.
         unspent_points = stat_base_get(obj, STAT_UNSPENT_POINTS);
         bonus = calculate_bonus_character_points(1, level);
-        stat_base_set(obj, STAT_UNSPENT_POINTS, unspent_points + bonus);
+        stat_base_set(obj, STAT_UNSPENT_POINTS, progression_points_add(unspent_points, bonus));
     }
 
     // Apply auto-leveling scheme.

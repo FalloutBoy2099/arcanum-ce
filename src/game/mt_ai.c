@@ -145,15 +145,15 @@ int mt_ai_action_score_compare_descending(const void* va, const void* vb)
 {
     const MagicTechAiActionListEntry* a = (const MagicTechAiActionListEntry*)va;
     const MagicTechAiActionListEntry* b = (const MagicTechAiActionListEntry*)vb;
-    int v1;
-    int v2;
+    int first_score;
+    int second_score;
 
-    v1 = mt_ai_current_action_spell_score(a->spell);
-    v2 = mt_ai_current_action_spell_score(b->spell);
+    first_score = mt_ai_current_action_spell_score(a->spell);
+    second_score = mt_ai_current_action_spell_score(b->spell);
 
-    if (v1 < v2) {
+    if (first_score < second_score) {
         return 1;
-    } else if (v1 > v2) {
+    } else if (first_score > second_score) {
         return -1;
     } else {
         return 0;
@@ -233,7 +233,7 @@ void mt_ai_cache_slots_reset(void)
         magictech_ai->cached_preferred_spell = 0;
         magictech_ai->leader_obj = OBJ_HANDLE_NULL;
         magictech_ai->target_obj = OBJ_HANDLE_NULL;
-        magictech_ai->field_2C = 0;
+        magictech_ai->reserved_slot_2 = 0;
 
         for (action = 0; action < MAGICTECH_AI_ACTION_COUNT; action++) {
             magictech_ai->actions[action].entries = NULL;
@@ -266,7 +266,7 @@ void mt_ai_create_internal(MagicTechAi* magictech_ai, int64_t obj, int action)
     magictech_ai->target_obj = OBJ_HANDLE_NULL;
     magictech_ai->cached_preferred_spell = 0;
     magictech_ai->preferred_spell = -1;
-    magictech_ai->field_2C = 0;
+    magictech_ai->reserved_slot_2 = 0;
 }
 
 // 0x4CC520
@@ -280,7 +280,7 @@ void mt_ai_cache_slot_free(int slot)
     magictech_ai->leader_obj = OBJ_HANDLE_NULL;
     magictech_ai->cached_preferred_spell = 0;
     magictech_ai->target_obj = OBJ_HANDLE_NULL;
-    magictech_ai->field_2C = 0;
+    magictech_ai->reserved_slot_2 = 0;
 
     for (action = 0; action < MAGICTECH_AI_ACTION_COUNT; action++) {
         if (magictech_ai->actions[action].entries != NULL) {
@@ -460,7 +460,7 @@ void mt_ai_item_actions_collect(MagicTechAi* magictech_ai, int64_t item_obj)
         && mt_ai_item_identification_check(item_obj, magictech_ai)) {
         for (index = 0; index < 5; index++) {
             spell = obj_field_int32_get(item_obj, 100 + index);
-            if (spell != 10000
+            if (spell >= 0 && spell < MT_SPELL_COUNT
                 && magictech_spells[spell].ai.values[mt_ai_current_action] != -1
                 && magictech_item_effective_power_check(magictech_ai->obj, magictech_ai->target_obj, item_obj)) {
                 mt_ai_candidate_item_spell_add(spell, item_obj);
@@ -497,6 +497,47 @@ void mt_ai_create(MagicTechAi* magictech_ai, int64_t obj, int action)
         mt_ai_create_internal(magictech_ai, obj, action);
         mt_ai_populate(magictech_ai);
     }
+}
+
+int mt_ai_utility_actions_collect(int64_t obj, int action, MagicTechAiActionListEntry* entries, int capacity)
+{
+    MagicTechAiActionListEntry spells[MAX_MT_ENTRIES];
+    MagicTechAi actor = { 0 };
+    int previous_action = mt_ai_current_action;
+    int spell_count;
+    int item_count;
+    int count = 0;
+    int index;
+    if (!mt_ai_initialized || entries == NULL || capacity <= 0 || obj == OBJ_HANDLE_NULL
+        || action < 0 || action >= MAGICTECH_AI_ACTION_COUNT
+        || !obj_type_is_critter(obj_field_int32_get(obj, OBJ_F_TYPE))) return 0;
+    if (capacity > MT_AI_UTILITY_RESOURCE_LIMIT) capacity = MT_AI_UTILITY_RESOURCE_LIMIT;
+    actor.obj = obj;
+    actor.action = action;
+    actor.leader_obj = critter_pc_leader_get(obj);
+    mt_ai_current_action = action;
+    mt_ai_entries_cnt = 0;
+    magictech_build_ai_action_list(&actor);
+    spell_count = mt_ai_entries_cnt;
+    memcpy(spells, mt_ai_tmp_entries, spell_count * sizeof(*spells));
+    mt_ai_entries_cnt = 0;
+    mt_ai_inventory_actions_collect(&actor);
+    item_count = mt_ai_entries_cnt;
+    for (index = 0; count < capacity && (index < spell_count || index < item_count); index++) {
+        int family;
+        for (family = 0; family < 2 && count < capacity; family++) {
+            MagicTechAiActionListEntry entry;
+            int duplicate;
+            if (index >= (family == 0 ? spell_count : item_count)) continue;
+            entry = family == 0 ? spells[index] : mt_ai_tmp_entries[index];
+            for (duplicate = 0; duplicate < count; duplicate++) {
+                if (entries[duplicate].spell == entry.spell && entries[duplicate].item_obj == entry.item_obj) break;
+            }
+            if (duplicate == count) entries[count++] = entry;
+        }
+    }
+    mt_ai_current_action = previous_action;
+    return count;
 }
 
 // 0x4CCAD0

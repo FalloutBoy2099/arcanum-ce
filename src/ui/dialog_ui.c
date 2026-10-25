@@ -33,10 +33,10 @@ typedef struct DialogUiEntry {
     /* 1850 */ int active;
     /* 1854 */ int script_num;
     /* 1858 */ int script_line;
-    /* 185C */ char field_185C;
-    /* 185D */ char field_185D;
-    /* 185E */ char field_185E;
-    /* 185F */ char field_185F;
+    /* 185C */ char reserved_slot_1;
+    /* 185D */ char reserved_slot_2;
+    /* 185E */ char reserved_slot_3;
+    /* 185F */ char reserved_slot_4;
 } DialogUiEntry;
 
 static DialogUiEntry* dialog_ui_first_entry_get_stub(int64_t obj);
@@ -213,11 +213,11 @@ void dialog_ui_start_dialog(int64_t pc_obj, int64_t npc_obj, int script_num, int
 }
 
 // 0x5678D0
-void dialog_ui_end_dialog(int64_t obj, int a2)
+void dialog_ui_end_dialog(int64_t obj, int end_reason)
 {
     DialogUiEntry* entry;
 
-    (void)a2;
+    (void)end_reason;
 
     entry = dialog_ui_first_entry_get_stub(obj);
     if (!entry->active) {
@@ -495,8 +495,8 @@ void dialog_ui_notify_object_destroyed(int64_t obj)
 // 0x5688D0
 void dialog_ui_speech_start(int64_t npc_obj, int64_t pc_obj, int speech_id)
 {
-    int v1;
-    int v2;
+    int dialog_number;
+    int line_number;
     char gender;
     char path[TIG_MAX_PATH];
 
@@ -507,19 +507,19 @@ void dialog_ui_speech_start(int64_t npc_obj, int64_t pc_obj, int speech_id)
     }
 
     dialog_ui_speech_stop();
-    dialog_speech_id_decode(speech_id, &v1, &v2);
+    dialog_speech_id_decode(speech_id, &dialog_number, &line_number);
 
     gender = stat_level_get(pc_obj, STAT_GENDER) != 0 ? 'm' : 'f';
     snprintf(path, sizeof(path),
         "sound\\speech\\%.5d\\v%d_%c.mp3",
-        v1,
-        v2,
+        dialog_number,
+        line_number,
         gender);
     if (gender == 'f' && !tig_file_exists(path, NULL)) {
         snprintf(path, sizeof(path),
             "sound\\speech\\%.5d\\v%d_%c.mp3",
-            v1,
-            v2,
+            dialog_number,
+            line_number,
             'm');
     }
     if (tig_file_exists(path, NULL)) {

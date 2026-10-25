@@ -1,4 +1,5 @@
 #include "game/sector_light_list.h"
+#include <limits.h>
 
 // TODO: Get rid.
 #include <stdio.h>
@@ -122,6 +123,7 @@ bool sector_light_list_load(SectorLightList* list, TigFile* stream, int64_t sect
         return false;
     }
 
+    if (!tig_file_count_fits(stream, cnt, INT_MAX, 0x30)) return false;
     if (sector_id != -1) {
         // TODO: Check.
         x = (int)SECTOR_X(sector_id);
@@ -170,6 +172,7 @@ bool sector_light_list_load_with_dif(SectorLightList* list, TigFile* sec_stream,
         return false;
     }
 
+    if (!tig_file_count_fits(sec_stream, cnt, INT_MAX, 0x30)) return false;
     if (sector_id != -1) {
         x = SECTOR_X(sector_id);
         y = SECTOR_Y(sector_id);
@@ -186,6 +189,7 @@ bool sector_light_list_load_with_dif(SectorLightList* list, TigFile* sec_stream,
 
             dif = (extent & 0x80000000) != 0;
             extent &= ~0x80000000;
+            if (extent == 0 || extent > cnt - idx) return false;
         }
 
         if (!light_read(sec_stream, &light)) {

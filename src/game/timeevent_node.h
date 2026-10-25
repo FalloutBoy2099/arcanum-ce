@@ -9,7 +9,7 @@ typedef struct TimeEventNode {
     TimeEvent te;
     ObjectReference object_references[TIMEEVENT_PARAM_TYPE_COUNT];
     struct TimeEventNode* next;
-    int field_D4;
+    int reserved_slot_1;
 } TimeEventNode;
 
 #endif

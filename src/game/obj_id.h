@@ -38,7 +38,7 @@ void objid_id_perm_by_load_order(ObjectID* oid, int64_t obj);
 bool objid_is_valid(ObjectID a);
 bool objid_compare(ObjectID a, ObjectID b);
 bool objid_is_equal(ObjectID a, ObjectID b);
-ObjectID objid_make_a(int a1);
+ObjectID objid_make_a(int allocated_id);
 void objid_id_to_str(char* buffer, ObjectID oid);
 bool objid_id_from_str(ObjectID* oid, const char* str);
 

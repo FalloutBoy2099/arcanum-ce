@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 
+#include "tig/asset_source.h"
 #include "tig/guid.h"
 #include "tig/types.h"
 
@@ -10,14 +11,17 @@
 extern "C" {
 #endif
 
-#define TIG_FILE_ATTRIBUTE_0x01 0x01
+#define TIG_FILE_ATTRIBUTE_RESERVED_FIRST 0x01
 #define TIG_FILE_ATTRIBUTE_READONLY 0x02
 #define TIG_FILE_ATTRIBUTE_HIDDEN 0x04
-#define TIG_FILE_ATTRIBUTE_0x08 0x08
+#define TIG_FILE_ATTRIBUTE_RESERVED_FOURTH 0x08
 #define TIG_FILE_ATTRIBUTE_SYSTEM 0x10
 #define TIG_FILE_ATTRIBUTE_SUBDIR 0x20
 #define TIG_FILE_ATTRIBUTE_ARCHIVE 0x40
-#define TIG_FILE_ATTRIBUTE_0x80 0x80
+#define TIG_FILE_ATTRIBUTE_DATABASE 0x80
+
+#define TIG_FILE_IGNORE_DATABASE 0x1
+#define TIG_FILE_IGNORE_DIRECTORY 0x2
 
 typedef struct TigFile TigFile;
 
@@ -43,6 +47,7 @@ bool tig_file_archive(const char* dst, const char* src);
 bool tig_file_unarchive(const char* src, const char* dst);
 int tig_file_init(TigInitInfo* init_info);
 void tig_file_exit(void);
+void tig_file_ignore(const char* path, unsigned int flags);
 bool tig_file_repository_add(const char* path);
 bool tig_file_repository_remove(const char* path);
 bool tig_file_repository_remove_all(void);
@@ -70,6 +75,7 @@ char* tig_file_fgets(char* buffer, int max_count, TigFile* stream);
 int tig_file_fputc(int ch, TigFile* stream);
 int tig_file_fputs(const char* str, TigFile* stream);
 int tig_file_ungetc(int ch, TigFile* stream);
+bool tig_file_count_fits(TigFile* stream, int count, size_t maximum, size_t minimum_entry_size);
 size_t tig_file_fread(void* buffer, size_t size, size_t count, TigFile* stream);
 size_t tig_file_fwrite(const void* buffer, size_t size, size_t count, TigFile* stream);
 int tig_file_fgetpos(TigFile* stream, int* pos_ptr);
@@ -84,6 +90,9 @@ bool tig_file_lock(const char* filename, const void* owner, size_t size);
 bool tig_file_unlock(const char* filename, const void* owner, size_t size);
 bool tig_file_locked_by(const char* filename, const void* owner, size_t size);
 bool tig_file_copy(const char* src, const char* dst);
+
+int tig_file_snapshot_sources(const char* path, TigAssetSource sources[TIG_ASSET_SOURCE_CAPACITY]);
+int tig_file_prefetch_sources(const char* path, char sources[TIG_ASSET_SOURCE_CAPACITY][TIG_ASSET_SOURCE_PATH_CAPACITY]);
 
 SDL_IOStream* tig_file_io_open(const char* path, const char* mode);
 

@@ -38,6 +38,7 @@ typedef struct WmapPathInfo {
 } WmapPathInfo;
 
 int path_make(PathCreateInfo* path_create_info);
+int path_make_preview(PathCreateInfo* path_create_info);
 unsigned int path_translate_flags(PathFlags flags);
 int path_make_straight(int64_t from, int64_t to, int8_t* rotations);
 int wmap_path_make(WmapPathInfo* path_info);

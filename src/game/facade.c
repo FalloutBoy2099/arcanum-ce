@@ -225,7 +225,7 @@ void facade_reserved_noop(void)
 }
 
 // 0x4CA6B0
-bool facade_location_rect_clip(LocRect* loc_rect, int* a2, int* a3)
+bool facade_location_rect_clip(LocRect* loc_rect, int* clipped_offset_x, int* clipped_offset_y)
 {
     int64_t min_x;
     int64_t min_y;
@@ -265,8 +265,8 @@ bool facade_location_rect_clip(LocRect* loc_rect, int* a2, int* a3)
         return false;
     }
 
-    *a2 = (int)(loc_rect->x1 - min_x);
-    *a3 = (int)(loc_rect->y1 - min_y);
+    *clipped_offset_x = (int)(loc_rect->x1 - min_x);
+    *clipped_offset_y = (int)(loc_rect->y1 - min_y);
 
     return true;
 }

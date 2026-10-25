@@ -1,5 +1,7 @@
 #include "game/mes.h"
 
+#include <limits.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -169,7 +171,8 @@ void mes_localized_exit(void)
 bool mes_load(const char* path, mes_file_handle_t* mes_file_handle_ptr)
 {
     int index;
-    MesFile mes_file;
+    MesFile mes_file = { 0 };
+    if (path == NULL || mes_file_handle_ptr == NULL || strlen(path) >= sizeof(mes_file.path)) return false;
 
     // Check if the file is already loaded.
     if (find_mes_file(path, &index)) {
@@ -179,6 +182,10 @@ bool mes_load(const char* path, mes_file_handle_t* mes_file_handle_ptr)
         return true;
     }
 
+    if (index < 0) {
+        *mes_file_handle_ptr = MES_FILE_HANDLE_INVALID;
+        return false;
+    }
     // Initialize new mes file object.
     strcpy(mes_file.path, path);
     mes_file.refcount = 1;
@@ -192,6 +199,8 @@ bool mes_load(const char* path, mes_file_handle_t* mes_file_handle_ptr)
 
     // Check if any entries were loaded.
     if (mes_file.num_entries == 0) {
+        FREE(mes_file.entries);
+        FREE(mes_file.data);
         if (mes_file_handle_ptr != NULL) {
             *mes_file_handle_ptr = MES_FILE_HANDLE_INVALID;
         }
@@ -418,54 +427,42 @@ int mes_num_entries(mes_file_handle_t mes_file_handle)
  */
 void mes_merge(mes_file_handle_t dst, mes_file_handle_t src)
 {
-    int index;
-    char* data;
-    MesFile* dst_mes_file = &(mes_files[dst]);
-    MesFile* src_mes_file = &(mes_files[src]);
-
-    // Keep the original pointer for pointer math (see below).
-    data = dst_mes_file->data;
-
-    // Expand the data buffer and entries array to accommodate both files' data.
-    dst_mes_file->data = (char*)REALLOC(dst_mes_file->data,
-        dst_mes_file->size + src_mes_file->size);
-    dst_mes_file->entries = (MesFileEntry*)REALLOC(dst_mes_file->entries,
-        sizeof(MesFileEntry) * (dst_mes_file->num_entries + src_mes_file->num_entries));
-
-    // Append data and entries from the source file.
-    memcpy(&(dst_mes_file->data[dst_mes_file->size]),
-        src_mes_file->data,
-        src_mes_file->size);
-    memcpy(&(dst_mes_file->entries[dst_mes_file->num_entries]),
-        src_mes_file->entries,
-        sizeof(MesFileEntry) * src_mes_file->num_entries);
-
-    // Fix string pointers in the destination entries.
-    for (index = 0; index < dst_mes_file->num_entries; index++) {
-        dst_mes_file->entries[index].str += dst_mes_file->data - data;
+    if (dst < 0 || dst >= mes_files_capacity || src < 0 || src >= mes_files_capacity
+        || mes_files[dst].refcount == 0 || mes_files[src].refcount == 0) return;
+    MesFile* destination = &mes_files[dst];
+    const MesFile* source = &mes_files[src];
+    if (source->num_entries > INT_MAX - destination->num_entries
+        || source->size > (size_t)INT_MAX - destination->size) return;
+    int count = destination->num_entries + source->num_entries;
+    if ((size_t)count > SIZE_MAX / sizeof(MesFileEntry)) return;
+    size_t size = destination->size + source->size;
+    char* data = (char*)MALLOC(size);
+    MesFileEntry* entries = (MesFileEntry*)MALLOC((size_t)count * sizeof(*entries));
+    if (data == NULL || entries == NULL) {
+        FREE(data);
+        FREE(entries);
+        return;
     }
-
-    // Adjust string pointers in the copied source entries.
-    for (index = 0; index < src_mes_file->num_entries; index++) {
-        dst_mes_file->entries[dst_mes_file->num_entries + index].str += dst_mes_file->data
-            + dst_mes_file->size
-            - src_mes_file->data;
+    memcpy(data, destination->data, destination->size);
+    memcpy(data + destination->size, source->data, source->size);
+    for (int index = 0; index < destination->num_entries; index++) {
+        entries[index] = destination->entries[index];
+        entries[index].str = data + (destination->entries[index].str - destination->data);
     }
-
-    // Update the destination file's size and entry count.
-    dst_mes_file->size += src_mes_file->size;
-    dst_mes_file->num_entries += src_mes_file->num_entries;
-
-    // Sort the combined entries (since all lookups use binary search).
-    if (dst_mes_file->num_entries != 0) {
-        qsort(dst_mes_file->entries,
-            dst_mes_file->num_entries,
-            sizeof(MesFileEntry),
-            compare_mes_file_entry);
+    for (int index = 0; index < source->num_entries; index++) {
+        entries[destination->num_entries + index] = source->entries[index];
+        entries[destination->num_entries + index].str = data + destination->size
+            + (source->entries[index].str - source->data);
     }
-
-    // Check for duplicate entry numbers.
-    check_duplicates(dst_mes_file);
+    FREE(destination->data);
+    FREE(destination->entries);
+    destination->data = data;
+    destination->entries = entries;
+    destination->size = size;
+    destination->num_entries = count;
+    destination->max_entries = count;
+    qsort(entries, count, sizeof(*entries), compare_mes_file_entry);
+    check_duplicates(destination);
 }
 
 /**
@@ -504,8 +501,18 @@ bool find_mes_file(const char* path, int* index_ptr)
     *index_ptr = index;
 
     // No free slot is available, expand message files array.
-    mes_files_capacity += 10;
-    mes_files = (MesFile*)REALLOC(mes_files, sizeof(MesFile) * mes_files_capacity);
+    if (mes_files_capacity > INT_MAX - 10 || (size_t)mes_files_capacity + 10 > SIZE_MAX / sizeof(MesFile)) {
+        *index_ptr = -1;
+        return false;
+    }
+    int capacity = mes_files_capacity + 10;
+    MesFile* resized = (MesFile*)REALLOC(mes_files, sizeof(*resized) * (size_t)capacity);
+    if (resized == NULL) {
+        *index_ptr = -1;
+        return false;
+    }
+    mes_files = resized;
+    mes_files_capacity = capacity;
 
     // Initialize new slots with zero refcount.
     while (index < mes_files_capacity) {
@@ -535,8 +542,19 @@ void mes_load_internal(MesFile* mes_file)
     // Allocate a buffer for the file's data based on its size. The actual size
     // for string data is smaller because it does not include comments, braces,
     // or new lines (unless they are part of a message entry).
-    mes_file->size = tig_file_filelength(stream);
+    int length = tig_file_filelength(stream);
+    mes_file->size = length > 0 ? (size_t)length : 0;
+    if (mes_file->size == 0) {
+        mes_file->size = 0;
+        mes_file_close(stream);
+        return;
+    }
     mes_file->data = (char*)MALLOC(mes_file->size);
+    if (mes_file->data == NULL) {
+        mes_file->size = 0;
+        mes_file_close(stream);
+        return;
+    }
 
     mes_file_entry.str = buffer;
 
@@ -545,11 +563,17 @@ void mes_load_internal(MesFile* mes_file)
 
     // Parse entries until the end of the file.
     while (parse_entry(stream, &mes_file_entry)) {
+        size_t entry_size = strlen(mes_file_entry.str) + 1;
+        if (entry_size > (size_t)(mes_file->size - offset)) break;
         // Expand the entries array if necessary.
         if (mes_file->num_entries == mes_file->max_entries) {
-            mes_file->max_entries += 10;
-            mes_file->entries = (MesFileEntry*)REALLOC(mes_file->entries,
-                sizeof(MesFileEntry) * mes_file->max_entries);
+            if (mes_file->max_entries > INT_MAX - 10
+                || (size_t)mes_file->max_entries + 10 > SIZE_MAX / sizeof(MesFileEntry)) break;
+            int capacity = mes_file->max_entries + 10;
+            MesFileEntry* resized = (MesFileEntry*)REALLOC(mes_file->entries, sizeof(*resized) * (size_t)capacity);
+            if (resized == NULL) break;
+            mes_file->entries = resized;
+            mes_file->max_entries = capacity;
         }
 
         // Copy the parsed entry to the entries array and update the data buffer.
@@ -597,7 +621,10 @@ bool parse_entry(TigFile* stream, MesFileEntry* mes_file_entry)
             current_mes_file_path);
     }
 
-    mes_file_entry->num = atoi(buffer);
+    char* end;
+    long long identifier = strtoll(buffer, &end, 10);
+    if (end == buffer || identifier < INT_MIN || identifier > INT_MAX) return false;
+    mes_file_entry->num = (int)identifier;
 
     // Parse the text field.
     if (!parse_field(stream, buffer)) {

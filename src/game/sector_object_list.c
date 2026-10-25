@@ -1,4 +1,5 @@
 #include "game/sector_object_list.h"
+#include <limits.h>
 
 #include "game/anim.h"
 #include "game/gsound.h"
@@ -136,10 +137,12 @@ bool objlist_load(SectorObjectList* list, TigFile* stream, int64_t sector_id)
         return false;
     }
 
+    if (cnt < 0) return false;
     if (tig_file_fseek(stream, pos, 0) != 0) {
         return false;
     }
 
+    if (!tig_file_count_fits(stream, cnt, INT_MAX, sizeof(uint32_t))) return false;
     if (sector_id != -1) {
         x = (int)SECTOR_X(sector_id) << 6;
         y = (int)SECTOR_Y(sector_id) << 6;
@@ -219,11 +222,13 @@ bool objlist_load_with_difs(SectorObjectList* list, TigFile* sec_stream, TigFile
         return false;
     }
 
+    if (cnt < 0) return false;
     if (tig_file_fseek(sec_stream, pos, 0) != 0) {
         tig_debug_println("ERROR: Seek failed in objlist_load_with_difs.");
         return false;
     }
 
+    if (!tig_file_count_fits(sec_stream, cnt, INT_MAX, sizeof(uint32_t))) return false;
     if (sector_id != -1) {
         x = SECTOR_X(sector_id);
         y = SECTOR_Y(sector_id);
@@ -246,6 +251,7 @@ bool objlist_load_with_difs(SectorObjectList* list, TigFile* sec_stream, TigFile
 
             dif = (extent & 0x80000000) != 0;
             extent &= ~0x80000000;
+            if (extent == 0 || extent > cnt - idx) return false;
         }
 
         if (!obj_read(sec_stream, &obj)) {
@@ -456,7 +462,7 @@ bool objlist_save_with_dif(SectorObjectList* list, TigFile* stream)
 }
 
 // 0x4F1CD0
-void objlist_fold(SectorObjectList* list, int64_t location, int a4)
+void objlist_fold(SectorObjectList* list, int64_t location, int event_processing_flags)
 {
     int64_t obj;
     FindNode* iter;
@@ -466,7 +472,7 @@ void objlist_fold(SectorObjectList* list, int64_t location, int a4)
             if ((obj_field_int32_get(obj, OBJ_F_FLAGS) & OF_INVENTORY) == 0
                 && !object_is_static(obj)) {
                 objlist_insert_internal(list, obj);
-                object_npc_ai_schedule_immediate(obj, a4);
+                object_npc_ai_schedule_immediate(obj, event_processing_flags);
                 wallcheck_player_location_notify(obj);
             }
         } while (obj_find_walk_next(&obj, &iter));
@@ -558,10 +564,10 @@ void sector_object_node_insert_sorted(SectorObjectList* list, ObjectNode* new_no
     int64_t new_obj_loc;
     int new_obj_type;
     unsigned int new_obj_flags;
-    int v1;
-    int v2;
-    int v3;
-    int v4;
+    int new_offset_x;
+    int new_offset_y;
+    int current_offset_x;
+    int current_offset_y;
     int new_obj_tile;
     ObjectNode** node_ptr;
     unsigned int flags;
@@ -570,7 +576,7 @@ void sector_object_node_insert_sorted(SectorObjectList* list, ObjectNode* new_no
     new_obj_loc = obj_field_int64_get(new_node->obj, OBJ_F_LOCATION);
     new_obj_type = obj_field_int32_get(new_node->obj, OBJ_F_TYPE);
     new_obj_flags = obj_field_int32_get(new_node->obj, OBJ_F_FLAGS);
-    sector_object_sort_offsets_get(new_node->obj, &v1, &v2);
+    sector_object_sort_offsets_get(new_node->obj, &new_offset_x, &new_offset_y);
     new_obj_tile = tile_id_from_loc(new_obj_loc);
 
     node_ptr = &(list->heads[new_obj_tile]);
@@ -603,14 +609,14 @@ void sector_object_node_insert_sorted(SectorObjectList* list, ObjectNode* new_no
         }
 
         if ((flags & OF_FLAT) == 0) {
-            sector_object_sort_offsets_get((*node_ptr)->obj, &v3, &v4);
-            if (v2 < v4) {
+            sector_object_sort_offsets_get((*node_ptr)->obj, &current_offset_x, &current_offset_y);
+            if (new_offset_y < current_offset_y) {
                 new_node->next = *node_ptr;
                 *node_ptr = new_node;
                 return;
             }
 
-            if (v2 == v4 && v1 < v3) {
+            if (new_offset_y == current_offset_y && new_offset_x < current_offset_x) {
                 new_node->next = *node_ptr;
                 *node_ptr = new_node;
                 return;

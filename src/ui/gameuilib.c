@@ -1,4 +1,5 @@
 #include "ui/gameuilib.h"
+#include "ui/asset_warmup.h"
 
 #include "game/gamelib.h"
 #include "game/target.h"
@@ -139,6 +140,7 @@ static bool gameuilib_mod_loaded;
  */
 bool gameuilib_init(GameInitInfo* init_info)
 {
+    ui_asset_warmup_clear();
     int index;
 
     // Initialize each module.
@@ -197,6 +199,7 @@ void gameuilib_exit(void)
  */
 void gameuilib_reset(void)
 {
+    ui_asset_warmup_rewind();
     int index;
 
     for (index = 0; index < MODULE_COUNT; index++) {

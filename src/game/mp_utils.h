@@ -44,13 +44,13 @@ static_assert(sizeof(Packet4) == 0x28, "wrong size");
 typedef struct Packet5 {
     /* 0000 */ int type;
     /* 0004 */ int padding_4;
-    /* 0008 */ DateTime field_8;
-    /* 0010 */ AnimGoalData field_10;
+    /* 0008 */ DateTime reserved_slot_1;
+    /* 0010 */ AnimGoalData reserved_slot_2;
     /* 0188 */ int64_t loc;
     /* 0190 */ int offset_x;
     /* 0194 */ int offset_y;
-    /* 0198 */ AnimID field_198;
-    /* 01A4 */ int field_1A4;
+    /* 0198 */ AnimID reserved_slot_3;
+    /* 01A4 */ int reserved_slot_4;
 } Packet5;
 
 // Serializeable.
@@ -87,13 +87,13 @@ static_assert(sizeof(Packet7) == 0x198, "wrong size");
 
 typedef struct Packet8 {
     /* 0000 */ int type;
-    /* 0004 */ int field_4;
+    /* 0004 */ int reserved_slot_1;
     /* 0008 */ AGModifyData modify_data;
     /* 0038 */ int offset_x;
     /* 003C */ int offset_y;
-    /* 0040 */ int64_t field_40;
-    /* 0048 */ int field_48;
-    /* 004C */ int field_4C;
+    /* 0040 */ int64_t extra_target_location;
+    /* 0048 */ int reserved_slot_2;
+    /* 004C */ int reserved_slot_3;
 } Packet8;
 
 // Serializeable.
@@ -101,19 +101,19 @@ static_assert(sizeof(Packet8) == 0x50, "wrong size");
 
 typedef struct Packet9 {
     /* 0000 */ int type;
-    /* 0004 */ int field_4;
+    /* 0004 */ int reserved_mode;
     /* 0008 */ int priority_level;
-    /* 000C */ int field_C;
-    /* 0010 */ int field_10;
-    /* 0014 */ int field_14;
-    /* 0018 */ ObjectHandleReference field_18;
-    /* 0048 */ int field_48;
-    /* 004C */ int field_4C;
+    /* 000C */ int reserved_slot_1;
+    /* 0010 */ int reserved_slot_2;
+    /* 0014 */ int reserved_slot_3;
+    /* 0018 */ ObjectHandleReference object_reference;
+    /* 0048 */ int use_lowest_priority;
+    /* 004C */ int reserved_slot_4;
     /* 0050 */ int64_t loc;
     /* 0058 */ int offset_x;
     /* 005C */ int offset_y;
     /* 0060 */ int art_id;
-    /* 0064 */ int field_64;
+    /* 0064 */ int reserved_slot_5;
 } Packet9;
 
 static_assert(sizeof(Packet9) == 0x68, "wrong size");
@@ -147,7 +147,7 @@ typedef struct Packet26 {
     /* 0000 */ int type;
     /* 0004 */ int padding_4;
     /* 0008 */ ObjectID oid;
-    /* 0020 */ int field_20;
+    /* 0020 */ int distance;
     /* 0024 */ int padding_24;
 } Packet26;
 
@@ -186,12 +186,12 @@ static_assert(sizeof(Packet29) == 0x20, "wrong size");
 typedef struct Packet46 {
     /* 0000 */ int type;
     /* 0004 */ int player;
-    /* 0008 */ int field_8;
-    /* 000C */ int field_C;
-    /* 0010 */ int field_10;
-    /* 0014 */ int field_14;
-    /* 0018 */ int field_18;
-    /* 001C */ int field_1C;
+    /* 0008 */ int reserved_slot_1;
+    /* 000C */ int reserved_slot_2;
+    /* 0010 */ int reserved_slot_3;
+    /* 0014 */ int reserved_slot_4;
+    /* 0018 */ int reserved_slot_5;
+    /* 001C */ int reserved_slot_6;
 } Packet46;
 
 static_assert(sizeof(Packet46) == 0x20, "wrong size");
@@ -243,10 +243,10 @@ typedef struct Packet64 {
     /* 0004 */ int player;
     /* 0008 */ int map;
     /* 000C */ char name[TIG_MAX_PATH];
-    /* 0110 */ int field_110;
-    /* 0114 */ int field_114;
-    /* 0118 */ int field_118;
-    /* 011C */ int field_11C;
+    /* 0110 */ int reserved_slot_1;
+    /* 0114 */ int reserved_slot_2;
+    /* 0118 */ int reserved_slot_3;
+    /* 011C */ int reserved_slot_4;
 } Packet64;
 
 // Serializeable.
@@ -254,7 +254,7 @@ static_assert(sizeof(Packet64) == 0x120, "wrong size");
 
 typedef struct Packet67 {
     /* 0000 */ int type;
-    /* 0004 */ int field_4;
+    /* 0004 */ int value;
 } Packet67;
 
 static_assert(sizeof(Packet67) == 0x08, "wrong size");
@@ -262,7 +262,7 @@ static_assert(sizeof(Packet67) == 0x08, "wrong size");
 typedef struct PacketNotifyPlayerLagging {
     /* 0000 */ int type;
     /* 0004 */ int padding_4;
-    /* 0008 */ ObjectHandleReference field_8;
+    /* 0008 */ ObjectHandleReference object_reference;
 } PacketNotifyPlayerLagging;
 
 static_assert(sizeof(PacketNotifyPlayerLagging) == 0x38, "wrong size");
@@ -270,7 +270,7 @@ static_assert(sizeof(PacketNotifyPlayerLagging) == 0x38, "wrong size");
 typedef struct PacketNotifyPlayerRecovered {
     /* 0000 */ int type;
     /* 0004 */ int padding_4;
-    /* 0008 */ ObjectHandleReference field_8;
+    /* 0008 */ ObjectHandleReference object_reference;
 } PacketNotifyPlayerRecovered;
 
 // Serializeable.
@@ -282,18 +282,18 @@ typedef struct Packet70 {
     union {
         struct {
             /* 0008 */ int name;
-            /* 000C */ int field_C;
+            /* 000C */ int reserved_slot_1;
             /* 0010 */ ObjectID oid;
             /* 0028 */ int64_t loc;
-            /* 0030 */ int field_30;
-            /* 0034 */ int field_34;
-            /* 0038 */ ObjectID field_38;
-            /* 0050 */ int field_50;
-            /* 0054 */ int field_54;
-            /* 0058 */ int field_58;
-            /* 005C */ int field_5C;
-            /* 0060 */ int field_60;
-            /* 0064 */ int field_64;
+            /* 0030 */ int reserved_creation_flags;
+            /* 0034 */ int reserved_slot_2;
+            /* 0038 */ ObjectID reserved_slot_3;
+            /* 0050 */ int reserved_slot_4;
+            /* 0054 */ int reserved_slot_5;
+            /* 0058 */ int reserved_slot_6;
+            /* 005C */ int reserved_slot_7;
+            /* 0060 */ int reserved_slot_8;
+            /* 0064 */ int reserved_slot_9;
         } s0;
         struct {
             /* 0008 */ ObjectID oid;
@@ -355,7 +355,7 @@ static_assert(sizeof(Packet74) == 0x40, "wrong size");
 typedef struct PacketMagicTechObjFlag {
     /* 0000 */ int type;
     /* 0004 */ int padding_4;
-    /* 0008 */ ObjectID field_8;
+    /* 0008 */ ObjectID target_id;
     /* 0020 */ ObjectID self_oid;
     /* 0038 */ int fld;
     /* 003C */ int value;
@@ -373,7 +373,7 @@ typedef struct Packet76 {
     /* 0004 */ int padding_4;
     /* 0008 */ ObjectID oid;
     /* 0020 */ int cost;
-    /* 0024 */ bool field_24;
+    /* 0024 */ bool consume_cost;
     /* 0028 */ int magictech;
     /* 002C */ int padding_2C;
 } Packet76;
@@ -397,26 +397,26 @@ typedef struct Packet80 {
     /* 0008 */ ObjectID item_oid;
     /* 0020 */ ObjectID parent_oid;
     /* 0038 */ int idx;
-    /* 003C */ int field_3C;
+    /* 003C */ int request_mode;
 } Packet80;
 
 typedef struct InventoryTransactionPacket {
     /* 0000 */ int type;
-    /* 0004 */ int field_4;
-    /* 0008 */ int field_8;
-    /* 000C */ int field_C;
-    /* 0010 */ ObjectID field_10;
-    /* 0028 */ ObjectID field_28;
-    /* 0040 */ ObjectID field_40;
-    /* 0058 */ int field_58;
-    /* 005C */ int field_5C;
-    /* 0060 */ int field_60;
-    /* 0064 */ int field_64;
-    /* 0068 */ int field_68;
-    /* 006C */ int field_6C;
-    /* 0070 */ ObjectID field_70;
-    /* 0088 */ ObjectID field_88;
-    /* 00A0 */ ObjectID field_A0;
+    /* 0004 */ int reserved_slot_1;
+    /* 0008 */ int transaction_flags;
+    /* 000C */ int reserved_slot_2;
+    /* 0010 */ ObjectID item_id;
+    /* 0028 */ ObjectID source_owner_id;
+    /* 0040 */ ObjectID destination_owner_id;
+    /* 0058 */ int destination_slot;
+    /* 005C */ int price;
+    /* 0060 */ int quantity;
+    /* 0064 */ int reserved_slot_3;
+    /* 0068 */ int client_id;
+    /* 006C */ int reserved_slot_4;
+    /* 0070 */ ObjectID merchant_id;
+    /* 0088 */ ObjectID target_inventory_owner_id;
+    /* 00A0 */ ObjectID pc_id;
 } InventoryTransactionPacket;
 
 // Serializeable.
@@ -424,21 +424,21 @@ static_assert(sizeof(InventoryTransactionPacket) == 0xB8, "wrong size");
 
 typedef struct Packet82 {
     /* 0000 */ int type;
-    /* 0004 */ int field_4;
-    /* 0008 */ ObjectID field_8;
-    /* 0020 */ ObjectID field_20;
-    /* 0038 */ int field_38;
-    /* 003C */ int field_3C;
-    /* 0040 */ ObjectID field_40;
+    /* 0004 */ int reserved_slot_1;
+    /* 0008 */ ObjectID reserved_slot_2;
+    /* 0020 */ ObjectID reserved_slot_3;
+    /* 0038 */ int reserved_slot_4;
+    /* 003C */ int reserved_slot_5;
+    /* 0040 */ ObjectID reserved_slot_6;
 } Packet82;
 
 static_assert(sizeof(Packet82) == 0x58, "wrong size");
 
 typedef struct Packet83 {
     /* 0000 */ int type;
-    /* 0004 */ int field_4;
-    /* 0008 */ int field_8;
-    /* 000C */ char field_C[128];
+    /* 0004 */ int reserved_slot_1;
+    /* 0008 */ int reserved_slot_2;
+    /* 000C */ char reserved_slot_3[128];
 } Packet83;
 
 static_assert(sizeof(Packet83) == 0x8C, "wrong size");
@@ -446,7 +446,7 @@ static_assert(sizeof(Packet83) == 0x8C, "wrong size");
 typedef struct Packet84 {
     /* 0000 */ int type;
     /* 0004 */ int extra_length;
-    /* 0008 */ int field_8;
+    /* 0008 */ int message_flags;
     /* 0010 */ UiMessage ui_message;
 } Packet84;
 
@@ -469,9 +469,9 @@ static_assert(sizeof(Packet92) == 0x28, "wrong size");
 
 typedef struct Packet93 {
     /* 0000 */ int type;
-    /* 0000 */ int field_4;
+    /* 0000 */ int client_id;
     /* 0008 */ ObjectID oid;
-    /* 0020 */ int field_20;
+    /* 0020 */ int active;
     /* 0024 */ int padding_24;
 } Packet93;
 
@@ -490,8 +490,8 @@ static_assert(sizeof(PacketUpdateInven) == 0x20, "wrong size");
 typedef struct Packet97 {
     /* 0000 */ int type;
     /* 0004 */ int padding_4;
-    /* 0008 */ ObjectID field_8;
-    /* 0020 */ ObjectID field_20;
+    /* 0008 */ ObjectID viewer_id;
+    /* 0020 */ ObjectID inventory_owner_id;
 } Packet97;
 
 // Serializeable.
@@ -524,7 +524,7 @@ typedef struct ObjectMovePacket {
     /* 0020 */ int64_t location;
     /* 0028 */ int dx;
     /* 002C */ int dy;
-    /* 0030 */ int field_30;
+    /* 0030 */ int center_local_player_view;
     /* 0034 */ int padding_34;
 } ObjectMovePacket;
 
@@ -536,30 +536,30 @@ typedef struct UiRequestPacket {
     /* 0004 */ int subtype;
     union {
         struct {
-            /* 0008 */ int field_8;
-            /* 000C */ int field_C;
+            /* 0008 */ int primary_value;
+            /* 000C */ int secondary_value;
         } a;
         struct {
-            /* 0008 */ ObjectID field_8;
+            /* 0008 */ ObjectID object_id;
         } b;
         struct {
-            /* 0008 */ int field_8;
-            /* 0010 */ ObjectID field_10;
-            /* 0028 */ ObjectID field_28;
+            /* 0008 */ int success;
+            /* 0010 */ ObjectID primary_id;
+            /* 0028 */ ObjectID secondary_id;
         } c;
         struct {
-            /* 0008 */ ObjectID field_8;
-            /* 0020 */ ObjectID field_20;
+            /* 0008 */ ObjectID source_id;
+            /* 0020 */ ObjectID target_id;
         } s;
         struct {
-            /* 0008 */ ObjectID field_8;
-            /* 0020 */ int field_20;
+            /* 0008 */ ObjectID pc_id;
+            /* 0020 */ int error_code;
         } x;
         struct {
-            /* 0008 */ ObjectID field_8;
-            /* 0020 */ ObjectID field_20;
-            /* 0038 */ int field_38;
-            /* 003C */ int field_3C;
+            /* 0008 */ ObjectID pc_id;
+            /* 0020 */ ObjectID target_id;
+            /* 0038 */ int inventory_mode;
+            /* 003C */ int stage;
         } z;
     } d;
 } UiRequestPacket;
@@ -598,8 +598,8 @@ static_assert(sizeof(PacketPlaySound) == 0x28, "wrong size");
 typedef struct ObjectPullPacket {
     /* 0000 */ int type;
     /* 0004 */ int padding_4;
-    /* 0008 */ ObjectID field_8;
-    /* 0020 */ ObjectID field_20;
+    /* 0008 */ ObjectID source_id;
+    /* 0020 */ ObjectID target_id;
 } ObjectPullPacket;
 
 // Serializeable.
@@ -607,9 +607,9 @@ static_assert(sizeof(ObjectPullPacket) == 0x38, "wrong size");
 
 typedef struct InventoryDestroyPacket {
     /* 0000 */ int type;
-    /* 0004 */ int field_4;
+    /* 0004 */ int reserved_slot_1;
     /* 0008 */ ObjectID oid;
-    /* 0020 */ int field_20;
+    /* 0020 */ int preserve_persistent;
     /* 0024 */ int padding_24;
 } InventoryDestroyPacket;
 
@@ -618,7 +618,7 @@ static_assert(sizeof(InventoryDestroyPacket) == 0x28, "wrong size");
 
 typedef struct InventorySpawnPacket {
     /* 0000 */ int type;
-    /* 0004 */ int field_4;
+    /* 0004 */ int reserved_slot_1;
     /* 0008 */ ObjectID oid;
 } InventorySpawnPacket;
 
@@ -674,18 +674,18 @@ static_assert(sizeof(Packet128) == 0x38, "wrong size");
 
 bool mp_junk_pile_cleanup_request(int64_t obj);
 bool mp_object_create(int name, int64_t loc, int64_t* obj_ptr);
-void mp_ui_message_send(UiMessage* ui_message, int player, int a3);
+void mp_ui_message_send(UiMessage* ui_message, int player, int message_flags);
 void mp_object_current_art_set(int64_t obj, tig_art_id_t art_id);
 void mp_ui_update_inven(int64_t obj);
-void mp_object_move_to_location(int64_t obj, int64_t location, int dx, int dy, bool a7);
+void mp_object_move_to_location(int64_t obj, int64_t location, int dx, int dy, bool center_local_player_view);
 void mp_item_activate(int64_t owner_obj, int64_t item_obj);
 void mp_ui_written_start_type(int64_t obj, WrittenType written_type, int num);
-void mp_ui_show_inven_loot(int64_t obj, int64_t a2);
-void mp_ui_object_examine_request(int64_t obj, int64_t a2);
+void mp_ui_show_inven_loot(int64_t obj, int64_t target_obj);
+void mp_ui_object_examine_request(int64_t obj, int64_t observer_obj);
 void mp_ui_show_inven_identify(int64_t pc_obj, int64_t target_obj);
-void mp_ui_character_sheet_request(int64_t obj, int64_t a2);
-void mp_object_pull_request(int64_t a1, int64_t a2);
-void mp_inventory_destroy_request(int64_t obj, int a2);
+void mp_ui_character_sheet_request(int64_t obj, int64_t target_obj);
+void mp_object_pull_request(int64_t source_obj, int64_t target_obj);
+void mp_inventory_destroy_request(int64_t obj, int preserve_persistent);
 void mp_inventory_source_spawn_request(int64_t obj);
 void mp_player_rule_packet_send(int64_t pc_obj, const char* name, const char* rule);
 void mp_gsound_play_sfx(int sound_id);

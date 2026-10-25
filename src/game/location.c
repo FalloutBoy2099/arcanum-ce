@@ -512,15 +512,15 @@ bool location_screen_rect_to_loc_rect(TigRect* rect, LocRect* loc_rect)
 }
 
 // 0x4B93F0
-void location_offsets_to_sort_axes(int a1, int a2, int* a3, int* a4)
+void location_offsets_to_sort_axes(int offset_x, int offset_y, int* sort_x_ptr, int* sort_y_ptr)
 {
-    int v1;
-    int v2;
+    int horizontal_axis_offset;
+    int vertical_axis_offset;
 
-    v1 = (a1 - 40) / 2;
-    v2 = 2 * (a2 / 2);
-    *a3 = v2 - v1;
-    *a4 = v1 + v2;
+    horizontal_axis_offset = (offset_x - 40) / 2;
+    vertical_axis_offset = 2 * (offset_y / 2);
+    *sort_x_ptr = vertical_axis_offset - horizontal_axis_offset;
+    *sort_y_ptr = horizontal_axis_offset + vertical_axis_offset;
 }
 
 // 0x4B9420

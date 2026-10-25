@@ -1,4 +1,5 @@
 #include "game/tile_script_list.h"
+#include <limits.h>
 
 // NOTE: This structure represents tile script list item data as it is stored on
 // disk. Its memory layout is set in stone and should never change. The main
@@ -295,14 +296,13 @@ bool tile_script_list_load(TileScriptList* list, TigFile* stream)
         return false;
     }
 
+    if (!tig_file_count_fits(stream, cnt, INT_MAX, sizeof(serialized))) return false;
     // Load each node.
     for (index = 0; index < cnt; index++) {
-        node = tile_script_node_create();
-
         if (tig_file_fread(&serialized, sizeof(serialized), 1, stream) != 1) {
             return false;
         }
-
+        node = tile_script_node_create();
         node->flags = serialized.flags;
         node->id = serialized.id;
         node->scr = serialized.scr;
@@ -389,6 +389,7 @@ bool tile_script_list_load_with_dif(TileScriptList* list, TigFile* stream)
         return false;
     }
 
+    if (!tig_file_count_fits(stream, cnt, INT_MAX, sizeof(serialized))) return false;
     // Load and apply each node.
     for (index = 0; index < cnt; index++) {
         if (tig_file_fread(&serialized, sizeof(serialized), 1, stream) != 1) {

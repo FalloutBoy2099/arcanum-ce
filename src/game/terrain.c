@@ -6,6 +6,7 @@
 #include "game/random.h"
 #include "game/tile.h"
 #include "game/terrain_encoding.h"
+#include "game/terrain_storage.h"
 
 #define FIRST_TERRAIN_COLOR_ID 100
 #define FIRST_TERRAIN_TRANSITION_ID 200
@@ -24,25 +25,25 @@ typedef struct TerrainHeader {
 // Serializeable.
 static_assert(sizeof(TerrainHeader) == 0x20, "wrong size");
 
-static void terrain_editor_bitmap_render_stub(int a1, int a2, TigVideoBuffer* vb, TigRect* rect);
+static void terrain_editor_bitmap_render_stub(int bitmap_x, int bitmap_y, TigVideoBuffer* vb, TigRect* rect);
 static void terrain_sector_tile_set(int64_t sec, uint16_t tid, void (*callback)(uint64_t sec));
 static const char* terrain_base_name(int terrain_type);
 static int terrain_match_base_name(const char* base_name);
 static void terrain_color(int terrain_type, int* red, int* green, int* blue);
-static void terrain_encode_to_pointer(int a1, int a2, int a3, int a4, uint16_t* value);
-static int terrain_transition_variant_randomize(int a1, int a2, int a3);
+static void terrain_encode_to_pointer(int primary_type, int secondary_type, int transition_mask, int variant, uint16_t* value);
+static int terrain_transition_variant_randomize(int primary_type, int secondary_type, int transition_mask);
 static int64_t terrain_variant_sector_id(int variant);
 static bool terrain_init_types(void);
 static bool terrain_types_and_variants_scan(void);
 static bool terrain_init_transitions(void);
 static bool terrain_parse_transition(char* str, int* from_terrain_type, int* to_terrain_type);
-static bool terrain_transition_first_step_find(int from, int to, bool* transitions, int* a4);
-static bool terrain_transition_path_search(int* a1, int a2, int a3, bool* transitions);
+static bool terrain_transition_first_step_find(int from, int to, bool* transitions, int* next_type_ptr);
+static bool terrain_transition_path_search(int* path, int path_depth, int destination_type, bool* transitions);
 static uint16_t terrain_transition_base_tile_get(int from, int to);
 static bool terrain_transition_uses_endpoint(int from, int to);
 static int terrain_compressed_row_cache_load(int64_t row_y);
 static void terrain_compressed_row_decode(void* dst, uint16_t* src);
-static void terrain_row_inflate(void* dst, void* src, int size);
+static bool terrain_row_inflate(void* dst, void* src, int size);
 static uint16_t* terrain_compressed_row_pointer_get(int64_t row_y);
 static bool terrain_compressed_rows_read(TigFile* stream);
 static bool terrain_compressed_rows_write(TigFile* stream);
@@ -68,7 +69,7 @@ static int64_t terrain_transition_variant_sector_ids[] = {
 };
 
 // 0x5B99E8
-static int dword_5B99E8[] = {
+static int terrain_unused_direction_masks[] = {
     1,
     3,
     2,
@@ -119,7 +120,7 @@ static int terrain_tile_data_size;
 static mes_file_handle_t terrain_mes_file;
 
 // 0x603A20
-static int dword_603A20[TERRAIN_TYPE_MAX];
+static int terrain_type_blocked_flags[TERRAIN_TYPE_MAX];
 
 // 0x603AA0
 static int64_t terrain_row_cache_y_coordinates[4];
@@ -177,8 +178,15 @@ bool terrain_map_new(MapNewInfo* new_map_info)
     terrain_header.height = new_map_info->height;
     terrain_header.base_terrain_type = new_map_info->base_terrain_type;
 
-    terrain_tile_data_size = sizeof(uint16_t) * (int)terrain_header.width * (int)terrain_header.height;
+    if (!terrain_storage_size(terrain_header.width, terrain_header.height, &terrain_tile_data_size)) {
+        terrain_map_close();
+        return false;
+    }
     terrain_tile_data = (uint16_t*)MALLOC(terrain_tile_data_size);
+    if (terrain_tile_data == NULL) {
+        terrain_map_close();
+        return false;
+    }
 
     for (index = 0; index < terrain_header.height * terrain_header.width; index++) {
         terrain_tile_data[index] = terrain_transition_variant_randomize(new_map_info->base_terrain_type, new_map_info->base_terrain_type, 15);
@@ -199,7 +207,9 @@ bool terrain_map_new(MapNewInfo* new_map_info)
 bool terrain_open(const char* base_path, const char* save_path)
 {
     TigFile* stream;
-    bool v1 = false;
+    bool header_loaded = false;
+    int expanded_size;
+    int file_size;
 
     terrain_map_close();
 
@@ -221,26 +231,41 @@ bool terrain_open(const char* base_path, const char* save_path)
     if (tig_file_fread(&terrain_header, sizeof(terrain_header), 1, stream) != 1) {
         tig_debug_println("Unable to read terrain header");
         tig_file_fclose(stream);
+        terrain_map_close();
         return false;
     }
 
     if (terrain_header.version != 1.2f) {
         tig_debug_println("Wrong terrain header version");
         tig_file_fclose(stream);
+        terrain_map_close();
         return false;
     }
 
-    terrain_tile_data_size = tig_file_filelength(stream) - sizeof(terrain_header);
+    file_size = tig_file_filelength(stream);
+    if (!terrain_storage_size(terrain_header.width, terrain_header.height, &expanded_size)
+        || file_size < (int)sizeof(terrain_header)
+        || ((terrain_header.flags & 1) == 0 && file_size - (int)sizeof(terrain_header) < expanded_size)) {
+        tig_file_fclose(stream);
+        terrain_map_close();
+        return false;
+    }
+    terrain_tile_data_size = file_size - (int)sizeof(terrain_header);
 
     if ((terrain_header.flags & 0x1) != 0) {
         if (terrain_editor) {
-            v1 = true;
-            terrain_tile_data_size = sizeof(int16_t) * (int)terrain_header.width * (int)terrain_header.height;
+            header_loaded = true;
+            terrain_tile_data_size = expanded_size;
         } else {
             int index;
 
             for (index = 0; index < 4; index++) {
-                terrain_row_cache[index] = (int16_t*)MALLOC(sizeof(int16_t) * terrain_header.width);
+                terrain_row_cache[index] = (int16_t*)MALLOC(sizeof(int16_t) * (size_t)terrain_header.width);
+                if (terrain_row_cache[index] == NULL) {
+                    tig_file_fclose(stream);
+                    terrain_map_close();
+                    return false;
+                }
                 terrain_row_cache_y_coordinates[index] = -1;
             }
 
@@ -249,11 +274,17 @@ bool terrain_open(const char* base_path, const char* save_path)
     }
 
     terrain_tile_data = (uint16_t*)MALLOC(terrain_tile_data_size);
+    if (terrain_tile_data == NULL) {
+        tig_file_fclose(stream);
+        terrain_map_close();
+        return false;
+    }
 
-    if (v1) {
+    if (header_loaded) {
         if (!terrain_compressed_rows_read(stream)) {
             tig_debug_println("Unable to decompress terrain data");
             tig_file_fclose(stream);
+            terrain_map_close();
             return false;
         }
 
@@ -262,11 +293,17 @@ bool terrain_open(const char* base_path, const char* save_path)
         if (tig_file_fread(terrain_tile_data, terrain_tile_data_size, 1, stream) != 1) {
             tig_debug_println("Unable to read terrain data");
             tig_file_fclose(stream);
+            terrain_map_close();
             return false;
         }
     }
 
     tig_file_fclose(stream);
+    if ((terrain_header.flags & 1) != 0
+        && !terrain_storage_rows_valid(terrain_tile_data, terrain_tile_data_size, terrain_header.height)) {
+        terrain_map_close();
+        return false;
+    }
 
     return true;
 }
@@ -276,10 +313,12 @@ void terrain_map_close(void)
 {
     int index;
 
-    if ((terrain_header.flags & 0x1) != 0) {
-        for (index = 0; index < 4; index++) {
+    for (index = 0; index < 4; index++) {
+        if (terrain_row_cache[index] != NULL) {
             FREE(terrain_row_cache[index]);
+            terrain_row_cache[index] = NULL;
         }
+        terrain_row_cache_y_coordinates[index] = -1;
     }
 
     if (terrain_tile_data != NULL) {
@@ -359,7 +398,7 @@ bool terrain_editor_bitmap_export(void)
 }
 
 // 0x4E80C0
-void terrain_editor_bitmap_render_stub(int a1, int a2, TigVideoBuffer* vb, TigRect* rect)
+void terrain_editor_bitmap_render_stub(int bitmap_x, int bitmap_y, TigVideoBuffer* vb, TigRect* rect)
 {
     // TODO: Incomplete.
 }
@@ -369,10 +408,10 @@ void terrain_sector_path(int64_t sector_id, char* path)
 {
     uint16_t tid;
     int base;
-    int v1;
-    int v2;
-    int v3;
-    int64_t v4;
+    int secondary_type;
+    int transition_mask;
+    int variant;
+    int64_t variant_sector_id;
     const char* to;
     const char* from;
 
@@ -383,11 +422,11 @@ void terrain_sector_path(int64_t sector_id, char* path)
         tig_debug_printf("Error: Invalid base in terrain_sector_path\n  tid: %d  base: %d\n", tid, base);
     }
 
-    v1 = terrain_secondary_type_get(tid);
-    v2 = terrain_transition_mask_get(tid);
-    if (base == v1 || v2 == 0) {
-        v3 = terrain_variant_get(tid);
-        v4 = terrain_variant_sector_id(v3);
+    secondary_type = terrain_secondary_type_get(tid);
+    transition_mask = terrain_transition_mask_get(tid);
+    if (base == secondary_type || transition_mask == 0) {
+        variant = terrain_variant_get(tid);
+        variant_sector_id = terrain_variant_sector_id(variant);
 
         to = terrain_base_name(base);
         if (to == NULL) {
@@ -397,14 +436,14 @@ void terrain_sector_path(int64_t sector_id, char* path)
         strcpy(path, "terrain\\");
         strcat(path, to);
     } else {
-        v4 = terrain_transition_variant_sector_ids[v2];
-        if (v4 != -1) {
+        variant_sector_id = terrain_transition_variant_sector_ids[transition_mask];
+        if (variant_sector_id != -1) {
             from = terrain_base_name(base);
-            to = terrain_base_name(v1);
+            to = terrain_base_name(secondary_type);
         } else {
-            from = terrain_base_name(v1);
+            from = terrain_base_name(secondary_type);
             to = terrain_base_name(base);
-            v4 = terrain_transition_variant_sector_ids[15 - v2];
+            variant_sector_id = terrain_transition_variant_sector_ids[15 - transition_mask];
         }
 
         strcpy(path, "terrain\\");
@@ -414,7 +453,7 @@ void terrain_sector_path(int64_t sector_id, char* path)
     }
 
     strcat(path, "\\");
-    SDL_lltoa(v4, &(path[strlen(path)]), 10);
+    SDL_lltoa(variant_sector_id, &(path[strlen(path)]), 10);
     strcat(path, ".sec");
 }
 
@@ -585,30 +624,30 @@ void terrain_color(int terrain_type, int* red, int* green, int* blue)
 }
 
 // 0x4E8CE0
-void terrain_encode_to_pointer(int a1, int a2, int a3, int a4, uint16_t* value)
+void terrain_encode_to_pointer(int primary_type, int secondary_type, int transition_mask, int variant, uint16_t* value)
 {
-    *value = terrain_encode(a1, a2, a3, a4);
+    *value = terrain_encode(primary_type, secondary_type, transition_mask, variant);
 }
 
 // 0x4E8D60
-int terrain_transition_variant_randomize(int a1, int a2, int a3)
+int terrain_transition_variant_randomize(int primary_type, int secondary_type, int transition_mask)
 {
     uint16_t value;
     int variant = 0;
 
     // A full or empty transition mask selects a single terrain type.
-    if (a3 == 0) {
-        a1 = a2;
-    } else if (a3 == 15) {
-        a2 = a1;
+    if (transition_mask == 0) {
+        primary_type = secondary_type;
+    } else if (transition_mask == 15) {
+        secondary_type = primary_type;
     }
-    if (a1 == a2) {
-        a3 = 0;
-        if (a1 >= 0 && a1 < TERRAIN_TYPE_MAX && terrain_variant_counts[a1] > 1) {
-            variant = random_between(0, terrain_variant_counts[a1] - 1);
+    if (primary_type == secondary_type) {
+        transition_mask = 0;
+        if (primary_type >= 0 && primary_type < TERRAIN_TYPE_MAX && terrain_variant_counts[primary_type] > 1) {
+            variant = random_between(0, terrain_variant_counts[primary_type] - 1);
         }
     }
-    terrain_encode_to_pointer(a1, a2, a3, variant, &value);
+    terrain_encode_to_pointer(primary_type, secondary_type, transition_mask, variant, &value);
     return value;
 }
 
@@ -639,18 +678,18 @@ int terrain_variant_get(uint16_t tile_data)
 // 0x4E8E00
 bool terrain_is_blocked(int64_t sec)
 {
-    uint16_t v1;
+    uint16_t tile_data;
 
-    v1 = terrain_sector_tile_get(sec);
-    if (v1 == 0xFFFF) {
+    tile_data = terrain_sector_tile_get(sec);
+    if (tile_data == 0xFFFF) {
         return true;
     }
 
-    if ((dword_603A20[terrain_primary_type_get(v1)] & 1) != 0) {
+    if ((terrain_type_blocked_flags[terrain_primary_type_get(tile_data)] & 1) != 0) {
         return true;
     }
 
-    if ((dword_603A20[terrain_secondary_type_get(v1)] & 1) != 0) {
+    if ((terrain_type_blocked_flags[terrain_secondary_type_get(tile_data)] & 1) != 0) {
         return true;
     }
 
@@ -661,8 +700,8 @@ bool terrain_is_blocked(int64_t sec)
 int64_t terrain_variant_sector_id(int variant)
 {
     // TODO: Check.
-    int64_t v1 = variant;
-    return (v1 % 2) | ((v1 / 2) << 26);
+    int64_t variant_index = variant;
+    return (variant_index % 2) | ((variant_index / 2) << 26);
 }
 
 // 0x4E8EA0
@@ -680,7 +719,7 @@ bool terrain_init_types(void)
 
         pch = strstr(mes_file_entry.str, "/b");
         if (pch != NULL) {
-            dword_603A20[index] = 1;
+            terrain_type_blocked_flags[index] = 1;
 
             do {
                 pch--;
@@ -744,7 +783,7 @@ bool terrain_init_transitions(void)
     int index;
     int from;
     int to;
-    int v1;
+    int first_step_type;
 
     mes_file_entry.num = FIRST_TERRAIN_TRANSITION_ID;
     if (!mes_search(terrain_mes_file, &mes_file_entry)) {
@@ -771,12 +810,12 @@ bool terrain_init_transitions(void)
 
     for (from = 0; from < terrain_type_count; from++) {
         for (to = 0; to < terrain_type_count; to++) {
-            if (!terrain_transition_first_step_find(from, to, transitions, &v1)) {
+            if (!terrain_transition_first_step_find(from, to, transitions, &first_step_type)) {
                 FREE(transitions);
                 return false;
             }
 
-            terrain_transition_next_steps[to + from * terrain_type_count] = v1;
+            terrain_transition_next_steps[to + from * terrain_type_count] = first_step_type;
         }
     }
 
@@ -816,55 +855,55 @@ bool terrain_parse_transition(char* str, int* from_terrain_type, int* to_terrain
 }
 
 // 0x4E92B0
-bool terrain_transition_first_step_find(int from, int to, bool* transitions, int* a4)
+bool terrain_transition_first_step_find(int from, int to, bool* transitions, int* next_type_ptr)
 {
-    int* v1;
+    int* path;
     bool result;
 
     if (from == to) {
-        *a4 = from;
+        *next_type_ptr = from;
         return true;
     }
 
-    v1 = (int*)MALLOC(sizeof(*v1) * terrain_type_count);
-    v1[0] = from;
+    path = (int*)MALLOC(sizeof(*path) * terrain_type_count);
+    path[0] = from;
 
-    result = terrain_transition_path_search(v1, 0, to, transitions);
+    result = terrain_transition_path_search(path, 0, to, transitions);
 
-    *a4 = v1[1];
-    FREE(v1);
+    *next_type_ptr = path[1];
+    FREE(path);
 
     return result;
 }
 
 // 0x4E9310
-bool terrain_transition_path_search(int* a1, int a2, int a3, bool* transitions)
+bool terrain_transition_path_search(int* path, int path_depth, int destination_type, bool* transitions)
 {
-    int v4;
-    int v6;
-    int v7;
+    int candidate_type;
+    int adjacency_row_offset;
+    int visited_index;
 
-    v6 = 0;
-    for (v4 = 0; v4 < terrain_type_count; v4++) {
-        if (transitions[v6 + a1[a2]]) {
-            for (v7 = 0; v7 <= a2; v7++) {
-                if (v4 == a1[v7]) {
+    adjacency_row_offset = 0;
+    for (candidate_type = 0; candidate_type < terrain_type_count; candidate_type++) {
+        if (transitions[adjacency_row_offset + path[path_depth]]) {
+            for (visited_index = 0; visited_index <= path_depth; visited_index++) {
+                if (candidate_type == path[visited_index]) {
                     break;
                 }
             }
 
-            if (v7 > a2) {
-                a1[a2 + 1] = v4;
-                if (v4 == a3) {
+            if (visited_index > path_depth) {
+                path[path_depth + 1] = candidate_type;
+                if (candidate_type == destination_type) {
                     return true;
                 }
 
-                if (terrain_transition_path_search(a1, a2 + 1, a3, transitions)) {
+                if (terrain_transition_path_search(path, path_depth + 1, destination_type, transitions)) {
                     return true;
                 }
             }
         }
-        v6 += terrain_type_count;
+        adjacency_row_offset += terrain_type_count;
     }
 
     return false;
@@ -874,10 +913,10 @@ bool terrain_transition_path_search(int* a1, int a2, int a3, bool* transitions)
 uint16_t terrain_transition_base_tile_get(int from, int to)
 {
     uint16_t value;
-    int v1;
+    int next_type;
 
-    v1 = terrain_transition_next_steps[to + from * terrain_type_count];
-    terrain_encode_to_pointer(v1, v1, 15, 0, &value);
+    next_type = terrain_transition_next_steps[to + from * terrain_type_count];
+    terrain_encode_to_pointer(next_type, next_type, 15, 0, &value);
 
     return value;
 }
@@ -907,51 +946,32 @@ int terrain_compressed_row_cache_load(int64_t row_y)
 // 0x4E9470
 void terrain_compressed_row_decode(void* dst, uint16_t* src)
 {
-    terrain_row_inflate(dst, (uint32_t*)src + 1, *(uint32_t*)src);
+    uint32_t size;
+    memcpy(&size, src, sizeof(size));
+    if (!terrain_row_inflate(dst, (uint8_t*)src + sizeof(size), (int)size)) {
+        memset(dst, 0, (size_t)terrain_header.width * sizeof(uint16_t));
+        tig_debug_println("Invalid compressed terrain row.");
+    }
 }
 
 // 0x4E9490
-void terrain_row_inflate(void* dst, void* src, int size)
+bool terrain_row_inflate(void* dst, void* src, int size)
 {
-    z_stream strm;
-    int rc;
-
-    strm.zalloc = Z_NULL;
-    strm.zfree = Z_NULL;
-    strm.opaque = Z_NULL;
-    strm.next_in = src;
-    strm.avail_in = 0;
-
-    rc = inflateInit(&strm);
-    if (rc != Z_OK) {
-        tig_debug_printf("Error decompressing terrain data\n");
-        exit(EXIT_FAILURE);
-    }
-
-    strm.next_out = dst;
-    strm.avail_in = size;
-    strm.next_in = src;
-    strm.avail_out = 2 * (int)terrain_header.width;
-
-    rc = inflate(&strm, Z_FINISH);
-    if (rc != Z_OK && rc != Z_STREAM_END) {
-        tig_debug_printf("Error decompressing terrain data\n");
-        exit(EXIT_FAILURE);
-    }
-
-    inflateEnd(&strm);
+    return size > 0 && terrain_storage_inflate_row(dst, (size_t)terrain_header.width * sizeof(uint16_t), src, (size_t)size);
 }
 
 // 0x4E9540
 uint16_t* terrain_compressed_row_pointer_get(int64_t row_y)
 {
-    int64_t v1;
-    uint16_t* v2 = terrain_tile_data;
+    int64_t row_index;
+    uint16_t* row_data = terrain_tile_data;
 
-    for (v1 = 0; v1 < row_y; v1++) {
-        v2 = (uint16_t*)((uint8_t*)v2 + *(uint32_t*)v2 + 4);
+    for (row_index = 0; row_index < row_y; row_index++) {
+        uint32_t size;
+        memcpy(&size, row_data, sizeof(size));
+        row_data = (uint16_t*)((uint8_t*)row_data + size + sizeof(size));
     }
-    return v2;
+    return row_data;
 }
 
 // 0x4E9580
@@ -964,7 +984,8 @@ bool terrain_compressed_rows_read(TigFile* stream)
     uint16_t* dst = terrain_tile_data;
 
     for (y = 0; y < terrain_header.height; y++) {
-        if (tig_file_fread(&size, sizeof(size), 1, stream) != 1) {
+        if (tig_file_fread(&size, sizeof(size), 1, stream) != 1
+            || size <= 0 || size > tig_file_filelength(stream) - tig_file_ftell(stream)) {
             if (tmp_size != 0) {
                 FREE(tmp_buf);
             }
@@ -972,7 +993,12 @@ bool terrain_compressed_rows_read(TigFile* stream)
         }
 
         if (size > tmp_size) {
-            tmp_buf = REALLOC(tmp_buf, size);
+            void* resized = REALLOC(tmp_buf, size);
+            if (resized == NULL) {
+                FREE(tmp_buf);
+                return false;
+            }
+            tmp_buf = resized;
             tmp_size = size;
         }
 
@@ -983,7 +1009,10 @@ bool terrain_compressed_rows_read(TigFile* stream)
             return false;
         }
 
-        terrain_row_inflate(dst, tmp_buf, size);
+        if (!terrain_row_inflate(dst, tmp_buf, size)) {
+            FREE(tmp_buf);
+            return false;
+        }
 
         dst += terrain_header.width;
     }
@@ -998,102 +1027,5 @@ bool terrain_compressed_rows_read(TigFile* stream)
 // 0x4E9680
 bool terrain_compressed_rows_write(TigFile* stream)
 {
-    int64_t y;
-    int pos;
-    int size;
-    z_stream strm;
-    uint16_t* src = terrain_tile_data;
-    int stride_size = sizeof(*src) * (int)terrain_header.width;
-    uint8_t tmp_buf[4096];
-    int rc;
-
-    for (y = 0; y < terrain_header.height; y++) {
-        pos = tig_file_ftell(stream);
-
-        if (tig_file_fwrite(&size, sizeof(size), 1, stream) != 1) {
-            return false;
-        }
-
-        strm.zalloc = Z_NULL;
-        strm.zfree = Z_NULL;
-        strm.opaque = Z_NULL;
-
-        if (deflateInit(&strm, Z_BEST_COMPRESSION) != Z_OK) {
-            return false;
-        }
-
-        strm.next_in = (Bytef*)src;
-        strm.avail_in = stride_size;
-        strm.next_out = (Bytef*)tmp_buf;
-        strm.avail_out = sizeof(tmp_buf);
-
-        while (strm.avail_in != 0) {
-            if (strm.avail_out == 0) {
-                if (tig_file_fwrite(tmp_buf, sizeof(tmp_buf), 1, stream) != 1) {
-                    deflateEnd(&strm);
-                    return false;
-                }
-
-                strm.next_out = tmp_buf;
-                strm.avail_out = sizeof(tmp_buf);
-            }
-
-            if (deflate(&strm, Z_NO_FLUSH) != Z_OK) {
-                deflateEnd(&strm);
-                return false;
-            }
-
-            if (strm.total_in == stride_size) {
-                while (strm.avail_out == 0) {
-                    if (tig_file_fwrite(tmp_buf, sizeof(tmp_buf), 1, stream) != 1) {
-                        deflateEnd(&strm);
-                        return false;
-                    }
-
-                    strm.next_out = tmp_buf;
-                    strm.avail_out = sizeof(tmp_buf);
-
-                    rc = deflate(&strm, Z_FINISH);
-                    if (rc == Z_STREAM_END) {
-                        break;
-                    }
-
-                    if (rc != Z_OK) {
-                        deflateEnd(&strm);
-                        return false;
-                    }
-                }
-
-                if (strm.avail_out != sizeof(tmp_buf)) {
-                    if (tig_file_fwrite(tmp_buf, sizeof(tmp_buf) - strm.avail_out, 1, stream) != 1) {
-                        deflateEnd(&strm);
-                        return false;
-                    }
-                }
-
-                if (deflateEnd(&strm) != Z_OK) {
-                    return false;
-                }
-
-                size = tig_file_ftell(stream) - pos - sizeof(size);
-
-                if (tig_file_fseek(stream, pos, SEEK_SET) != 0) {
-                    return false;
-                }
-
-                if (tig_file_fwrite(&size, sizeof(stream), 1, stream) != 1) {
-                    return false;
-                }
-
-                if (tig_file_fseek(stream, size, SEEK_CUR) != 0) {
-                    return false;
-                }
-
-                src += terrain_header.width;
-                break;
-            }
-        }
-    }
-
-    return true;
+    return terrain_storage_rows_write(stream, terrain_tile_data, terrain_header.width, terrain_header.height);
 }

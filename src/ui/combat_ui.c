@@ -440,7 +440,7 @@ void combat_ui_draw_ap_bar_segment(tig_window_handle_t window_handle, TigRect* r
 }
 
 // 0x56F430
-void combat_ui_action_points_bar_draw(int a1)
+void combat_ui_action_points_bar_draw(int preview_action_point_cost)
 {
     tig_art_id_t art_id;
     TigArtFrameData art_frame_data;
@@ -458,7 +458,7 @@ void combat_ui_action_points_bar_draw(int a1)
         return;
     }
 
-    combat_ui_draw_compact_ap_bar(a1);
+    combat_ui_draw_compact_ap_bar(preview_action_point_cost);
 
     if (tig_art_interface_id_create(294, 0, 0, 0, &art_id) == TIG_OK
         && tig_art_frame_data(art_id, &art_frame_data) == TIG_OK
@@ -475,17 +475,17 @@ void combat_ui_action_points_bar_draw(int a1)
         tig_window_blit_art(combat_ui_ap_bar_window_handle, &art_blit_info);
     }
 
-    if (a1 != 0) {
+    if (preview_action_point_cost != 0) {
         action_points = combat_required_action_points_get();
         orange = action_points;
-        green = a1 - action_points;
+        green = preview_action_point_cost - action_points;
         if (green >= TWENTY) {
             green = TWENTY;
             orange = 0;
             red = 0;
-        } else if (action_points > a1) {
-            orange = a1;
-            red = action_points - a1;
+        } else if (action_points > preview_action_point_cost) {
+            orange = preview_action_point_cost;
+            red = action_points - preview_action_point_cost;
             green = 0;
         }
 

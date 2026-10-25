@@ -397,3 +397,4 @@ benchmark-performance.csv
 benchmark-phases.csv
 benchmark-runs.txt
 benchmark-status.txt
+/.arcanum-build-number*

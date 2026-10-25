@@ -13,3 +13,7 @@ FetchContent_Declare(SDL3_ttf
 )
 
 FetchContent_MakeAvailable(SDL3_ttf)
+
+include("${CMAKE_CURRENT_LIST_DIR}/prefer_outline_fonts.cmake")
+FetchContent_GetProperties(SDL3_ttf SOURCE_DIR arcanum_sdl_ttf_source)
+arcanum_prefer_outline_fonts("${arcanum_sdl_ttf_source}/src/SDL_ttf.c")

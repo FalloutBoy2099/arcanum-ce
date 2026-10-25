@@ -4,7 +4,7 @@
 #include "game/context.h"
 
 void portal_bust(int64_t portal_obj, int64_t triggerer_obj);
-void portal_delete(int64_t portal_obj, bool a2);
+void portal_delete(int64_t portal_obj, bool delete_original);
 bool portal_is_open(int64_t portal_obj);
 void portal_toggle(int64_t portal_obj);
 bool portal_open(int64_t portal_obj);

@@ -9,7 +9,7 @@ void wall_resize(GameResizeInfo* resize_info);
 void wall_update_view(ViewOptions* view_options);
 void wall_toggle(void);
 void wall_draw(GameDrawInfo* draw_info);
-void wall_editor_pair_hook_stub(int64_t a1, int64_t a2);
-void wall_delete(int64_t obj, bool a2);
+void wall_editor_pair_hook_stub(int64_t source_wall, int64_t target_wall);
+void wall_delete(int64_t obj, bool delete_original);
 
 #endif /* ARCANUM_GAME_WALL_H_ */

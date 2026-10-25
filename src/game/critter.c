@@ -18,6 +18,8 @@
 #include "game/object_node.h"
 #include "game/party.h"
 #include "game/player.h"
+#include "game/progression_rules.h"
+#include "game/level_progression.h"
 #include "game/random.h"
 #include "game/reaction.h"
 #include "game/reputation.h"
@@ -29,11 +31,14 @@
 
 typedef enum FatigueEventType {
     FATIGUE_EVENT_RECOVERY,
-    FATIGUE_EVENT_DAMAGE,
+    FATIGUE_EVENT_WEIGHT_DAMAGE,
+    FATIGUE_EVENT_BULK_DAMAGE,
 } FatigueEventType;
 
 static void critter_disband_internal(int64_t obj);
 static bool fatigue_timeevent_check(TimeEvent* timeevent);
+static bool fatigue_timeevent_matches_delay(TimeEvent* timeevent);
+static int critter_test_fatigue_delay;
 static bool resting_timeevent_check(TimeEvent* timeevent);
 static bool decay_timeevent_check(TimeEvent* timeevent);
 static void critter_set_concealed_internal(int64_t obj, bool concealed);
@@ -42,22 +47,6 @@ static void critter_set_concealed_internal(int64_t obj, bool concealed);
  * 0x5B304C
  */
 static int critter_test_fatigue_type = -1;
-
-/**
- * Defines fatigue damage timeevent delay (in milliseconds) per encumbrance
- * level.
- *
- * 0x5B3050
- */
-static int fatigue_damage_delay_tbl[MAX_ENCUMBRANCE_LEVEL] = {
-    /*        ENCUMBRANCE_LEVEL_NONE */ 0,
-    /*       ENCUMBRANCE_LEVEL_LIGHT */ 0,
-    /*    ENCUMBRANCE_LEVEL_MODERATE */ 0,
-    /*      ENCUMBRANCE_LEVEL_MEDIUM */ 0,
-    /* ENCUMBRANCE_LEVEL_SIGNIFICANT */ 600000,
-    /*       ENCUMBRANCE_LEVEL_HEAVY */ 60000,
-    /*      ENCUMBRANCE_LEVEL_SEVERE */ 5000,
-};
 
 /**
  * Defines weight ratio (in percent from the maximum carry weight) per
@@ -698,8 +687,12 @@ void critter_notify_killed(int64_t victim_obj, int64_t killer_obj, int anim)
                 ObjectList followers;
                 ObjectNode* node;
 
-                // 20% of the experience cost for killing.
-                critter_give_xp(pc_killer_obj, 20 * obj_field_int32_get(victim_obj, OBJ_F_NPC_EXPERIENCE_WORTH) / 100);
+                int reward = progression_kill_experience(
+                    obj_field_int32_get(victim_obj, OBJ_F_NPC_EXPERIENCE_WORTH),
+                    obj_field_int32_get(victim_obj, OBJ_F_NPC_EXPERIENCE_POOL),
+                    settings_get_value(&settings, NO_XP_PER_HIT_KEY) != 0);
+                obj_field_int32_set(victim_obj, OBJ_F_NPC_EXPERIENCE_POOL, 0);
+                critter_give_xp(pc_killer_obj, reward);
                 obj_field_int32_set(victim_obj, OBJ_F_NPC_EXPERIENCE_WORTH, 0);
 
                 // Adjust alignment.
@@ -761,13 +754,13 @@ void critter_notify_killed(int64_t victim_obj, int64_t killer_obj, int anim)
  *
  * 0x45DC90
  */
-void critter_alignment_adjust_for_victim(int64_t killer_obj, int64_t victim_obj, bool a3)
+void critter_alignment_adjust_for_victim(int64_t killer_obj, int64_t victim_obj, bool full_adjustment)
 {
     int64_t summoner_obj;
     int alignment1;
     int alignment2;
     int adj;
-    int v1;
+    int alignment_delta;
     int alignment;
 
     if (!magictech_spell_flag_caster_find(victim_obj, OSF_SUMMONED, &summoner_obj) || summoner_obj != killer_obj) {
@@ -785,33 +778,33 @@ void critter_alignment_adjust_for_victim(int64_t killer_obj, int64_t victim_obj,
             adj = -100 - alignment2;
         }
 
-        v1 = alignment2 / 20;
-        if (!a3) {
-            v1 /= 2;
+        alignment_delta = alignment2 / 20;
+        if (!full_adjustment) {
+            alignment_delta /= 2;
         }
 
         // TODO: Check.
-        if (v1 < 0) {
+        if (alignment_delta < 0) {
             alignment = stat_base_get(killer_obj, STAT_ALIGNMENT);
             if (adj >= 0) {
-                if (alignment + v1 > adj) {
+                if (alignment + alignment_delta > adj) {
                     if (alignment > adj) {
                         stat_base_set(killer_obj, STAT_ALIGNMENT, alignment);
                     } else {
                         stat_base_set(killer_obj, STAT_ALIGNMENT, adj);
                     }
                 } else {
-                    stat_base_set(killer_obj, STAT_ALIGNMENT, alignment + v1);
+                    stat_base_set(killer_obj, STAT_ALIGNMENT, alignment + alignment_delta);
                 }
             } else {
-                if (alignment + v1 < adj) {
+                if (alignment + alignment_delta < adj) {
                     if (alignment < adj) {
                         stat_base_set(killer_obj, STAT_ALIGNMENT, alignment);
                     } else {
                         stat_base_set(killer_obj, STAT_ALIGNMENT, adj);
                     }
                 } else {
-                    stat_base_set(killer_obj, STAT_ALIGNMENT, alignment + v1);
+                    stat_base_set(killer_obj, STAT_ALIGNMENT, alignment + alignment_delta);
                 }
             }
         }
@@ -924,6 +917,10 @@ bool critter_follow(int64_t follower_obj, int64_t leader_obj, bool force)
         obj_field_int32_set(follower_obj, OBJ_F_SPELL_FLAGS, flags);
     }
 
+    if (settings_get_value(&settings, MASTER_EDUCATOR_KEY) != 0) {
+        int64_t leader = critter_pc_leader_get(follower_obj);
+        if (leader != OBJ_HANDLE_NULL) background_educate_followers(leader);
+    }
     return true;
 }
 
@@ -935,7 +932,7 @@ bool critter_follow(int64_t follower_obj, int64_t leader_obj, bool force)
 bool critter_disband(int64_t obj, bool force)
 {
     int64_t leader_obj;
-    int64_t v1;
+    int64_t mind_control_caster;
 
     leader_obj = critter_leader_get(obj);
     if (leader_obj != OBJ_HANDLE_NULL) {
@@ -949,7 +946,7 @@ bool critter_disband(int64_t obj, bool force)
             }
 
             // Mind-controlled critters cannot voluntarily leave their master.
-            if (magictech_spell_flag_caster_find(obj, OSF_MIND_CONTROLLED, &v1)) {
+            if (magictech_spell_flag_caster_find(obj, OSF_MIND_CONTROLLED, &mind_control_caster)) {
                 return false;
             }
         }
@@ -1305,7 +1302,7 @@ bool critter_fatigue_timeevent_process(TimeEvent* timeevent)
 {
     int64_t critter_obj;
     int type;
-    int v3;
+    int fatigue_adjustment;
     int fatigue;
     int dam;
     int encumbrance_level;
@@ -1323,9 +1320,9 @@ bool critter_fatigue_timeevent_process(TimeEvent* timeevent)
     }
 
     // TODO: Figure out math.
-    v3 = game_time_seconds_elapsed_since(timeevent->params[2].integer_value) / 8 / 10;
-    if (v3 < 1) {
-        v3 = 1;
+    fatigue_adjustment = game_time_seconds_elapsed_since(timeevent->params[2].integer_value) / 8 / 10;
+    if (fatigue_adjustment < 1) {
+        fatigue_adjustment = 1;
     }
 
     dam = critter_fatigue_damage_get(critter_obj);
@@ -1335,7 +1332,7 @@ bool critter_fatigue_timeevent_process(TimeEvent* timeevent)
     case FATIGUE_EVENT_RECOVERY:
         if (dam > 0) {
             // Recover fatigue based on heal rate.
-            dam -= v3 * stat_level_get(critter_obj, STAT_HEAL_RATE);
+            dam -= fatigue_adjustment * stat_level_get(critter_obj, STAT_HEAL_RATE);
             fatigue = critter_fatigue_current(critter_obj);
             if (dam < 0) {
                 dam = 0;
@@ -1348,21 +1345,20 @@ bool critter_fatigue_timeevent_process(TimeEvent* timeevent)
             }
         }
         break;
-    case FATIGUE_EVENT_DAMAGE:
-        // Apply fatigue damage if sufficient fatigue remains.
-        fatigue = critter_fatigue_current(critter_obj);
-        if (fatigue >= 5) {
-            if (fatigue - v3 < 5) {
-                v3 = 1;
+    case FATIGUE_EVENT_WEIGHT_DAMAGE:
+    case FATIGUE_EVENT_BULK_DAMAGE:
+        encumbrance_level = type == FATIGUE_EVENT_WEIGHT_DAMAGE
+            ? critter_weight_load_level_get(critter_obj) : critter_bulk_load_level_get(critter_obj);
+        if (inventory_load_fatigue_delay(encumbrance_level) != 0) {
+            fatigue = critter_fatigue_current(critter_obj);
+            fatigue_adjustment = inventory_load_fatigue_damage(game_time_seconds_elapsed_since(timeevent->params[2].integer_value));
+            if (fatigue > 5) {
+                if (fatigue_adjustment > fatigue - 5) {
+                    fatigue_adjustment = fatigue - 5;
+                }
+                critter_fatigue_damage_set(critter_obj, dam + fatigue_adjustment);
             }
-            dam += v3;
-            critter_fatigue_damage_set(critter_obj, dam);
-        }
-
-        // Schedule next fatigue damage event if applicable.
-        encumbrance_level = critter_encumbrance_level_get(critter_obj);
-        if (fatigue_damage_delay_tbl[encumbrance_level] != 0) {
-            critter_fatigue_timeevent_schedule(critter_obj, FATIGUE_EVENT_DAMAGE, fatigue_damage_delay_tbl[encumbrance_level]);
+            critter_fatigue_timeevent_schedule(critter_obj, type, inventory_load_fatigue_delay(encumbrance_level));
         }
         break;
     }
@@ -1377,7 +1373,7 @@ bool critter_fatigue_timeevent_process(TimeEvent* timeevent)
  */
 bool critter_fatigue_timeevent_schedule(int64_t obj, int type, int delay)
 {
-    TimeEvent timeevent;
+    TimeEvent timeevent = { 0 };
     DateTime datetime;
 
     if (obj == OBJ_HANDLE_NULL) {
@@ -1388,10 +1384,18 @@ bool critter_fatigue_timeevent_schedule(int64_t obj, int type, int delay)
         return true;
     }
 
-    // Check for existing event to avoid duplicates.
     critter_test_obj = obj;
     critter_test_fatigue_type = type;
-    if (timeevent_any(TIMEEVENT_TYPE_FATIGUE, fatigue_timeevent_check)) {
+    if (type == FATIGUE_EVENT_WEIGHT_DAMAGE || type == FATIGUE_EVENT_BULK_DAMAGE) {
+        critter_test_fatigue_delay = delay;
+        if (timeevent_any(TIMEEVENT_TYPE_FATIGUE, fatigue_timeevent_matches_delay)) {
+            return true;
+        }
+        timeevent_clear_all_ex(TIMEEVENT_TYPE_FATIGUE, fatigue_timeevent_check);
+        if (delay == 0) {
+            return true;
+        }
+    } else if (timeevent_any(TIMEEVENT_TYPE_FATIGUE, fatigue_timeevent_check)) {
         return true;
     }
 
@@ -1411,6 +1415,13 @@ bool fatigue_timeevent_check(TimeEvent* timeevent)
 {
     return timeevent->params[0].integer_value == critter_test_fatigue_type
         && timeevent->params[1].object_value == critter_test_obj;
+}
+
+static bool fatigue_timeevent_matches_delay(TimeEvent* event)
+{
+    return fatigue_timeevent_check(event)
+        && datetime_seconds_since_reference_date(&event->datetime) - event->params[2].integer_value
+            == critter_test_fatigue_delay / 1000;
 }
 
 /**
@@ -1836,7 +1847,8 @@ int critter_xp_worth(int64_t obj)
  */
 void critter_give_xp(int64_t obj, int xp_gain)
 {
-    int xp;
+    int64_t xp;
+    int64_t reward = xp_gain;
 
     if (obj_field_int32_get(obj, OBJ_F_TYPE) != OBJ_TYPE_PC) {
         return;
@@ -1849,18 +1861,22 @@ void critter_give_xp(int64_t obj, int xp_gain)
     // Adjust reward based on game difficulty.
     switch (gamelib_game_difficulty_get()) {
     case GAME_DIFFICULTY_EASY:
-        xp_gain += xp_gain / 2;
+        reward += reward / 2;
         break;
     case GAME_DIFFICULTY_HARD:
-        xp_gain -= xp_gain / 2;
+        reward -= reward / 2;
         break;
     }
 
     // Single-player game - just give all reward to the local PC.
     if (!critter_is_dead(obj)) {
         xp = stat_base_get(obj, STAT_EXPERIENCE_POINTS);
-        xp += effect_adjust_xp_gain(obj, xp_gain);
-        stat_base_set(obj, STAT_EXPERIENCE_POINTS, xp);
+        if (reward > LEVEL_EXPERIENCE_MAX) reward = LEVEL_EXPERIENCE_MAX;
+        if (reward < -LEVEL_EXPERIENCE_MAX) reward = -LEVEL_EXPERIENCE_MAX;
+        xp += effect_adjust_xp_gain(obj, (int)reward);
+        if (xp > LEVEL_EXPERIENCE_MAX) xp = LEVEL_EXPERIENCE_MAX;
+        if (xp < 0) xp = 0;
+        stat_base_set(obj, STAT_EXPERIENCE_POINTS, (int)xp);
 
         if (player_is_local_pc_obj(obj)) {
             ui_character_panels_refresh();
@@ -2139,29 +2155,40 @@ bool critter_is_monstrous(int64_t critter_obj)
  *
  * 0x45F790
  */
-int critter_encumbrance_level_get(int64_t obj)
+int critter_weight_load_level_get(int64_t obj)
 {
-    int current_weight;
-    int max_weight;
-    int encumbrance_level;
-
-    // Check if object is a critter.
-    if (!obj_type_is_critter(obj_field_int32_get(obj, OBJ_F_TYPE))) {
+    if (obj == OBJ_HANDLE_NULL || !obj_type_is_critter(obj_field_int32_get(obj, OBJ_F_TYPE))) {
         return ENCUMBRANCE_LEVEL_SEVERE;
     }
+    return inventory_load_level(item_total_weight(obj), stat_level_get(obj, STAT_CARRY_WEIGHT));
+}
 
-    // Get current and maximum carry weight.
-    current_weight = item_total_weight(obj);
-    max_weight = stat_level_get(obj, STAT_CARRY_WEIGHT);
+int critter_bulk_load_level_get(int64_t obj)
+{
+    return inventory_load_level(item_total_bulk(obj), item_bulk_capacity(obj));
+}
 
-    // Calculate encumbrance level based on weight ratio.
-    for (encumbrance_level = 0; encumbrance_level < MAX_ENCUMBRANCE_LEVEL; encumbrance_level++) {
-        if (current_weight < max_weight * critter_encumbrance_level_ratio(encumbrance_level) / 100) {
-            return encumbrance_level;
-        }
+int critter_load_speed_penalty(int64_t obj)
+{
+    if (obj == OBJ_HANDLE_NULL || !obj_type_is_critter(obj_field_int32_get(obj, OBJ_F_TYPE))) {
+        return 0;
     }
+    int weight;
+    int64_t bulk;
+    item_inventory_load_get(obj, &weight, &bulk);
+    return inventory_load_speed_penalty(inventory_load_level(weight, stat_level_get(obj, STAT_CARRY_WEIGHT)),
+        inventory_load_level(bulk, item_bulk_capacity(obj)));
+}
 
-    return ENCUMBRANCE_LEVEL_SEVERE;
+int critter_encumbrance_level_get(int64_t obj)
+{
+    if (obj == OBJ_HANDLE_NULL || !obj_type_is_critter(obj_field_int32_get(obj, OBJ_F_TYPE))) return ENCUMBRANCE_LEVEL_SEVERE;
+    int weight;
+    int64_t bulk;
+    item_inventory_load_get(obj, &weight, &bulk);
+    int weight_level = inventory_load_level(weight, stat_level_get(obj, STAT_CARRY_WEIGHT));
+    int bulk_level = inventory_load_level(bulk, item_bulk_capacity(obj));
+    return weight_level > bulk_level ? weight_level : bulk_level;
 }
 
 /**
@@ -2171,47 +2198,28 @@ int critter_encumbrance_level_get(int64_t obj)
  */
 void critter_encumbrance_level_recalc(int64_t obj, int prev_encumbrance_level)
 {
-    int encumbrance_level;
-    MesFileEntry mes_file_entry;
-    UiMessage ui_message;
-    int lvl;
+    int level;
+    int delay;
+    MesFileEntry message;
+    UiMessage notification;
 
-    encumbrance_level = critter_encumbrance_level_get(obj);
-    if (encumbrance_level == prev_encumbrance_level) {
+    if (obj == OBJ_HANDLE_NULL || obj_is_proto(obj)
+        || !obj_type_is_critter(obj_field_int32_get(obj, OBJ_F_TYPE))) {
         return;
     }
-
-    // Remove all existing encumbrance effects.
-    effect_remove_all_typed(obj, EFFECT_ENCUMBRANCE);
-
-    // Add one effect per each encumbrance level.
-    for (lvl = 0; lvl < encumbrance_level; lvl++) {
-        effect_add(obj, EFFECT_ENCUMBRANCE, EFFECT_CAUSE_ITEM);
-    }
-
-    // Special case - severe encumbrance adds two extra penalties.
-    if (encumbrance_level == ENCUMBRANCE_LEVEL_SEVERE) {
-        effect_add(obj, EFFECT_ENCUMBRANCE, EFFECT_CAUSE_ITEM);
-        effect_add(obj, EFFECT_ENCUMBRANCE, EFFECT_CAUSE_ITEM);
-    }
-
-    // Recalculate animation speed based on new effects.
+    level = critter_encumbrance_level_get(obj);
     anim_speed_recalc(obj);
-
-    // Provide UI feedback if enabled and for local PC.
-    if (critter_encumbrance_recalc_feedback_cnt > 0 && player_is_local_pc_obj(obj)) {
-        mes_file_entry.num = 11 + encumbrance_level;
-        mes_get_msg(critter_mes_file, &mes_file_entry);
-
-        ui_message.type = UI_MSG_TYPE_EXCLAMATION;
-        ui_message.str = mes_file_entry.str;
-        ui_display_msg(&ui_message);
+    if (level != prev_encumbrance_level && critter_encumbrance_recalc_feedback_cnt > 0 && player_is_local_pc_obj(obj)) {
+        message.num = 11 + level;
+        mes_get_msg(critter_mes_file, &message);
+        notification.type = UI_MSG_TYPE_EXCLAMATION;
+        notification.str = message.str;
+        ui_display_msg(&notification);
     }
-
-    // Schedule fatigue damage event.
-    if (fatigue_damage_delay_tbl[encumbrance_level] != 0) {
-        critter_fatigue_timeevent_schedule(obj, FATIGUE_EVENT_DAMAGE, fatigue_damage_delay_tbl[encumbrance_level]);
-    }
+    delay = inventory_load_fatigue_delay(critter_weight_load_level_get(obj));
+    critter_fatigue_timeevent_schedule(obj, FATIGUE_EVENT_WEIGHT_DAMAGE, delay);
+    delay = inventory_load_fatigue_delay(critter_bulk_load_level_get(obj));
+    critter_fatigue_timeevent_schedule(obj, FATIGUE_EVENT_BULK_DAMAGE, delay);
 }
 
 /**

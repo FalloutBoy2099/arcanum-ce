@@ -1,5 +1,8 @@
 #include "game/quest.h"
 
+#include <errno.h>
+#include <limits.h>
+
 #include "game/critter.h"
 #include "game/mes.h"
 #include "game/object.h"
@@ -26,7 +29,16 @@ typedef struct Quest {
     char* dumb_description;
 } Quest;
 
-static bool quest_parse(const char* path, int start, int end);
+typedef enum QuestParseResult {
+    QUEST_PARSE_MISSING,
+    QUEST_PARSE_INVALID,
+    QUEST_PARSE_OK,
+} QuestParseResult;
+
+static QuestParseResult quest_parse(const char* path, int start, int end);
+static bool quest_access_valid(int num);
+static bool quest_state_valid(int state);
+static int quest_pc_state_normalize(int state);
 static int quest_state_set_internal(int64_t pc_obj, int num, int state, int64_t npc_obj);
 static int quest_logbook_entry_compare(const void* va, const void* vb);
 
@@ -49,7 +61,7 @@ static mes_file_handle_t quest_log_dumb_mes_file = MES_FILE_HANDLE_INVALID;
  *
  * 0x5FF414
  */
-static mes_file_handle_t quest_xp_mes_file;
+static mes_file_handle_t quest_xp_mes_file = MES_FILE_HANDLE_INVALID;
 
 /**
  * Array storing the global state of each quest.
@@ -85,10 +97,20 @@ bool quest_init(GameInitInfo* init_info)
     quest_gstate = (int*)CALLOC(MAX_QUEST, sizeof(*quest_gstate));
     quests = (Quest*)CALLOC(MAX_QUEST, sizeof(*quests));
 
+    if (quest_gstate == NULL || quests == NULL) {
+        FREE(quest_gstate);
+        FREE(quests);
+        quest_gstate = NULL;
+        quests = NULL;
+        return false;
+    }
+
     // Load xp rewards data from file (required).
     if (!mes_load("Rules\\xp_quest.mes", &quest_xp_mes_file)) {
         FREE(quest_gstate);
         FREE(quests);
+        quest_gstate = NULL;
+        quests = NULL;
         return false;
     }
 
@@ -103,6 +125,7 @@ bool quest_init(GameInitInfo* init_info)
 void quest_reset(void)
 {
     int index;
+    if (quest_gstate == NULL) return;
 
     for (index = 0; index < MAX_QUEST; index++) {
         quest_gstate[index] = QUEST_STATE_ACCEPTED;
@@ -119,6 +142,9 @@ void quest_exit(void)
     mes_unload(quest_xp_mes_file);
     FREE(quest_gstate);
     FREE(quests);
+    quests = NULL;
+    quest_gstate = NULL;
+    quest_xp_mes_file = MES_FILE_HANDLE_INVALID;
 }
 
 /**
@@ -132,6 +158,7 @@ bool quest_mod_load(void)
     int state;
     MesFileEntry mes_file_entry;
     int num;
+    if (quests == NULL || quest_gstate == NULL) return false;
 
     // Initialize quests meta.
     for (index = 0; index < MAX_QUEST; index++) {
@@ -142,13 +169,17 @@ bool quest_mod_load(void)
         }
 
         quests[index].experience_level = 1;
+        quests[index].alignment_adjustment = 0;
         quests[index].normal_description = NULL;
         quests[index].dumb_description = NULL;
     }
 
     // Parse quests meta from file, which is optional. If this file exists
     // proceed to loading logbook descriptions.
-    if (quest_parse("rules\\gamequest.mes", 1000, 1999)) {
+    quest_reset();
+    QuestParseResult parsed = quest_parse("rules\\gamequest.mes", 1000, 1999);
+    if (parsed == QUEST_PARSE_INVALID) return false;
+    if (parsed == QUEST_PARSE_OK) {
         // Load quest logbook descriptions (for characters with normal
         // intelligence).
         if (mes_load("mes\\gamequestlog.mes", &quest_log_mes_file)) {
@@ -171,7 +202,6 @@ bool quest_mod_load(void)
             }
         }
 
-        quest_reset();
     }
 
     return true;
@@ -193,6 +223,12 @@ void quest_mod_unload(void)
         mes_unload(quest_log_dumb_mes_file);
         quest_log_dumb_mes_file = MES_FILE_HANDLE_INVALID;
     }
+    if (quests != NULL) {
+        for (int index = 0; index < MAX_QUEST; index++) {
+            quests[index].normal_description = NULL;
+            quests[index].dumb_description = NULL;
+        }
+    }
 }
 
 /**
@@ -202,10 +238,13 @@ void quest_mod_unload(void)
  */
 bool quest_load(GameLoadInfo* load_info)
 {
-    if (tig_file_fread(quest_gstate, sizeof(*quest_gstate) * MAX_QUEST, 1, load_info->stream) != 1) {
+    int loaded[MAX_QUEST];
+    if (load_info == NULL || load_info->stream == NULL || quest_gstate == NULL
+        || tig_file_fread(loaded, sizeof(loaded), 1, load_info->stream) != 1) {
         return false;
     }
-
+    for (int index = 0; index < MAX_QUEST; index++) if (!quest_state_valid(loaded[index])) return false;
+    memcpy(quest_gstate, loaded, sizeof(loaded));
     return true;
 }
 
@@ -216,10 +255,59 @@ bool quest_load(GameLoadInfo* load_info)
  */
 bool quest_save(TigFile* stream)
 {
+    if (stream == NULL || quest_gstate == NULL) return false;
     if (tig_file_fwrite(quest_gstate, sizeof(*quest_gstate) * MAX_QUEST, 1, stream) != 1) {
         return false;
     }
 
+    return true;
+}
+
+static bool quest_access_valid(int num)
+{
+    if (num >= 1000 && num < 1000 + MAX_QUEST && quests != NULL && quest_gstate != NULL) return true;
+    tig_debug_printf("Quest: invalid or unavailable quest %d.\n", num);
+    return false;
+}
+
+static bool quest_state_valid(int state)
+{
+    return state >= QUEST_STATE_UNKNOWN && state < QUEST_STATE_COUNT;
+}
+
+static int quest_pc_state_normalize(int state)
+{
+    int base = state & ~QUEST_BOTCHED_MODIFIER;
+    if (!quest_state_valid(base)) return QUEST_STATE_UNKNOWN;
+    return (state & QUEST_BOTCHED_MODIFIER) != 0 ? QUEST_STATE_BOTCHED : base;
+}
+
+static bool quest_definition_parse(const char* text, Quest* quest)
+{
+    int values[2 + 3 * QUEST_STATE_COUNT];
+    const char* cursor = text;
+    if (cursor == NULL) return false;
+    for (int index = 0; index < (int)SDL_arraysize(values); index++) {
+        char* end;
+        long value;
+        while (SDL_isspace((unsigned char)*cursor)) cursor++;
+        errno = 0;
+        value = strtol(cursor, &end, 10);
+        if (end == cursor || errno == ERANGE || value < INT_MIN || value > INT_MAX
+            || (*end != '\0' && !SDL_isspace((unsigned char)*end))) return false;
+        if ((index == 0 && value < 0) || (index >= 2 && value < -1)) return false;
+        values[index] = (int)value;
+        cursor = end;
+    }
+    while (SDL_isspace((unsigned char)*cursor)) cursor++;
+    if (*cursor != '\0') return false;
+    quest->experience_level = values[0];
+    quest->alignment_adjustment = values[1];
+    for (int state = 0; state < QUEST_STATE_COUNT; state++) {
+        quest->normal_dialog[state] = values[2 + state];
+        quest->bad_reaction_dialog[state] = values[2 + QUEST_STATE_COUNT + state];
+        quest->dumb_dialog[state] = values[2 + 2 * QUEST_STATE_COUNT + state];
+    }
     return true;
 }
 
@@ -228,75 +316,33 @@ bool quest_save(TigFile* stream)
  *
  * 0x4C4860
  */
-bool quest_parse(const char* path, int start, int end)
+static QuestParseResult quest_parse(const char* path, int start, int end)
 {
     mes_file_handle_t mes_file;
-    MesFileEntry mes_file_entry;
-    int num;
-    char temp[2000];
-    Quest* quest;
-
-    // Load the message file.
-    if (!mes_load(path, &mes_file)) {
-        return false;
-    }
-
-    // Parse each entry in the specified range.
-    for (num = start; num <= end; num++) {
-        mes_file_entry.num = num;
-
-        if (mes_search(mes_file, &mes_file_entry)) {
-            // NOTE: There is pretty good explanation of the format in the
-            // WorldEd manual:
-            //
-            // "The first two numbers are experience level of the quest and how
-            // it will affect the PC's alignment when completed.
-            //
-            // The next 21 numbers are used by the Q: generated dialog operator.
-            // These numbers are arranged in three banks of seven numbers each.
-            // The banks, in order, are normal dialog, bad reaction dialog (used
-            // if the PC has a reaction of 20 or lower), and stupid PC dialog
-            // (used if the PC has an intelligence of 4 or lower). Each of the
-            // seven numbers in each bank is the dialog entry point for the
-            // quest in each of its seven states. The number refers to a PC
-            // dialog line which will be used in place of the Q: line based on
-            // the associated quest state. You can use a –1 to indicate no
-            // dialog line, meaning no message will be printed."
-            strcpy(temp, mes_file_entry.str);
-
-            quest = &(quests[quest_num_to_idx(num)]);
-            quest->experience_level = atoi(strtok(temp, " "));
-            quest->alignment_adjustment = atoi(strtok(NULL, " "));
-
-            quest->normal_dialog[QUEST_STATE_UNKNOWN] = atoi(strtok(NULL, " "));
-            quest->normal_dialog[QUEST_STATE_MENTIONED] = atoi(strtok(NULL, " "));
-            quest->normal_dialog[QUEST_STATE_ACCEPTED] = atoi(strtok(NULL, " "));
-            quest->normal_dialog[QUEST_STATE_ACHIEVED] = atoi(strtok(NULL, " "));
-            quest->normal_dialog[QUEST_STATE_COMPLETED] = atoi(strtok(NULL, " "));
-            quest->normal_dialog[QUEST_STATE_OTHER_COMPLETED] = atoi(strtok(NULL, " "));
-            quest->normal_dialog[QUEST_STATE_BOTCHED] = atoi(strtok(NULL, " "));
-
-            quest->bad_reaction_dialog[QUEST_STATE_UNKNOWN] = atoi(strtok(NULL, " "));
-            quest->bad_reaction_dialog[QUEST_STATE_MENTIONED] = atoi(strtok(NULL, " "));
-            quest->bad_reaction_dialog[QUEST_STATE_ACCEPTED] = atoi(strtok(NULL, " "));
-            quest->bad_reaction_dialog[QUEST_STATE_ACHIEVED] = atoi(strtok(NULL, " "));
-            quest->bad_reaction_dialog[QUEST_STATE_COMPLETED] = atoi(strtok(NULL, " "));
-            quest->bad_reaction_dialog[QUEST_STATE_OTHER_COMPLETED] = atoi(strtok(NULL, " "));
-            quest->bad_reaction_dialog[QUEST_STATE_BOTCHED] = atoi(strtok(NULL, " "));
-
-            quest->dumb_dialog[QUEST_STATE_UNKNOWN] = atoi(strtok(NULL, " "));
-            quest->dumb_dialog[QUEST_STATE_MENTIONED] = atoi(strtok(NULL, " "));
-            quest->dumb_dialog[QUEST_STATE_ACCEPTED] = atoi(strtok(NULL, " "));
-            quest->dumb_dialog[QUEST_STATE_ACHIEVED] = atoi(strtok(NULL, " "));
-            quest->dumb_dialog[QUEST_STATE_COMPLETED] = atoi(strtok(NULL, " "));
-            quest->dumb_dialog[QUEST_STATE_OTHER_COMPLETED] = atoi(strtok(NULL, " "));
-            quest->dumb_dialog[QUEST_STATE_BOTCHED] = atoi(strtok(NULL, " "));
+    Quest* parsed;
+    bool valid = true;
+    if (start < 1000 || end >= 1000 + MAX_QUEST || start > end || quests == NULL) return QUEST_PARSE_INVALID;
+    if (!mes_load(path, &mes_file)) return QUEST_PARSE_MISSING;
+    parsed = MALLOC(MAX_QUEST * sizeof(*parsed));
+    if (parsed == NULL) { mes_unload(mes_file); return QUEST_PARSE_INVALID; }
+    memcpy(parsed, quests, MAX_QUEST * sizeof(*parsed));
+    for (int index = 0; index < mes_entries_count(mes_file); index++) {
+        MesFileEntry entry;
+        if (!mes_get_entry(mes_file, index, &entry)) { valid = false; break; }
+        if (entry.num < start || entry.num > end) {
+            tig_debug_printf("Quest: ignoring auxiliary catalog entry %d outside %d-%d.\n", entry.num, start, end);
+            continue;
+        }
+        if (!quest_definition_parse(entry.str, &parsed[quest_num_to_idx(entry.num)])) {
+            tig_debug_printf("Quest: invalid definition in %s, entry %d; expected 23 integers and a valid quest number.\n", path, entry.num);
+            valid = false;
+            break;
         }
     }
-
+    if (valid) memcpy(quests, parsed, MAX_QUEST * sizeof(*quests));
+    FREE(parsed);
     mes_unload(mes_file);
-
-    return true;
+    return valid ? QUEST_PARSE_OK : QUEST_PARSE_INVALID;
 }
 
 /**
@@ -309,7 +355,7 @@ int quest_dialog_line(int64_t pc_obj, int64_t npc_obj, int num)
     int state;
 
     // Verify that the object is a PC.
-    if (obj_field_int32_get(pc_obj, OBJ_F_TYPE) != OBJ_TYPE_PC) {
+    if (!quest_access_valid(num) || pc_obj == OBJ_HANDLE_NULL || obj_field_int32_get(pc_obj, OBJ_F_TYPE) != OBJ_TYPE_PC) {
         return 0;
     }
 
@@ -336,24 +382,19 @@ int quest_dialog_line(int64_t pc_obj, int64_t npc_obj, int num)
  */
 int quest_state_get(int64_t pc_obj, int num)
 {
-    PcQuestState pc_quest_state;
+    PcQuestState pc_quest_state = { 0 };
     int state;
+    if (!quest_access_valid(num)) return QUEST_STATE_UNKNOWN;
 
     // Check if obj is not really a PC. In this case return global quest state.
-    if (obj_field_int32_get(pc_obj, OBJ_F_TYPE) != OBJ_TYPE_PC) {
+    if (pc_obj == OBJ_HANDLE_NULL || obj_field_int32_get(pc_obj, OBJ_F_TYPE) != OBJ_TYPE_PC) {
         return quest_global_state_get(num);
     }
 
     // Retrieve the PC's quest state.
     obj_arrayfield_pc_quest_get(pc_obj, OBJ_F_PC_QUEST_IDX, num, &pc_quest_state);
 
-    state = pc_quest_state.state;
-
-    // Check if quest is botched. If so, expose state as botched, rather than
-    // the exact value.
-    if ((state & QUEST_BOTCHED_MODIFIER) != 0) {
-        state = QUEST_STATE_BOTCHED;
-    }
+    state = quest_pc_state_normalize(pc_quest_state.state);
 
     return state;
 }
@@ -366,6 +407,8 @@ int quest_state_get(int64_t pc_obj, int num)
 int quest_state_set(int64_t pc_obj, int num, int state, int64_t npc_obj)
 {
     int old_state;
+    if (!quest_access_valid(num) || !quest_state_valid(state) || pc_obj == OBJ_HANDLE_NULL
+        || obj_field_int32_get(pc_obj, OBJ_F_TYPE) != OBJ_TYPE_PC) return QUEST_STATE_UNKNOWN;
 
     // Obtain the current quest state.
     old_state = quest_state_get(pc_obj, num);
@@ -398,8 +441,9 @@ int quest_state_set(int64_t pc_obj, int num, int state, int64_t npc_obj)
 int quest_state_set_internal(int64_t pc_obj, int num, int state, int64_t npc_obj)
 {
     int old_state;
-    PcQuestState pc_quest_state;
+    PcQuestState pc_quest_state = { 0 };
     int reaction;
+    if (!quest_access_valid(num) || !quest_state_valid(state) || pc_obj == OBJ_HANDLE_NULL) return QUEST_STATE_UNKNOWN;
 
     // Verify the object is a player character.
     if (obj_field_int32_get(pc_obj, OBJ_F_TYPE) != OBJ_TYPE_PC) {
@@ -428,7 +472,7 @@ int quest_state_set_internal(int64_t pc_obj, int num, int state, int64_t npc_obj
     obj_arrayfield_pc_quest_get(pc_obj, OBJ_F_PC_QUEST_IDX, num, &pc_quest_state);
     if (state == QUEST_STATE_BOTCHED) {
         // Keep current quest state, but mark as it botched.
-        pc_quest_state.state |= QUEST_BOTCHED_MODIFIER;
+        pc_quest_state.state = old_state | QUEST_BOTCHED_MODIFIER;
     } else {
         pc_quest_state.state = state;
     }
@@ -438,9 +482,10 @@ int quest_state_set_internal(int64_t pc_obj, int num, int state, int64_t npc_obj
 
     // Apply alignment adjustment.
     if (state == QUEST_STATE_COMPLETED) {
+        int64_t alignment = (int64_t)stat_base_get(pc_obj, STAT_ALIGNMENT) + quests[quest_num_to_idx(num)].alignment_adjustment;
         stat_base_set(pc_obj,
             STAT_ALIGNMENT,
-            stat_base_get(pc_obj, STAT_ALIGNMENT) + quests[quest_num_to_idx(num)].alignment_adjustment);
+            alignment > INT_MAX ? INT_MAX : alignment < INT_MIN ? INT_MIN : (int)alignment);
 
         // Play quest completed sound.
         tig_sound_quick_play(SND_INTERFACE_QUESTCOMPLETE);
@@ -478,7 +523,8 @@ int quest_state_set_internal(int64_t pc_obj, int num, int state, int64_t npc_obj
 int quest_unbotch(int64_t obj, int num)
 {
     int state;
-    PcQuestState pc_quest_state;
+    PcQuestState pc_quest_state = { 0 };
+    if (!quest_access_valid(num)) return QUEST_STATE_UNKNOWN;
 
     // Check if the quest is botched globally.
     state = quest_global_state_get(num);
@@ -487,16 +533,18 @@ int quest_unbotch(int64_t obj, int num)
     }
 
     // Verify the object is a player character.
-    if (obj_field_int32_get(obj, OBJ_F_TYPE) != OBJ_TYPE_PC) {
+    if (obj == OBJ_HANDLE_NULL || obj_field_int32_get(obj, OBJ_F_TYPE) != OBJ_TYPE_PC) {
         return state;
     }
+
+    obj_arrayfield_pc_quest_get(obj, OBJ_F_PC_QUEST_IDX, num, &pc_quest_state);
+    if (!quest_state_valid(pc_quest_state.state & ~QUEST_BOTCHED_MODIFIER)) return QUEST_STATE_UNKNOWN;
 
     // Reset the global quest state ("accepted" is the default state).
     quest_gstate[quest_num_to_idx(num)] = QUEST_STATE_ACCEPTED;
 
     // Remove botched modifier from the player's quest state, effectively
     // returning quest to it's previous state.
-    obj_arrayfield_pc_quest_get(obj, OBJ_F_PC_QUEST_IDX, num, &pc_quest_state);
     pc_quest_state.state &= ~QUEST_BOTCHED_MODIFIER;
     pc_quest_state.datetime = game_time_get();
     obj_arrayfield_pc_quest_set(obj, OBJ_F_PC_QUEST_IDX, num, &pc_quest_state);
@@ -522,6 +570,7 @@ int quest_unbotch(int64_t obj, int num)
  */
 int quest_global_state_get(int num)
 {
+    if (!quest_access_valid(num)) return QUEST_STATE_UNKNOWN;
     return quest_gstate[quest_num_to_idx(num)];
 }
 
@@ -533,6 +582,7 @@ int quest_global_state_get(int num)
 int quest_global_state_set(int num, int state)
 {
     int old_state;
+    if (!quest_access_valid(num) || !quest_state_valid(state)) return QUEST_STATE_UNKNOWN;
 
     old_state = quest_gstate[quest_num_to_idx(num)];
 
@@ -557,6 +607,9 @@ int quest_global_state_set(int num, int state)
  */
 void quest_copy_description(int64_t obj, int num, char* buffer, size_t maxlen)
 {
+    if (buffer == NULL || maxlen == 0) return;
+    buffer[0] = '\0';
+    if (!quest_access_valid(num) || obj == OBJ_HANDLE_NULL) return;
     if (quests[quest_num_to_idx(num)].dumb_description != NULL
         && stat_level_get(obj, STAT_INTELLIGENCE) <= LOW_INTELLIGENCE) {
         SDL_strlcpy(buffer, quests[quest_num_to_idx(num)].dumb_description, maxlen);
@@ -576,11 +629,12 @@ void quest_copy_description(int64_t obj, int num, char* buffer, size_t maxlen)
 int quest_get_logbook_data(int64_t obj, QuestLogbookEntry* logbook_entries)
 {
     int index;
-    PcQuestState pc_quests[2000];
+    PcQuestState pc_quests[2000] = { 0 };
     int cnt;
 
     // Verify the object is a player character.
-    if (obj_field_int32_get(obj, OBJ_F_TYPE) != OBJ_TYPE_PC) {
+    if (logbook_entries == NULL || obj == OBJ_HANDLE_NULL || quests == NULL
+        || obj_field_int32_get(obj, OBJ_F_TYPE) != OBJ_TYPE_PC) {
         return 0;
     }
 
@@ -589,14 +643,14 @@ int quest_get_logbook_data(int64_t obj, QuestLogbookEntry* logbook_entries)
 
     // Collect active quests (non-unknown states).
     cnt = 0;
-    for (index = 0; index < 2000; index++) {
-        if ((pc_quests[index].state & ~QUEST_BOTCHED_MODIFIER) != QUEST_STATE_UNKNOWN) {
+    for (index = 1000; index < 2000; index++) {
+        if (quest_pc_state_normalize(pc_quests[index].state) != QUEST_STATE_UNKNOWN) {
             logbook_entries[cnt].num = index;
             logbook_entries[cnt].datetime = pc_quests[index].datetime;
             if ((pc_quests[index].state & QUEST_BOTCHED_MODIFIER) != 0) {
                 logbook_entries[cnt].state = QUEST_STATE_BOTCHED;
             } else {
-                logbook_entries[cnt].state = pc_quests[index].state;
+                logbook_entries[cnt].state = quest_pc_state_normalize(pc_quests[index].state);
             }
             cnt++;
         }
@@ -631,11 +685,14 @@ int quest_get_xp(int xp_level)
     MesFileEntry mes_file_entry;
 
     mes_file_entry.num = xp_level;
-    if (mes_search(quest_xp_mes_file, &mes_file_entry)) {
-        return atoi(mes_file_entry.str);
-    } else {
-        return 0;
-    }
+    if (xp_level < 0 || quest_xp_mes_file == MES_FILE_HANDLE_INVALID
+        || !mes_search(quest_xp_mes_file, &mes_file_entry) || mes_file_entry.str == NULL) return 0;
+    char* end;
+    errno = 0;
+    long value = strtol(mes_file_entry.str, &end, 10);
+    if (end == mes_file_entry.str || errno == ERANGE || value < 0 || value > INT_MAX) return 0;
+    while (SDL_isspace((unsigned char)*end)) end++;
+    return *end == '\0' ? (int)value : 0;
 }
 
 /**
@@ -645,13 +702,14 @@ int quest_get_xp(int xp_level)
  */
 bool quest_copy_accepted(int64_t src_obj, int64_t dst_obj)
 {
-    PcQuestState pc_quests[2000];
+    PcQuestState pc_quests[2000] = { 0 };
     int index;
     int dst_state;
     int src_state;
 
     // Ensure both objects are player characters.
-    if (obj_field_int32_get(src_obj, OBJ_F_TYPE) != OBJ_TYPE_PC
+    if (src_obj == OBJ_HANDLE_NULL || dst_obj == OBJ_HANDLE_NULL || quests == NULL
+        || obj_field_int32_get(src_obj, OBJ_F_TYPE) != OBJ_TYPE_PC
         || obj_field_int32_get(dst_obj, OBJ_F_TYPE) != OBJ_TYPE_PC) {
         return false;
     }
@@ -659,7 +717,7 @@ bool quest_copy_accepted(int64_t src_obj, int64_t dst_obj)
     // Copy source player's quests.
     obj_arrayfield_pc_quest_copy_to_flat(src_obj, OBJ_F_PC_QUEST_IDX, 1999, pc_quests);
 
-    for (index = 0; index < 2000; index++) {
+    for (index = 1000; index < 2000; index++) {
         dst_state = quest_state_get(dst_obj, index);
 
         // Skip if quest is completed or botched.

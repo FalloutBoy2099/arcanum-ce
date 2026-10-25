@@ -47,14 +47,14 @@ static void end_game(void);
 static void tb_ui_hotkey_slot_clear(int slot);
 static void tb_ui_counters_refresh(void);
 static void tb_ui_targeting_reset(void);
-static void tb_ui_spell_apply(int64_t obj, void* a2, int a3);
+static void tb_ui_spell_apply(int64_t obj, void* target_descriptor, int spell);
 static void handle_sector_changed(int64_t sec, int64_t obj);
 static void charedit_error_msg(int type, int param);
 static void tb_ui_character_sheet_open(int64_t pc_obj, int64_t target_obj);
 static void tb_ui_inventory_drag_cancel(void);
 static bool tb_ui_multiplayer_confirmation_1902(void);
 static bool tb_ui_multiplayer_confirmation_1903(void);
-static bool tb_ui_multiplayer_named_confirmation(const char* name, const char* a2);
+static bool tb_ui_multiplayer_named_confirmation(const char* name, const char* message);
 
 // 0x57C6E0
 bool tb_ui_init(GameInitInfo* init_info)
@@ -329,11 +329,11 @@ void tb_ui_targeting_reset(void)
 }
 
 // 0x57CE30
-void tb_ui_spell_apply(int64_t obj, void* a2, int a3)
+void tb_ui_spell_apply(int64_t obj, void* target_descriptor, int spell)
 {
-    if (!magictech_has_item_triggers(a3)) {
-        if (spell_ui_activate(obj, a3) == SPELL_UI_ACTIVATE_OK) {
-            spell_ui_apply(a2);
+    if (!magictech_has_item_triggers(spell)) {
+        if (spell_ui_activate(obj, spell) == SPELL_UI_ACTIVATE_OK) {
+            spell_ui_apply(target_descriptor);
         }
         spell_ui_cancel();
     }
@@ -480,7 +480,7 @@ bool tb_ui_multiplayer_confirmation_1903(void)
 }
 
 // 0x57D150
-bool tb_ui_multiplayer_named_confirmation(const char* name, const char* a2)
+bool tb_ui_multiplayer_named_confirmation(const char* name, const char* message)
 {
     mes_file_handle_t mes_file;
     MesFileEntry mes_file_entry;
@@ -488,7 +488,7 @@ bool tb_ui_multiplayer_named_confirmation(const char* name, const char* a2)
     TigWindowModalDialogInfo modal_info;
     TigWindowModalDialogChoice choice;
 
-    (void)a2;
+    (void)message;
 
     mes_load("mes\\MultiPlayer.mes", &mes_file);
 

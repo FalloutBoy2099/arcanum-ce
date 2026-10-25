@@ -131,10 +131,10 @@ void ui_skill_preprocess(int64_t obj, int type)
 }
 
 // 0x460380
-void ui_skill_activate(TargetDescriptor* td, int64_t obj, int a3)
+void ui_skill_activate(TargetDescriptor* td, int64_t obj, int skill)
 {
     if (ui_callbacks.skill_activate != NULL) {
-        ui_callbacks.skill_activate(td, obj, a3);
+        ui_callbacks.skill_activate(td, obj, skill);
     }
 }
 
@@ -273,10 +273,10 @@ void ui_counters_refresh(void)
 }
 
 // 0x4605E0
-void ui_spell_apply(int64_t a1, void* a2, int a3)
+void ui_spell_apply(int64_t source_obj, void* spell_context, int spell)
 {
     if (ui_callbacks.spell_apply != NULL) {
-        ui_callbacks.spell_apply(a1, a2, a3);
+        ui_callbacks.spell_apply(source_obj, spell_context, spell);
     }
 }
 
@@ -507,18 +507,18 @@ void ui_start_dialog(int64_t pc_obj, int64_t npc_obj, int script_num, int script
 }
 
 // 0x460A20
-void ui_end_dialog(int64_t pc_obj, int a3)
+void ui_end_dialog(int64_t pc_obj, int end_reason)
 {
     if (ui_callbacks.end_dialog != NULL) {
-        ui_callbacks.end_dialog(pc_obj, a3);
+        ui_callbacks.end_dialog(pc_obj, end_reason);
     }
 }
 
 // 0x460AB0
-void ui_optional_event_dispatch(int a1, int a2, void* a3)
+void ui_optional_event_dispatch(int event_type, int event_code, void* event_payload)
 {
     if (ui_callbacks.optional_event_callback != NULL) {
-        ui_callbacks.optional_event_callback(a1, a2, a3);
+        ui_callbacks.optional_event_callback(event_type, event_code, event_payload);
     }
 }
 
@@ -567,10 +567,10 @@ bool ui_wmap_rnd_timeevent_process(TimeEvent* timeevent)
 }
 
 // 0x460B50
-void ui_schematic_open_request(int64_t a1, int64_t a2)
+void ui_schematic_open_request(int64_t primary_obj, int64_t secondary_obj)
 {
     if (ui_callbacks.schematic_open_request != NULL) {
-        ui_callbacks.schematic_open_request(a1, a2);
+        ui_callbacks.schematic_open_request(primary_obj, secondary_obj);
     }
 }
 
@@ -613,10 +613,10 @@ int ui_multiplayer_confirmation_1903(void)
 }
 
 // 0x460BE0
-int ui_multiplayer_named_confirmation(const char* a1, const char* a2)
+int ui_multiplayer_named_confirmation(const char* title, const char* message)
 {
     if (ui_callbacks.multiplayer_named_confirmation != NULL) {
-        return ui_callbacks.multiplayer_named_confirmation(a1, a2);
+        return ui_callbacks.multiplayer_named_confirmation(title, message);
     } else {
         return 0;
     }
@@ -687,50 +687,50 @@ bool ui_inven_create(int64_t pc_obj, int64_t target_obj, int mode)
 }
 
 // 0x460D10
-void ui_reserved_string_callback_144_dispatch(const char* a1)
+void ui_reserved_string_callback_144_dispatch(const char* text)
 {
     if (ui_callbacks.reserved_string_callback_144 != NULL) {
-        ui_callbacks.reserved_string_callback_144(a1);
+        ui_callbacks.reserved_string_callback_144(text);
     }
 }
 
 // 0x460D30
-void ui_reserved_string_callback_148_dispatch(const char* a1)
+void ui_reserved_string_callback_148_dispatch(const char* text)
 {
     if (ui_callbacks.reserved_string_callback_148 != NULL) {
-        ui_callbacks.reserved_string_callback_148(a1);
+        ui_callbacks.reserved_string_callback_148(text);
     }
 }
 
 // 0x460D50
-void ui_reserved_string_pair_callback_14c_dispatch(const char* a1, const char* a2)
+void ui_reserved_string_pair_callback_14c_dispatch(const char* first_text, const char* second_text)
 {
     if (ui_callbacks.reserved_string_pair_callback_14c != NULL) {
-        ui_callbacks.reserved_string_pair_callback_14c(a1, a2);
+        ui_callbacks.reserved_string_pair_callback_14c(first_text, second_text);
     }
 }
 
 // 0x460D70
-void ui_reserved_string_pair_callback_150_dispatch(const char* a1, const char* a2)
+void ui_reserved_string_pair_callback_150_dispatch(const char* first_text, const char* second_text)
 {
     if (ui_callbacks.reserved_string_pair_callback_150 != NULL) {
-        ui_callbacks.reserved_string_pair_callback_150(a1, a2);
+        ui_callbacks.reserved_string_pair_callback_150(first_text, second_text);
     }
 }
 
 // 0x460D90
-void ui_reserved_integer_pair_callback_154_dispatch(int a1, int a2)
+void ui_reserved_integer_pair_callback_154_dispatch(int first_value, int second_value)
 {
     if (ui_callbacks.reserved_integer_pair_callback_154 != NULL) {
-        ui_callbacks.reserved_integer_pair_callback_154(a1, a2);
+        ui_callbacks.reserved_integer_pair_callback_154(first_value, second_value);
     }
 }
 
 // 0x460DB0
-void ui_reserved_string_pair_callback_158_dispatch(const char* a1, const char* a2)
+void ui_reserved_string_pair_callback_158_dispatch(const char* first_text, const char* second_text)
 {
     if (ui_callbacks.reserved_string_pair_callback_158 != NULL) {
-        ui_callbacks.reserved_string_pair_callback_158(a1, a2);
+        ui_callbacks.reserved_string_pair_callback_158(first_text, second_text);
     }
 }
 

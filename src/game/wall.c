@@ -99,7 +99,7 @@ void wall_draw(GameDrawInfo* draw_info)
 }
 
 // 0x4E1490
-void wall_editor_pair_hook_stub(int64_t a1, int64_t a2)
+void wall_editor_pair_hook_stub(int64_t source_wall, int64_t target_wall)
 {
     if (!wall_editor) {
         return;
@@ -109,7 +109,7 @@ void wall_editor_pair_hook_stub(int64_t a1, int64_t a2)
 }
 
 // 0x4E18F0
-void wall_delete(int64_t obj, bool a2)
+void wall_delete(int64_t obj, bool delete_original)
 {
     tig_art_id_t art_id;
     int p_piece;
@@ -125,7 +125,7 @@ void wall_delete(int64_t obj, bool a2)
         wall_pieces_expand_along_neighbors(obj);
     }
 
-    if (a2) {
+    if (delete_original) {
         if (obj_handle_is_valid(obj)) {
             object_sector_remove(obj);
             object_delete(obj);

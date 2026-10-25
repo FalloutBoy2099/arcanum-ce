@@ -16,6 +16,7 @@ void charedit_reset(void);
 bool charedit_open(int64_t obj, ChareditMode mode);
 void charedit_close(void);
 bool charedit_is_created(void);
+bool charedit_is_editing(int64_t obj);
 bool charedit_is_creation(void);
 void charedit_refresh(void);
 void charedit_error_not_enough_character_points(void);

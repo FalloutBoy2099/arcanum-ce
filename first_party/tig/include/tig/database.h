@@ -20,14 +20,14 @@ typedef struct TigDatabase {
     /* 000C */ TigDatabaseFileHandle* open_file_handles_head;
     /* 0010 */ TigDatabase* next;
     /* 0014 */ TigGuid guid;
-    /* 0024 */ int field_24;
+    /* 0024 */ int reserved_slot_1;
     /* 0028 */ char* name_table;
 } TigDatabase;
 
 #define TIG_DATABASE_ENTRY_PLAIN 0x01
 #define TIG_DATABASE_ENTRY_COMPRESSED 0x02
-#define TIG_DATABASE_ENTRY_0x100 0x100
-#define TIG_DATABASE_ENTRY_0x200 0x200
+#define TIG_DATABASE_ENTRY_OVERRIDE_UNCHECKED 0x100
+#define TIG_DATABASE_ENTRY_OVERRIDE_PRESENT 0x200
 #define TIG_DATABASE_ENTRY_DIRECTORY 0x400
 #define TIG_DATABASE_ENTRY_IGNORED 0x800
 
@@ -36,7 +36,7 @@ typedef struct TigDatabaseEntry {
     /* 0004 */ unsigned int flags;
     /* 0008 */ unsigned int size;
     /* 000C */ unsigned int compressed_size;
-    /* 0010 */ int offset;
+    int64_t offset;
 } TigDatabaseEntry;
 
 typedef struct TigDatabaseFindFileData {

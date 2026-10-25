@@ -15,8 +15,10 @@ int main(void)
     CHECK(tig_memory_init(NULL) == TIG_OK);
     remove(path);
     remove("performance-test.csv.details.csv");
+    remove("performance-test.csv.events.csv");
     CHECK(!tig_performance_is_enabled());
     CHECK(tig_performance_begin() == 0);
+    tig_performance_trace(TIG_PERF_EVENT_ATTACK_BEGIN, 1, 2, 30, 0);
     tig_performance_record(TIG_PERF_PATH, 10.0);
     tig_performance_count(TIG_PERF_PATH_EXPANSIONS, 3);
     CHECK(tig_performance_counter(TIG_PERF_PATH_EXPANSIONS) == 0);
@@ -24,12 +26,24 @@ int main(void)
     CHECK(!tig_performance_is_enabled());
     CHECK(tig_performance_set_enabled(true, path));
     CHECK(tig_performance_is_enabled());
+    tig_performance_trace(TIG_PERF_EVENT_COUNT, 1, 2, 30, 0);
+    tig_performance_trace(TIG_PERF_EVENT_ATTACK_BEGIN, UINT64_C(18446744073709551615), UINT64_C(4294967297), 30, 0);
+    for (int i = 1; i < 4096; i++) tig_performance_trace(TIG_PERF_EVENT_ATTACK_SCHEDULE, 1, 2, i, -2);
+    for (int i = 0; i < 7; i++) tig_performance_trace(TIG_PERF_EVENT_ATTACK_END, 1, 2, 0, 0);
+    CHECK(tig_performance_counter(TIG_PERF_TRACE_DROPPED) == 7);
+    tig_performance_record(TIG_PERF_FRAME_INTERVAL, 10.0);
+    tig_performance_record(TIG_PERF_FRAME_INTERVAL, 20.0);
+    tig_performance_record(TIG_PERF_FRAME_INTERVAL, 40.0);
+    CHECK(tig_performance_counter(TIG_PERF_FRAME_OVER_16MS) == 2);
+    CHECK(tig_performance_counter(TIG_PERF_FRAME_OVER_33MS) == 1);
     tig_performance_record_detail(TIG_PERF_ART_LOAD, 0.25, "fast.art");
     tig_performance_record_detail(TIG_PERF_ART_LOAD, 8.0, "art\\slow,\"quoted\".art");
     tig_performance_record_detail(TIG_PERF_ART_PREPARE, 9.0, "art\\prepare.art");
     tig_performance_record_detail(TIG_PERF_ART_BLIT, 10.0, "art\\blit.art");
     tig_performance_record_detail(TIG_PERF_METRIC_COUNT, 10.0, "invalid.art");
     tig_performance_record_detail(TIG_PERF_ART_LOAD, NAN, "invalid.art");
+    for (int i = 0; i < 1024; i++) tig_performance_trace(TIG_PERF_EVENT_AI_ACTION, 1, 0, 0, 0);
+    CHECK(tig_performance_counter(TIG_PERF_TRACE_SAMPLED_OUT) == 512);
     TigPerformanceSummary summary;
     CHECK(tig_performance_summary(TIG_PERF_PATH, &summary));
     CHECK(summary.count == 0 && summary.sampled == 0 && summary.mean_ms == 0.0);
@@ -72,11 +86,16 @@ int main(void)
     CHECK(after.live_bytes == before.live_bytes && after.live_blocks == before.live_blocks);
 
     tig_performance_flush();
+    CHECK(tig_performance_summary(TIG_PERF_PROFILE_FLUSH, &summary));
+    CHECK(summary.count == 1);
     CHECK(tig_performance_counter(TIG_PERF_PATH_EXPANSIONS) == 0);
     CHECK(tig_performance_summary(TIG_PERF_PATH, &summary) && summary.count == 0);
     CHECK(tig_performance_set_enabled(false, NULL));
     CHECK(!tig_performance_is_enabled());
     CHECK(tig_performance_set_enabled(true, path));
+    tig_performance_trace(TIG_PERF_EVENT_ATTACK_END, 1, 2, 1, 0);
+    tig_performance_trace(TIG_PERF_EVENT_SLOW_CALLBACK, 10, 1, 12345, 2);
+    tig_performance_record_detail(TIG_PERF_EVENT_CALLBACK, 12.345, "AI");
     tig_performance_record(TIG_PERF_JOURNAL, 2.0);
     CHECK(tig_performance_set_enabled(false, NULL));
     FILE* file = fopen(path, "r");
@@ -115,6 +134,26 @@ int main(void)
     tig_performance_record_detail(TIG_PERF_ART_LOAD, 10.0, "disabled.art");
     file = fopen("performance-test.csv.details.csv", "r");
     CHECK(file == NULL); // Profiling off never creates diagnostic files.
+    if (file != NULL) fclose(file);
+    file = fopen("performance-test.csv.events.csv", "r");
+    CHECK(file != NULL);
+    if (file != NULL) {
+        char line[512];
+        int headers = 0, begins = 0, schedules = 0, ends = 0, slow_callbacks = 0;
+        while (fgets(line, sizeof(line), file) != NULL) {
+            if (strncmp(line, "session,", 8) == 0) headers++;
+            if (strstr(line, ",attack_begin,18446744073709551615,4294967297,30,0") != NULL) begins++;
+            if (strstr(line, ",attack_schedule,") != NULL) schedules++;
+            if (strstr(line, ",attack_end,") != NULL) ends++;
+            if (strstr(line, ",slow_callback,10,1,12345,2") != NULL) slow_callbacks++;
+        }
+        CHECK(headers == 1 && begins == 1 && schedules == 4095 && ends == 1 && slow_callbacks == 1);
+        fclose(file);
+    }
+    remove("performance-test.csv.events.csv");
+    tig_performance_trace(TIG_PERF_EVENT_ATTACK_BEGIN, 1, 2, 30, 0);
+    file = fopen("performance-test.csv.events.csv", "r");
+    CHECK(file == NULL);
     if (file != NULL) fclose(file);
     tig_memory_exit();
     SDL_Quit();

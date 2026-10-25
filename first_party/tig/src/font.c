@@ -425,6 +425,7 @@ int tig_font_underline_ranges(TigVideoBuffer* buffer, const char* str, const Tig
 {
     if (buffer == NULL || str == NULL || rect == NULL || count < 0 || (count > 0 && ranges == NULL)) return TIG_ERR_INVALID_PARAM;
     size_t length = strlen(str);
+    if (length > INT_MAX) return TIG_ERR_INVALID_PARAM;
     for (int i = 0; i < count; i++) {
         if (ranges[i].start < 0 || ranges[i].length < 0
             || (size_t)ranges[i].start > length
@@ -1035,6 +1036,7 @@ char* tig_font_modern_to_utf8(const char* str)
     }
 
     len = SDL_strlen(str);
+    if (len > (SIZE_MAX - 1) / 3 || len > (size_t)INT_MAX / 3) return NULL;
     utf8 = (char*)MALLOC(len * 3 + 1);
     if (utf8 == NULL) {
         return NULL;

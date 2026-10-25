@@ -1,3 +1,4 @@
+#include "ui/asset_warmup.h"
 #include "ui/schematic_ui.h"
 #include <tig/performance.h>
 #include "ui/cache_key.h"
@@ -391,6 +392,12 @@ static bool schematic_ui_created;
  */
 bool schematic_ui_init(GameInitInfo* init_info)
 {
+
+    ui_asset_warmup_register(settings_get_value(&settings, SCHEMATIC_TOOLBAR_KEY) ? NAME_SCHEMATIC_BASE_XL : 365);
+    for (size_t index = 0; index < SDL_arraysize(schematic_ui_buttons); index++) ui_asset_warmup_register(schematic_ui_buttons[index].art_num);
+    for (size_t index = 0; index < SDL_arraysize(schematic_ui_tabs); index++) ui_asset_warmup_register(schematic_ui_tabs[index].art_num);
+    for (size_t index = 0; index < SDL_arraysize(schematic_ui_combine_indicator_icons); index++) ui_asset_warmup_register(schematic_ui_combine_indicator_icons[index]);
+
     int num;
     MesFileEntry mes_file_entry;
     int tech;

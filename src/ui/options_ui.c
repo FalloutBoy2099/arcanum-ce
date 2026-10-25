@@ -1,6 +1,7 @@
 #include "ui/options_ui.h"
 
 #include "game/anim.h"
+#include "game/background.h"
 #include "game/combat.h"
 #include "game/gamelib.h"
 #include "game/camera_follow.h"
@@ -157,9 +158,24 @@ BOOLEAN_OPTION(options_ui_autosave_travel, AUTOSAVE_TRAVEL_KEY, 0)
 BOOLEAN_OPTION(options_ui_autosave_sleep, AUTOSAVE_SLEEP_KEY, 0)
 BOOLEAN_OPTION(options_ui_crafting_party, CRAFTING_PARTY_COMPONENTS_KEY, 0)
 BOOLEAN_OPTION(options_ui_manual_level, FOLLOWERS_MANUALLY_LEVEL_UP_KEY, 0)
+BOOLEAN_OPTION(options_ui_no_xp_per_hit, NO_XP_PER_HIT_KEY, 0)
+
+static void options_ui_master_educator_get(int* value, bool* enabled)
+{
+    *value = settings_get_value(&settings, MASTER_EDUCATOR_KEY) != 0;
+    *enabled = true;
+}
+
+static void options_ui_master_educator_set(int value)
+{
+    settings_set_value(&settings, MASTER_EDUCATOR_KEY, value != 0);
+    int64_t player = player_get_local_pc_obj();
+    if (value != 0 && player != OBJ_HANDLE_NULL) background_educate_followers(player);
+}
 BOOLEAN_OPTION(options_ui_action_tooltips, ACTION_TOOLTIPS_KEY, 0)
 BOOLEAN_OPTION(options_ui_window_close, WINDOW_CLOSE_MODE_KEY, 0)
 BOOLEAN_OPTION(options_ui_combat_music, NO_COMBAT_MUSIC_KEY, 1)
+BOOLEAN_OPTION(options_ui_mute_repetitive_sounds, MUTE_REPETITIVE_SOUNDS_KEY, 0)
 BOOLEAN_OPTION(options_ui_borders, SCROLL_USING_BORDERS_KEY, 0)
 BOOLEAN_OPTION(options_ui_follow, CAMERA_FOLLOWS_PLAYER_KEY, 0)
 BOOLEAN_OPTION(options_ui_zoom, ISO_ZOOM_ENABLED_KEY, 0)
@@ -327,6 +343,8 @@ static OptionsUiControlInfo options_ui_tab_controls_meta[OPTIONS_UI_TAB_COUNT][M
         { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "", options_ui_encounters_get, options_ui_encounters_set, options_ui_encounter_values, SDL_arraysize(options_ui_encounter_values), 1 },
         { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "mes\\OptionsOffOn.mes", options_ui_manual_level_get, options_ui_manual_level_set, NULL, 0, 1 },
         { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "mes\\OptionsOffOn.mes", options_ui_crafting_party_get, options_ui_crafting_party_set, NULL, 0, 1 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "mes\\OptionsOffOn.mes", options_ui_master_educator_get, options_ui_master_educator_set, NULL, 0, 2 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "mes\\OptionsOffOn.mes", options_ui_no_xp_per_hit_get, options_ui_no_xp_per_hit_set, NULL, 0, 2 },
     },
     {
         { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "", options_ui_resolution_get, options_ui_resolution_set, options_ui_resolution_values, SDL_arraysize(options_ui_resolution_values), 0 },
@@ -353,6 +371,7 @@ static OptionsUiControlInfo options_ui_tab_controls_meta[OPTIONS_UI_TAB_COUNT][M
         { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "", options_ui_voice_volume_get, options_ui_voice_volume_set, NULL, 0, 0 },
         { true, CYCLIC_UI_CONTROL_NUMERIC_BAR, 0, "", options_ui_music_volume_get, options_ui_music_volume_set, NULL, 0, 0 },
         { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "mes\\OptionsOffOn.mes", options_ui_combat_music_get, options_ui_combat_music_set, NULL, 0, 1 },
+        { true, CYCLIC_UI_CONTROL_MESSAGE_FILE, 0, "mes\\OptionsOffOn.mes", options_ui_mute_repetitive_sounds_get, options_ui_mute_repetitive_sounds_set, NULL, 0, 1 },
     },
     {
         { true, CYCLIC_UI_CONTROL_TEXT_ARRAY, 0, "", options_ui_hud_get, options_ui_hud_set, options_ui_hud_values, SDL_arraysize(options_ui_hud_values), 0 },

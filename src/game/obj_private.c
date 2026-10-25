@@ -1,18 +1,14 @@
 #include "game/obj_private.h"
 
 #include <stdio.h>
+#include <limits.h>
 
 #include "game/map.h"
 #include "game/obj_file.h"
 #include "game/object.h"
 #include "game/sector.h"
 
-/**
- * Initial allocation size for the `WriteBuffer`, and the granularity at which
- * it is grown when more bytes are appended.
- */
 #define WRITE_BUFFER_INITIAL_SIZE 256
-#define WRITE_BUFFER_GROWTH_STEP WRITE_BUFFER_INITIAL_SIZE
 
 /**
  * Initial capacity for the `BitsetDescriptor` array, and the granularity at
@@ -67,7 +63,6 @@ typedef struct PopCountMask {
     uint16_t hi_mask;
 } PopCountMask;
 
-static void write_buffer_ensure_size(WriteBuffer* wb, int size);
 static void bitset_grow(int id, int cnt);
 static void bitset_shrink(int id, int cnt);
 static void bitset_shift_offsets(int start, int end, int delta);
@@ -516,139 +511,69 @@ void obj_data_copy(ObjDataDescriptor* descr, void* value)
  */
 bool obj_data_read_file_slow(ObjDataDescriptor* descr, TigFile* stream)
 {
+if (descr == NULL || descr->ptr == NULL || stream == NULL) return false;
+    if (descr->type == OD_TYPE_INT32) {
+        int value;
+        if (!objf_read(&value, sizeof(value), stream)) return false;
+        *(intptr_t*)descr->ptr = value;
+        return true;
+    }
+    if (descr->type < OD_TYPE_INT64 || descr->type > OD_TYPE_HANDLE_ARRAY) return false;
     uint8_t presence;
-    int size;
-
+    if (!objf_read(&presence, sizeof(presence), stream) || presence > 1) return false;
+    if (!presence) {
+        obj_data_reset(descr);
+        return true;
+    }
     switch (descr->type) {
-    case OD_TYPE_INT32:
-        if (!objf_read(descr->ptr, sizeof(int), stream)) {
-            return false;
-        }
-        return true;
     case OD_TYPE_INT64:
-        // Read presence byte to determine whether the value is stored.
-        if (!objf_read(&presence, sizeof(presence), stream)) {
-            return false;
-        }
-
-        if (!presence) {
-            // Not present: free any existing allocation and null the pointer.
-            if (*(int64_t**)descr->ptr != NULL) {
-                FREE(*(int64_t**)descr->ptr);
-                *(int64_t**)descr->ptr = NULL;
-            }
-            return true;
-        }
-
-        // Present: allocate if needed...
-        if (*(int64_t**)descr->ptr == NULL) {
-            *(int64_t**)descr->ptr = (int64_t*)MALLOC(sizeof(int64_t));
-        }
-
-        // ...and read the value.
-        if (!objf_read(*(int64_t**)descr->ptr, sizeof(int64_t), stream)) {
-            return false;
-        }
-
+    case OD_TYPE_HANDLE: {
+        union { int64_t integer; ObjectID handle; } value;
+        size_t size = descr->type == OD_TYPE_INT64 ? sizeof(value.integer) : sizeof(value.handle);
+        if (!objf_read(&value, size, stream)) return false;
+        void* loaded = MALLOC(size);
+        if (loaded == NULL) return false;
+        memcpy(loaded, &value, size);
+        obj_data_reset(descr);
+        *(void**)descr->ptr = loaded;
         return true;
-    case OD_TYPE_INT32_ARRAY:
-    case OD_TYPE_INT64_ARRAY:
-    case OD_TYPE_UINT32_ARRAY:
-    case OD_TYPE_UINT64_ARRAY:
-    case OD_TYPE_SCRIPT_ARRAY:
-    case OD_TYPE_QUEST_ARRAY:
-    case OD_TYPE_HANDLE_ARRAY:
-        // Read presence byte to determine whether the value is stored.
-        if (!objf_read(&presence, sizeof(presence), stream)) {
+    }
+    case OD_TYPE_STRING: {
+        int length;
+        if (!objf_read(&length, sizeof(length), stream) || length < 0 || length == INT_MAX
+            || !tig_file_count_fits(stream, length + 1, INT_MAX, 1)) return false;
+        size_t size = (size_t)length + 1;
+        char* loaded = MALLOC(size);
+        if (loaded == NULL) return false;
+        if (!objf_read(loaded, size, stream) || loaded[length] != '\0') {
+            FREE(loaded);
             return false;
         }
-
-        if (!presence) {
-            // Not present: free any existing allocation and null the pointer.
-            *(SizeableArray**)descr->ptr = NULL;
-            return true;
-        }
-
-        // Present: delegate deallocate/allocate/read dance to
-        // `SerializeableArray`.
-        if (!sa_read_file((SizeableArray**)descr->ptr, stream)) {
-            return false;
-        }
-
+        obj_data_reset(descr);
+        *(char**)descr->ptr = loaded;
         return true;
-    case OD_TYPE_STRING:
-        // Read presence byte to determine whether the value is stored.
-        if (!objf_read(&presence, sizeof(presence), stream)) {
+    }
+    default: {
+        int expected_size = sizeof(int);
+        if (descr->type == OD_TYPE_INT64_ARRAY || descr->type == OD_TYPE_UINT64_ARRAY) expected_size = sizeof(int64_t);
+        else if (descr->type == OD_TYPE_SCRIPT_ARRAY) expected_size = sizeof(Script);
+        else if (descr->type == OD_TYPE_QUEST_ARRAY) expected_size = sizeof(PcQuestState);
+        else if (descr->type == OD_TYPE_HANDLE_ARRAY) expected_size = sizeof(ObjectID);
+        SizeableArray* loaded = NULL;
+        if (!sa_read_no_dealloc(&loaded, stream)) return false;
+        if (loaded->size != expected_size) {
+            sa_deallocate(&loaded);
             return false;
         }
-
-        // Always free any existing string before reading a new value.
-        if (*(char**)descr->ptr != NULL) {
-            FREE(*(char**)descr->ptr);
-        }
-
-        if (!presence) {
-            // Not present: previous pointer is already freed, just nullify the
-            // pointer.
-            *(char**)descr->ptr = NULL;
-            return true;
-        }
-
-        // Present: read string length...
-        if (!objf_read(&size, sizeof(size), stream)) {
-            return false;
-        }
-
-        // ...then allocate and read the string.
-        *(char**)descr->ptr = (char*)MALLOC(size + 1);
-        if (!objf_read(*(char**)descr->ptr, size + 1, stream)) {
-            return false;
-        }
-
+        obj_data_reset(descr);
+        *(SizeableArray**)descr->ptr = loaded;
         return true;
-    case OD_TYPE_HANDLE:
-        // Read presence byte to determine whether the value is stored.
-        if (!objf_read(&presence, sizeof(presence), stream)) {
-            return false;
-        }
-
-        if (!presence) {
-            // Not present: free any existing allocation and null the pointer.
-            if (*(ObjectID**)descr->ptr != NULL) {
-                FREE(*(ObjectID**)descr->ptr);
-                *(ObjectID**)descr->ptr = NULL;
-            }
-            return true;
-        }
-
-        // Present: allocate if needed...
-        if (*(ObjectID**)descr->ptr == NULL) {
-            *(ObjectID**)descr->ptr = (ObjectID*)MALLOC(sizeof(ObjectID));
-        }
-
-        // ...and read the value.
-        if (!objf_read(*(ObjectID**)descr->ptr, sizeof(ObjectID), stream)) {
-            return false;
-        }
-
-        return true;
-    case OD_TYPE_PTR:
-    case OD_TYPE_PTR_ARRAY:
-        // These fields should only be stored in transient obj storage and
-        // should never be serialized.
-        assert(0);
-    default:
-        return false;
+    }
     }
 }
 
 /**
  * Reads an obj field from a `TigFile` stream into a freshly zeroed field.
- *
- * This is a simpler, faster variant of `obj_data_read_file_slow` intended for
- * brand-new obj whose fields have never been initialised. It does NOT free or
- * check for existing heap allocations. All output pointers are assumed to be
- * NULL on entry.
  *
  * Returns `true` on success, `false` otherwise.
  *
@@ -656,109 +581,7 @@ bool obj_data_read_file_slow(ObjDataDescriptor* descr, TigFile* stream)
  */
 bool obj_data_read_file_fast(ObjDataDescriptor* descr, TigFile* stream)
 {
-    uint8_t presence;
-    int size;
-
-    switch (descr->type) {
-    case OD_TYPE_INT32:
-        if (!objf_read(descr->ptr, sizeof(int), stream)) {
-            return false;
-        }
-        return true;
-    case OD_TYPE_INT64:
-        // Read presence byte to determine whether the value is stored.
-        if (!objf_read(&presence, sizeof(presence), stream)) {
-            return false;
-        }
-
-        if (!presence) {
-            // Not present: nullify the pointer.
-            *(int64_t**)descr->ptr = NULL;
-            return true;
-        }
-
-        // Present: allocate and read the value.
-        *(int64_t**)descr->ptr = (int64_t*)MALLOC(sizeof(int64_t));
-        if (!objf_read(*(int64_t**)descr->ptr, sizeof(int64_t), stream)) {
-            return false;
-        }
-
-        return true;
-    case OD_TYPE_INT32_ARRAY:
-    case OD_TYPE_INT64_ARRAY:
-    case OD_TYPE_UINT32_ARRAY:
-    case OD_TYPE_UINT64_ARRAY:
-    case OD_TYPE_SCRIPT_ARRAY:
-    case OD_TYPE_QUEST_ARRAY:
-    case OD_TYPE_HANDLE_ARRAY:
-        // Read presence byte to determine whether the value is stored.
-        if (!objf_read(&presence, sizeof(presence), stream)) {
-            return false;
-        }
-
-        if (!presence) {
-            // Not present: nullify the pointer.
-            *(SizeableArray**)descr->ptr = NULL;
-            return true;
-        }
-
-        // Present: allocate and read the value.
-        if (!sa_read_no_dealloc((SizeableArray**)descr->ptr, stream)) {
-            return false;
-        }
-
-        return true;
-    case OD_TYPE_STRING:
-        // Read presence byte to determine whether the value is stored.
-        if (!objf_read(&presence, sizeof(presence), stream)) {
-            return false;
-        }
-
-        if (!presence) {
-            // Not present: nullify the pointer.
-            *(char**)descr->ptr = NULL;
-            return true;
-        }
-
-        // Present: read string length...
-        if (!objf_read(&size, sizeof(size), stream)) {
-            return false;
-        }
-
-        // ...then allocate and read the string.
-        *(char**)descr->ptr = (char*)MALLOC(size + 1);
-        if (!objf_read(*(char**)descr->ptr, size + 1, stream)) {
-            return false;
-        }
-
-        return true;
-    case OD_TYPE_HANDLE:
-        // Read presence byte to determine whether the value is stored.
-        if (!objf_read(&presence, sizeof(presence), stream)) {
-            return false;
-        }
-
-        if (!presence) {
-            // Not present: nullify the pointer.
-            *(ObjectID**)descr->ptr = NULL;
-            return true;
-        }
-
-        // Present: allocate and read the value.
-        *(ObjectID**)descr->ptr = (ObjectID*)MALLOC(sizeof(ObjectID));
-        if (!objf_read(*(ObjectID**)descr->ptr, sizeof(ObjectID), stream)) {
-            return false;
-        }
-
-        return true;
-    case OD_TYPE_PTR:
-    case OD_TYPE_PTR_ARRAY:
-        // These fields should only be stored in transient obj storage and
-        // should never be serialized.
-        assert(0);
-    default:
-        return false;
-    }
+return obj_data_read_file_slow(descr, stream);
 }
 
 /**
@@ -771,108 +594,80 @@ bool obj_data_read_file_fast(ObjDataDescriptor* descr, TigFile* stream)
  *
  * 0x4E4660
  */
-void obj_data_read_mem(ObjDataDescriptor* descr, uint8_t** data)
+bool obj_data_read_mem(ObjDataDescriptor* descr, ReadBuffer* data)
 {
+    if (descr == NULL || descr->ptr == NULL || data == NULL) return false;
     uint8_t presence;
-    int size;
-
+    if (descr->type == OD_TYPE_INT32) {
+        int value;
+        if (!read_buffer_read(data, &value, sizeof(value))) return false;
+        *(intptr_t*)descr->ptr = value;
+        return true;
+    }
+    if (descr->type < OD_TYPE_INT64 || descr->type > OD_TYPE_HANDLE_ARRAY) return false;
+    if (!read_buffer_read(data, &presence, sizeof(presence))) return false;
+    if (!presence) {
+        obj_data_reset(descr);
+        return true;
+    }
     switch (descr->type) {
-    case OD_TYPE_INT32:
-        mem_read_advance(descr->ptr, sizeof(int), data);
-        return;
-    case OD_TYPE_INT64:
-        // Read presence byte to determine whether the value is stored.
-        mem_read_advance(&presence, sizeof(presence), data);
-
-        if (!presence) {
-            // Not present: free any existing allocation and null the pointer.
-            if (*(int64_t**)descr->ptr != NULL) {
-                FREE(*(int64_t**)descr->ptr);
-                *(int64_t**)descr->ptr = NULL;
-            }
-            return;
-        }
-
-        // Present: allocate if needed...
-        if (*(int64_t**)descr->ptr == NULL) {
-            *(int64_t**)descr->ptr = (int64_t*)MALLOC(sizeof(int64_t));
-        }
-
-        // ...and read the value.
-        mem_read_advance(*(int64_t**)descr->ptr, sizeof(int64_t), data);
-        return;
+    case OD_TYPE_INT64: {
+        int64_t value;
+        if (!read_buffer_read(data, &value, sizeof(value))) return false;
+        int64_t* loaded = MALLOC(sizeof(value));
+        if (loaded == NULL) return false;
+        *loaded = value;
+        obj_data_reset(descr);
+        *(int64_t**)descr->ptr = loaded;
+        return true;
+    }
     case OD_TYPE_INT32_ARRAY:
     case OD_TYPE_INT64_ARRAY:
     case OD_TYPE_UINT32_ARRAY:
     case OD_TYPE_UINT64_ARRAY:
     case OD_TYPE_SCRIPT_ARRAY:
     case OD_TYPE_QUEST_ARRAY:
-    case OD_TYPE_HANDLE_ARRAY:
-        // Read presence byte to determine whether the value is stored.
-        mem_read_advance(&presence, sizeof(presence), data);
-
-        if (!presence) {
-            // Not present: free any existing allocation and null the pointer.
-            if (*(SizeableArray**)descr->ptr != NULL) {
-                FREE(*(SizeableArray**)descr->ptr);
-                *(SizeableArray**)descr->ptr = NULL;
-            }
-            return;
+    case OD_TYPE_HANDLE_ARRAY: {
+        int expected_size = sizeof(int);
+        if (descr->type == OD_TYPE_INT64_ARRAY || descr->type == OD_TYPE_UINT64_ARRAY) expected_size = sizeof(int64_t);
+        else if (descr->type == OD_TYPE_SCRIPT_ARRAY) expected_size = sizeof(Script);
+        else if (descr->type == OD_TYPE_QUEST_ARRAY) expected_size = sizeof(PcQuestState);
+        else if (descr->type == OD_TYPE_HANDLE_ARRAY) expected_size = sizeof(ObjectID);
+        SizeableArray* loaded = NULL;
+        if (!sa_read_mem(&loaded, data)) return false;
+        if (loaded->size != expected_size) {
+            sa_deallocate(&loaded);
+            return false;
         }
-
-        // Present: delegate deallocate/allocate/read dance to
-        // `SerializeableArray`.
-        sa_read_mem((SizeableArray**)descr->ptr, data);
-        return;
-    case OD_TYPE_STRING:
-        // Read presence byte to determine whether the value is stored.
-        mem_read_advance(&presence, sizeof(presence), data);
-
-        // Always free any existing string before reading a new value.
-        if (*(char**)descr->ptr != NULL) {
-            FREE(*(char**)descr->ptr);
-        }
-
-        if (!presence) {
-            // Not present: previous pointer is already freed, just nullify the
-            // pointer.
-            *(char**)descr->ptr = NULL;
-            return;
-        }
-
-        // Present: read string length...
-        mem_read_advance(&size, sizeof(size), data);
-
-        // ...then allocate and read the string.
-        *(char**)descr->ptr = (char*)MALLOC(size + 1);
-        mem_read_advance(*(char**)descr->ptr, size + 1, data);
-        return;
-    case OD_TYPE_HANDLE:
-        // Read presence byte to determine whether the value is stored.
-        mem_read_advance(&presence, sizeof(presence), data);
-
-        if (!presence) {
-            // Not present: free any existing allocation and null the pointer.
-            if (*(ObjectID**)descr->ptr != NULL) {
-                FREE(*(ObjectID**)descr->ptr);
-                *(ObjectID**)descr->ptr = NULL;
-            }
-            return;
-        }
-
-        // Present: allocate if needed...
-        if (*(ObjectID**)descr->ptr == NULL) {
-            *(ObjectID**)descr->ptr = (ObjectID*)MALLOC(sizeof(ObjectID));
-        }
-
-        // ...and read the value.
-        mem_read_advance(*(ObjectID**)descr->ptr, sizeof(ObjectID), data);
-        return;
-    case OD_TYPE_PTR:
-    case OD_TYPE_PTR_ARRAY:
-        // These fields should only be stored in transient obj storage and
-        // should never be serialized.
-        assert(0);
+        obj_data_reset(descr);
+        *(SizeableArray**)descr->ptr = loaded;
+        return true;
+    }
+    case OD_TYPE_STRING: {
+        int length;
+        if (!read_buffer_read(data, &length, sizeof(length)) || length < 0 || length == INT_MAX) return false;
+        size_t size = (size_t)length + 1;
+        const uint8_t* bytes = read_buffer_take(data, size);
+        if (data->failed || bytes[size - 1] != 0) return false;
+        char* loaded = MALLOC(size);
+        if (loaded == NULL) return false;
+        memcpy(loaded, bytes, size);
+        obj_data_reset(descr);
+        *(char**)descr->ptr = loaded;
+        return true;
+    }
+    case OD_TYPE_HANDLE: {
+        ObjectID value;
+        if (!read_buffer_read(data, &value, sizeof(value))) return false;
+        ObjectID* loaded = MALLOC(sizeof(value));
+        if (loaded == NULL) return false;
+        *loaded = value;
+        obj_data_reset(descr);
+        *(ObjectID**)descr->ptr = loaded;
+        return true;
+    }
+    default:
+        return false;
     }
 }
 
@@ -922,7 +717,9 @@ bool obj_data_write_file(ObjDataDescriptor* descr, TigFile* stream)
         if (*(char**)descr->ptr != NULL) {
             presence = 1;
             if (!objf_write(&presence, sizeof(presence), stream)) return false;
-            size = (int)strlen(*(char**)descr->ptr);
+            size_t length = strlen(*(char**)descr->ptr);
+            if (length >= INT_MAX) return false;
+            size = (int)length;
             if (!objf_write(&size, sizeof(size), stream)) return false;
             if (!objf_write(*(char**)descr->ptr, size + 1, stream)) return false;
         } else {
@@ -953,66 +750,51 @@ bool obj_data_write_file(ObjDataDescriptor* descr, TigFile* stream)
 // 0x4E4990
 void obj_data_write_mem(ObjDataDescriptor* descriptor, WriteBuffer* wb)
 {
-    // uint8_t presence;
-    // int size;
-
-    // switch (a1->type) {
-    // case 3:
-    //     write_buffer_append(a1->d.int_value, sizeof(a1->d.int_value), wb);
-    //     break;
-    // case 4:
-    //     if (*a1->d.b != NULL) {
-    //         presence = 1;
-    //         write_buffer_append(&presence, sizeof(presence), wb);
-    //         write_buffer_append(*a1->d.b, sizeof(*a1->d.b), wb);
-    //     } else {
-    //         presence = 0;
-    //         write_buffer_append(&presence, sizeof(presence), wb);
-    //     }
-    //     break;
-    // case 5:
-    // case 6:
-    // case 7:
-    // case 8:
-    // case 9:
-    // case 10:
-    // case 13:
-    //     if (*a1->d.a.sa_ptr != NULL) {
-    //         presence = 1;
-    //         write_buffer_append(&presence, sizeof(presence), wb);
-    //         size = sa_total_byte_size(a1->d.a.sa_ptr);
-    //         write_buffer_ensure_size(wb, size);
-    //         sa_write_mem(a1->d.a.sa_ptr, wb->field_4);
-    //         wb->field_4 += size;
-    //         wb->field_C -= size;
-    //     } else {
-    //         presence = 0;
-    //         write_buffer_append(&presence, sizeof(presence), wb);
-    //     }
-    //     break;
-    // case 11:
-    //     if (*a1->d.str != NULL) {
-    //         presence = 1;
-    //         write_buffer_append(&presence, sizeof(presence), wb);
-    //         size = strlen(*a1->d.str);
-    //         write_buffer_append(&size, sizeof(size), wb);
-    //         write_buffer_append(*a1->d.str, size + 1, wb);
-    //     } else {
-    //         presence = 0;
-    //         write_buffer_append(&presence, sizeof(presence), wb);
-    //     }
-    //     break;
-    // case 12:
-    //     if (*a1->d.oid != NULL) {
-    //         presence = 1;
-    //         write_buffer_append(&presence, sizeof(presence), wb);
-    //         write_buffer_append(*a1->d.oid, sizeof(**a1->d.oid), wb);
-    //     } else {
-    //         presence = 0;
-    //         write_buffer_append(&presence, sizeof(presence), wb);
-    //     }
-    //     break;
-    // }
+    uint8_t presence;
+    if (descriptor->type == OD_TYPE_INT32) {
+        int value = (int)*(intptr_t*)descriptor->ptr;
+        write_buffer_append(&value, sizeof(value), wb);
+        return;
+    }
+    if (descriptor->type < OD_TYPE_INT64 || descriptor->type > OD_TYPE_HANDLE_ARRAY) {
+        wb->failed = true;
+        return;
+    }
+    presence = *(void**)descriptor->ptr != NULL;
+    if (!write_buffer_append(&presence, sizeof(presence), wb) || !presence) return;
+    switch (descriptor->type) {
+    case OD_TYPE_INT64:
+        write_buffer_append(*(int64_t**)descriptor->ptr, sizeof(int64_t), wb);
+        return;
+    case OD_TYPE_INT32_ARRAY:
+    case OD_TYPE_INT64_ARRAY:
+    case OD_TYPE_UINT32_ARRAY:
+    case OD_TYPE_UINT64_ARRAY:
+    case OD_TYPE_SCRIPT_ARRAY:
+    case OD_TYPE_QUEST_ARRAY:
+    case OD_TYPE_HANDLE_ARRAY: {
+        int size = sa_total_byte_size((SizeableArray**)descriptor->ptr);
+        if (size < 0) { wb->failed = true; return; }
+        if (!write_buffer_reserve(wb, (size_t)size)) return;
+        sa_write_mem((SizeableArray**)descriptor->ptr, (SizeableArray*)wb->curr);
+        wb->curr += size;
+        wb->remaining -= size;
+        return;
+    }
+    case OD_TYPE_STRING: {
+        size_t length = strlen(*(char**)descriptor->ptr);
+        if (length >= INT_MAX) { wb->failed = true; return; }
+        int stored_length = (int)length;
+        if (write_buffer_append(&stored_length, sizeof(stored_length), wb))
+            write_buffer_append(*(char**)descriptor->ptr, length + 1, wb);
+        return;
+    }
+    case OD_TYPE_HANDLE:
+        write_buffer_append(*(ObjectID**)descriptor->ptr, sizeof(ObjectID), wb);
+        return;
+    default:
+        wb->failed = true;
+    }
 }
 
 /**
@@ -1076,66 +858,47 @@ int obj_data_count_idx(ObjDataDescriptor* descr)
  */
 void write_buffer_init(WriteBuffer* wb)
 {
-    wb->base = (uint8_t*)MALLOC(WRITE_BUFFER_INITIAL_SIZE);
+    wb->base = MALLOC(WRITE_BUFFER_INITIAL_SIZE);
     wb->curr = wb->base;
     wb->size = WRITE_BUFFER_INITIAL_SIZE;
     wb->remaining = wb->size;
+    wb->failed = wb->base == NULL;
 }
 
-/**
- * Appends `size` bytes from `data` to a `WriteBuffer`, growing it if needed.
- *
- * 0x4E4C00
- */
-void write_buffer_append(const void* data, int size, WriteBuffer* wb)
+bool write_buffer_reserve(WriteBuffer* wb, size_t size)
 {
-    write_buffer_ensure_size(wb, size);
-    memcpy(wb->curr, data, size);
+    if (wb == NULL || wb->failed) return false;
+    size_t next;
+    size_t used = wb->size - wb->remaining;
+    if (!serialization_buffer_capacity(wb->size, used, size, &next)) {
+        wb->failed = true;
+        return false;
+    }
+    if (next > wb->size) {
+        uint8_t* resized = REALLOC(wb->base, next);
+        if (resized == NULL) {
+            wb->failed = true;
+            return false;
+        }
+        wb->base = resized;
+        wb->curr = wb->base + used;
+        wb->size = next;
+        wb->remaining = next - used;
+    }
+    return true;
+}
+
+bool write_buffer_append(const void* data, size_t size, WriteBuffer* wb)
+{
+    if (wb == NULL) return false;
+    if ((size != 0 && data == NULL) || !write_buffer_reserve(wb, size)) {
+        wb->failed = true;
+        return false;
+    }
+    if (size != 0) memcpy(wb->curr, data, size);
     wb->curr += size;
     wb->remaining -= size;
-}
-
-/**
- * Copies `size` bytes from `*data` into `buffer` and advances `*data` by
- * `size` bytes.
- *
- * Acts as a streaming read from a raw byte buffer. This function is used to
- * read from an arbitrary byte buffer without tracking the read offset manually.
- * It may overflow, though, and there is no protection against it.
- *
- * 0x4E4C50
- */
-void mem_read_advance(void* buffer, int size, uint8_t** data)
-{
-    memcpy(buffer, *data, size);
-    (*data) += size;
-}
-
-/**
- * Ensures that a `WriteBuffer` has at least `size` bytes of remaining space.
- *
- * If the current remaining capacity is insufficient, the buffer is grown in
- * multiples of `WRITE_BUFFER_GROWTH_STEP` bytes. After reallocation, base may
- * point to a new address.
- *
- * 0x4E4C80
- */
-void write_buffer_ensure_size(WriteBuffer* wb, int size)
-{
-    int extra_size;
-    int growth;
-
-    extra_size = size - wb->remaining;
-    if (extra_size > 0) {
-        // Round the growth amount up to the nearest `WRITE_BUFFER_GROWTH_STEP`.
-        growth = (extra_size / WRITE_BUFFER_GROWTH_STEP + 1) * WRITE_BUFFER_GROWTH_STEP;
-        wb->size += growth;
-        wb->base = (uint8_t*)REALLOC(wb->base, wb->size);
-
-        // Recalculate `curr` relative to the possibly relocated `base`.
-        wb->curr = wb->base + wb->size - wb->remaining - growth;
-        wb->remaining += growth;
-    }
+    return true;
 }
 
 /**
@@ -1423,26 +1186,21 @@ bool bitset_write_file(int id, TigFile* stream)
 bool bitset_read_file(int* out_id, TigFile* stream)
 {
     int id;
-    int cnt;
-
+    int count;
+    int position;
+    int file_size;
+    if (tig_file_fread(&count, sizeof(count), 1, stream) != 1 || count < 0) return false;
+    position = tig_file_ftell(stream);
+    file_size = tig_file_filelength(stream);
+    if (position < 0 || file_size < position || count > (file_size - position) / (int)sizeof(int)
+        || count > INT_MAX / (int)sizeof(int) - bitset_storage_size - BITSET_STORAGE_GROWTH_STEP) return false;
     id = bitset_alloc();
-
-    if (tig_file_fread(&cnt, sizeof(cnt), 1, stream) != 1) {
+    if (count > bitset_descriptors[id].cnt) bitset_grow(id, count - bitset_descriptors[id].cnt);
+    if (count != 0 && tig_file_fread(&bitset_storage[bitset_descriptors[id].offset], sizeof(int), count, stream) != (size_t)count) {
+        bitset_free(id);
         return false;
     }
-
-    // Grow if the stored size exceeds the freshly allocated minimum.
-    if (cnt != bitset_descriptors[id].cnt && cnt - bitset_descriptors[id].cnt > 0) {
-        bitset_grow(id, cnt - bitset_descriptors[id].cnt);
-    }
-
-    // Read exactly `cnt` storage items.
-    if (tig_file_fread(&(bitset_storage[bitset_descriptors[id].offset]), sizeof(*bitset_storage) * cnt, 1, stream) != 1) {
-        return false;
-    }
-
     *out_id = id;
-
     return true;
 }
 
@@ -1478,22 +1236,19 @@ void bitset_write_mem(int id, uint8_t* dst)
  *
  * 0x4E5F70
  */
-void bitset_read_mem(int* id_ptr, uint8_t** data)
+bool bitset_read_mem(int* id_ptr, ReadBuffer* data)
 {
-    int id;
-    int cnt;
-
-    id = bitset_alloc();
-
-    mem_read_advance(&cnt, sizeof(cnt), data);
-
-    if (cnt != bitset_descriptors[id].cnt) {
-        bitset_grow(id, cnt - bitset_descriptors[id].cnt);
-    }
-
-    mem_read_advance(&(bitset_storage[bitset_descriptors[id].offset]), sizeof(*bitset_storage) * cnt, data);
-
+    int count;
+    if (!read_buffer_read(data, &count, sizeof(count)) || count < 0
+        || (size_t)count > data->remaining / sizeof(int)
+        || count > INT_MAX / (int)sizeof(int) - bitset_storage_size - BITSET_STORAGE_GROWTH_STEP) return false;
+    const uint8_t* bytes = read_buffer_take(data, (size_t)count * sizeof(int));
+    if (data->failed) return false;
+    int id = bitset_alloc();
+    if (count > bitset_descriptors[id].cnt) bitset_grow(id, count - bitset_descriptors[id].cnt);
+    if (count != 0) memcpy(&bitset_storage[bitset_descriptors[id].offset], bytes, (size_t)count * sizeof(int));
     *id_ptr = id;
+    return true;
 }
 
 /**
@@ -1671,4 +1426,15 @@ void popcount_masks_init(void)
         popcount_masks[idx + 16].lo_mask = 0xFFFF;
         popcount_masks[idx + 16].hi_mask = accum;
     }
+}
+
+bool bitset_count_matches(int id, int expected)
+{
+    if (expected < 0) return false;
+    for (int index = 0; index < bitset_descriptors[id].cnt; index++) {
+        int count = bitset_count_bits(bitset_storage[bitset_descriptors[id].offset + index], 32);
+        if (count > expected) return false;
+        expected -= count;
+    }
+    return expected == 0;
 }

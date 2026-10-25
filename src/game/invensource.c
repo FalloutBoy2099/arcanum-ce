@@ -63,7 +63,7 @@ static char invensource_error[256];
 /**
  * 0x5FC62C
  */
-static bool dword_5FC62C;
+static bool invensource_editor_prompt_suppressed;
 
 /**
  * Flag indicating whether the inventory source system is initialized.
@@ -493,7 +493,7 @@ void show_error(const char* msg)
 {
     tig_debug_println(msg);
 
-    if (!dword_5FC62C && invensource_editor) {
+    if (!invensource_editor_prompt_suppressed && invensource_editor) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", msg, NULL);
     }
 }

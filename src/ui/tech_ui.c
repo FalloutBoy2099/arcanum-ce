@@ -1,5 +1,6 @@
 #include "ui/tech_ui.h"
 #include "game/activity_time.h"
+#include "game/progression_rules.h"
 
 #include "game/player.h"
 #include "game/stat.h"
@@ -17,18 +18,18 @@ void tech_ui_inc_degree(int64_t obj, int tech)
     int degree;
     int cost;
     int points;
-    bool is_pc;
+    bool is_edited;
 
     // Retrieve current degree, cost for next degree, and available points.
     degree = tech_degree_get(obj, tech);
     cost = tech_degree_cost_get(degree + 1);
     points = stat_level_get(obj, STAT_UNSPENT_POINTS);
-    is_pc = player_is_local_pc_obj(obj);
+    is_edited = charedit_is_editing(obj);
 
     // Check if there are enough character points to increment the degree.
     if (cost > points) {
         // Notify player of insufficient points.
-        if (is_pc) {
+        if (is_edited) {
             charedit_error_not_enough_character_points();
         }
     } else {
@@ -39,7 +40,7 @@ void tech_ui_inc_degree(int64_t obj, int tech)
             activity_time_record(obj, ACTIVITY_TIME_TECH_POINTS, cost);
 
             // Update UI.
-            if (charedit_is_created()) {
+            if (charedit_is_editing(obj)) {
                 charedit_refresh();
                 intgame_message_window_clear();
             }
@@ -48,7 +49,7 @@ void tech_ui_inc_degree(int64_t obj, int tech)
             //
             // NOTE: In fact there could be other reasons why next degree was
             // not obtained.
-            if (is_pc) {
+            if (is_edited) {
                 charedit_error_not_enough_intelligence();
             }
         }
@@ -75,11 +76,11 @@ void tech_ui_dec_degree(int64_t obj, int tech)
     // Attempt to decrease the technology degree.
     if (tech_degree_dec(obj, tech) < degree) {
         // Refund cost of the degree to unspent points.
-        stat_base_set(obj, STAT_UNSPENT_POINTS, points + cost);
+        stat_base_set(obj, STAT_UNSPENT_POINTS, progression_points_add(points, cost));
         activity_time_record(obj, ACTIVITY_TIME_TECH_POINTS, -cost);
 
         // Update UI.
-        if (charedit_is_created()) {
+        if (charedit_is_editing(obj)) {
             charedit_refresh();
             intgame_message_window_clear();
         }

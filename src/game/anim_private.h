@@ -134,7 +134,7 @@ typedef struct AnimGoalNode {
 typedef struct AnimID {
     int slot_num;
     int unique_id;
-    int field_8;
+    int reserved_id;
 } AnimID;
 
 // Serializeable.
@@ -144,7 +144,7 @@ typedef struct AGModifyData {
     /* 0000 */ AnimID id;
     /* 000C */ int flags;
     /* 0010 */ int path_flags;
-    /* 0014 */ int field_14;
+    /* 0014 */ int reserved_movement_code;
     /* 0018 */ int64_t loc;
     /* 0020 */ int64_t location;
     /* 0028 */ tig_art_id_t current_aid;
@@ -243,14 +243,14 @@ typedef struct AnimRunInfo {
     /* 0C00 */ AnimPath path;
     /* 0CF8 */ DateTime pause_time;
     /* 0D00 */ AnimRunInfoParam params[3];
-    /* 0D18 */ int field_D18;
-    /* 0D1C */ int field_D1C;
-    /* 0D20 */ int field_D20;
-    /* 0D24 */ int field_D24;
-    /* 0D28 */ int field_D28;
-    /* 0D2C */ int field_D2C;
-    /* 0D30 */ int field_D30;
-    /* 0D34 */ int field_D34;
+    /* 0D18 */ int reserved_slot_1;
+    /* 0D1C */ int reserved_slot_2;
+    /* 0D20 */ int reserved_slot_3;
+    /* 0D24 */ int reserved_slot_4;
+    /* 0D28 */ int reserved_slot_5;
+    /* 0D2C */ int reserved_slot_6;
+    /* 0D30 */ int reserved_slot_7;
+    /* 0D34 */ int reserved_slot_8;
 } AnimRunInfo;
 
 extern const char* anim_goal_names[];
@@ -262,8 +262,8 @@ extern bool in_anim_load;
 extern int anim_allocated_slot_count;
 extern int anim_active_goal_count;
 extern int anim_next_unique_id;
-extern int dword_739E40;
-extern int dword_739E44;
+extern int anim_serialized_reserved_slot_02;
+extern int anim_serialized_reserved_slot_01;
 
 extern AnimRunInfo anim_run_info[216];
 
@@ -286,8 +286,8 @@ bool anim_goal_add(AnimGoalData* goal_data, AnimID* anim_id);
 bool anim_goal_add_ex(AnimGoalData* goal_data, AnimID* anim_id, unsigned int flags);
 bool anim_subgoal_add(AnimID anim_id, AnimGoalData* goal_data, const char* file, int line);
 bool anim_recover_handles(AnimRunInfo* run_info, AnimGoalSubNode* goal_subnode);
-void anim_attack_interrupt_for_target_or_leader(int64_t a1, int64_t a2);
-void anim_attack_interrupt_for_target(int64_t a1, int64_t a2);
+void anim_attack_interrupt_for_target_or_leader(int64_t attacker_obj, int64_t target_or_leader_obj);
+void anim_attack_interrupt_for_target(int64_t attacker_obj, int64_t target_obj);
 bool anim_force_interrupt(AnimID* anim_id);
 bool anim_interrupt(AnimID* anim_id, int priority);
 bool anim_find_first_of_type(int64_t obj, int type, AnimID* anim_id);

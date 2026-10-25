@@ -58,7 +58,7 @@ typedef struct MainMenuWindowInfo {
     /* 0088 */ int max_top_index;
     /* 008C */ int cnt;
     /* 0090 */ int selected_index;
-    /* 0094 */ int field_94;
+    /* 0094 */ int reserved_slot_1;
 } MainMenuWindowInfo;
 
 typedef uint32_t HotkeyFlags;

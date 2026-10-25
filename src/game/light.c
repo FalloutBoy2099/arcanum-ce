@@ -45,7 +45,7 @@ typedef struct LightSerializedData {
 // Serializeable.
 static_assert(sizeof(LightSerializedData) == 0x30, "wrong size");
 
-static bool light_color_at_location_sample(int64_t loc, int a2, int a3, int a4, tig_color_t* color_ptr);
+static bool light_color_at_location_sample(int64_t loc, int offset_x, int offset_y, int ambient_only, tig_color_t* color_ptr);
 static void light_create_and_register(LightCreateInfo* create_info, Light** light_ptr);
 static void light_remove_or_disable(Light* light);
 static void light_unregister_from_sector(Light* light);
@@ -454,7 +454,7 @@ bool light_timeevent_process(TimeEvent* timeevent)
 }
 
 // 0x4D89E0
-bool light_color_at_location_sample(int64_t loc, int offset_x, int offset_y, int a4, tig_color_t* color_ptr)
+bool light_color_at_location_sample(int64_t loc, int offset_x, int offset_y, int ambient_only, tig_color_t* color_ptr)
 {
     int lx;
     int ly;
@@ -501,7 +501,7 @@ bool light_color_at_location_sample(int64_t loc, int offset_x, int offset_y, int
     indoor_color = light_get_indoor_color();
     outdoor_color = light_get_outdoor_color();
 
-    if (a4) {
+    if (ambient_only) {
         if (tig_art_tile_id_type_get(tile_art_id_at(loc))) {
             *color_ptr = outdoor_color;
         } else {
@@ -678,7 +678,7 @@ void light_free(Light* light)
 }
 
 // 0x4D9590
-void light_object_render_lights_create(int64_t obj, bool a2)
+void light_object_render_lights_create(int64_t obj, bool register_light)
 {
     unsigned int light_flags[4];
     unsigned int render_flags;
@@ -704,7 +704,7 @@ void light_object_render_lights_create(int64_t obj, bool a2)
         return;
     }
 
-    create_func = a2 ? light_create_and_register : light_allocate;
+    create_func = register_light ? light_create_and_register : light_allocate;
 
     art_id = obj_field_int32_get(obj, OBJ_F_LIGHT_AID);
     light = (Light*)obj_field_ptr_get(obj, OBJ_F_LIGHT_HANDLE);
@@ -925,7 +925,7 @@ bool shadow_apply(int64_t obj)
                                 uint8_t light_gray = tig_color_rgb_to_grayscale(light->tint_color);
                                 int delta = light_gray - gray;
                                 if (delta > 0) {
-                                    int v1 = (int)((float)delta * 0.4f);
+                                    int maximum_shadow_grey = (int)((float)delta * 0.4f);
                                     int frame = color_index - 32;
 
                                     shadows[cnt].art_id = tig_art_light_id_rotation_set(art_id, (frame / 7 + 16) % 32);
@@ -936,7 +936,7 @@ bool shadow_apply(int64_t obj)
                                     shadows[cnt].palette = light_shadow_palettes[frame];
                                     shadows[cnt].art_id = tig_art_id_frame_set(shadows[cnt].art_id, frame);
 
-                                    int shadow_grey = v1 - frame * (v1 / 7);
+                                    int shadow_grey = maximum_shadow_grey - frame * (maximum_shadow_grey / 7);
                                     shadows[cnt].color = tig_color_make(shadow_grey, shadow_grey, shadow_grey);
 
                                     cnt++;
@@ -1119,29 +1119,29 @@ void light_object_colors_sample(int64_t obj, int* colors, int* cnt_ptr)
         int64_t loc_x;
         int64_t loc_y;
         location_xy(loc, &loc_x, &loc_y);
-        int v87 = (int)LOCATION_GET_X(loc);
-        int v88 = (int)LOCATION_GET_Y(loc);
+        int object_tile_x = (int)LOCATION_GET_X(loc);
+        int object_tile_y = (int)LOCATION_GET_Y(loc);
 
-        int v1;
+        int scan_direction;
         switch (rot) {
         case 0:
             loc_x += 40;
-            v1 = 1;
+            scan_direction = 1;
             break;
         case 2:
             tile_color = outdoor_color;
             loc_x += 40;
             loc_y += 39;
-            v1 = -1;
+            scan_direction = -1;
             break;
         case 4:
             tile_color = outdoor_color;
             loc_y += 20;
-            v1 = 1;
+            scan_direction = 1;
             break;
         case 6:
             loc_y += 20;
-            v1 = -1;
+            scan_direction = -1;
             break;
         default:
             // Should be unreachable.
@@ -1154,7 +1154,7 @@ void light_object_colors_sample(int64_t obj, int* colors, int* cnt_ptr)
         TigRect obj_rect;
         object_get_rect(obj, 0, &obj_rect);
 
-        loc_y += (obj_rect.x - loc_x) * v1;
+        loc_y += (obj_rect.x - loc_x) * scan_direction;
         loc_x = obj_rect.x;
 
         if ((obj_rect.width & 1) != 0) {
@@ -1162,7 +1162,7 @@ void light_object_colors_sample(int64_t obj, int* colors, int* cnt_ptr)
         }
 
         obj_rect.height = obj_rect.width / 2;
-        obj_rect.y = v1 > 0 ? (int)loc_y : (int)loc_y - obj_rect.height + 1;
+        obj_rect.y = scan_direction > 0 ? (int)loc_y : (int)loc_y - obj_rect.height + 1;
 
         for (int x = 0; x < obj_rect.width; x++) {
             colors[x] = tile_color;
@@ -1176,8 +1176,8 @@ void light_object_colors_sample(int64_t obj, int* colors, int* cnt_ptr)
 
         LocRect loc_rect;
         if (location_screen_rect_to_loc_rect(&rect, &loc_rect)) {
-            SectorListNode* v2 = sector_list_create(&loc_rect);
-            SectorListNode* curr = v2;
+            SectorListNode* sector_list = sector_list_create(&loc_rect);
+            SectorListNode* curr = sector_list;
             while (curr != NULL) {
                 Sector* sector;
                 if (sector_lock(curr->sec, &sector)) {
@@ -1188,10 +1188,10 @@ void light_object_colors_sample(int64_t obj, int* colors, int* cnt_ptr)
                             int light_x = (int)LOCATION_GET_X(light->loc);
                             int light_y = (int)LOCATION_GET_Y(light->loc);
 
-                            if ((rot == 0 && light_x >= v87)
-                                || (rot == 2 && light_y > v88)
-                                || (rot == 4 && light_x > v87)
-                                || (rot == 6 && light_y >= v88)) {
+                            if ((rot == 0 && light_x >= object_tile_x)
+                                || (rot == 2 && light_y > object_tile_y)
+                                || (rot == 4 && light_x > object_tile_x)
+                                || (rot == 6 && light_y >= object_tile_y)) {
 
                                 TigRect light_rect;
                                 light_get_rect_internal(light, &light_rect);
@@ -1230,7 +1230,7 @@ void light_object_colors_sample(int64_t obj, int* colors, int* cnt_ptr)
                                         }
 
                                         if ((x & 1) != 0) {
-                                            tmp_y += v1;
+                                            tmp_y += scan_direction;
                                         }
 
                                         tmp_x++;
@@ -1245,7 +1245,7 @@ void light_object_colors_sample(int64_t obj, int* colors, int* cnt_ptr)
                 curr = curr->next;
             }
 
-            sector_list_destroy(v2);
+            sector_list_destroy(sector_list);
         }
 
         if (light_hardware_accelerated) {
@@ -1453,19 +1453,19 @@ void light_get_rect(Light* light, TigRect* rect)
 // 0x4DD150
 void light_set_flags_internal(Light* light, unsigned int flags)
 {
-    bool v1;
+    bool needs_invalidation;
     int overlay;
     TigRect rect;
 
-    v1 = false;
+    needs_invalidation = false;
     if ((flags & LF_OUTDOOR) != 0) {
-        v1 = true;
+        needs_invalidation = true;
         flags &= ~LF_OUTDOOR;
         light->flags &= ~LF_INDOOR;
         light->flags |= LF_OUTDOOR;
     }
     if ((flags & LF_INDOOR) != 0) {
-        v1 = true;
+        needs_invalidation = true;
         flags &= ~LF_INDOOR;
         light->flags &= ~LF_OUTDOOR;
         light->flags |= LF_INDOOR;
@@ -1495,7 +1495,7 @@ void light_set_flags_internal(Light* light, unsigned int flags)
         }
     }
 
-    if (v1) {
+    if (needs_invalidation) {
         light_refresh_tint_palette(light);
     }
 
@@ -1506,18 +1506,18 @@ void light_set_flags_internal(Light* light, unsigned int flags)
 // 0x4DD230
 void light_unset_flags_internal(Light* light, unsigned int flags)
 {
-    bool v1;
+    bool needs_invalidation;
     int overlay;
     TigRect rect;
 
-    v1 = false;
+    needs_invalidation = false;
     if ((flags & LF_OUTDOOR) != 0) {
-        v1 = true;
+        needs_invalidation = true;
         flags &= ~LF_OUTDOOR;
         light->flags &= ~LF_OUTDOOR;
     }
     if ((flags & LF_INDOOR) != 0) {
-        v1 = true;
+        needs_invalidation = true;
         flags &= ~LF_INDOOR;
         light->flags &= ~LF_INDOOR;
     }
@@ -1546,7 +1546,7 @@ void light_unset_flags_internal(Light* light, unsigned int flags)
         }
     }
 
-    if (v1) {
+    if (needs_invalidation) {
         light_refresh_tint_palette(light);
     }
 
@@ -1569,7 +1569,7 @@ void light_move_and_invalidate(Light* light, int64_t loc, int offset_x, int offs
     int64_t old_sector_id;
     int64_t new_sector_id;
     Sector* sector;
-    bool v1;
+    bool unattached;
 
     if (light->loc == loc) {
         light_update_offset_internal(light, offset_x, offset_y);
@@ -1580,10 +1580,10 @@ void light_move_and_invalidate(Light* light, int64_t loc, int offset_x, int offs
 
     old_sector_id = sector_id_from_loc(light->loc);
     new_sector_id = sector_id_from_loc(loc);
-    v1 = light_is_unattached(light);
+    unattached = light_is_unattached(light);
 
     if (old_sector_id == new_sector_id) {
-        if (v1 || sector_loaded(new_sector_id)) {
+        if (unattached || sector_loaded(new_sector_id)) {
             sector_lock(new_sector_id, &sector);
             sector_light_list_update(&(sector->lights), light, loc, offset_x, offset_y);
             sector_unlock(new_sector_id);
@@ -1592,7 +1592,7 @@ void light_move_and_invalidate(Light* light, int64_t loc, int offset_x, int offs
             light_set_offset(light, offset_x, offset_y);
         }
     } else {
-        if (v1 || sector_loaded(new_sector_id)) {
+        if (unattached || sector_loaded(new_sector_id)) {
             sector_lock(old_sector_id, &sector);
             sector_light_list_remove(&(sector->lights), light);
             sector_unlock(old_sector_id);
@@ -1601,7 +1601,7 @@ void light_move_and_invalidate(Light* light, int64_t loc, int offset_x, int offs
         light_set_location(light, loc);
         light_set_offset(light, offset_x, offset_y);
 
-        if (v1 || sector_loaded(old_sector_id)) {
+        if (unattached || sector_loaded(old_sector_id)) {
             sector_lock(new_sector_id, &sector);
             sector_light_list_add(&(sector->lights), light);
             sector_unlock(new_sector_id);
@@ -1878,11 +1878,9 @@ bool light_read(TigFile* stream, Light** light_ptr)
     Light* light;
     LightSerializedData serialized;
 
+    if (light_ptr == NULL || tig_file_fread(&serialized, sizeof(serialized), 1, stream) != 1) return false;
     light = (Light*)MALLOC(sizeof(*light));
-
-    if (tig_file_fread(&serialized, sizeof(serialized), 1, stream) != 1) {
-        return false;
-    }
+    if (light == NULL) return false;
 
     light->obj = serialized.obj;
     light->loc = serialized.loc;
@@ -2405,7 +2403,7 @@ void light_render_internal(GameDrawInfo* draw_info)
     TigRectListNode* rect_node;
     TigRect tmp_rect;
     TigRectListNode* head;
-    SectorListNode* v1;
+    SectorListNode* sector_node;
     Sector* sector;
     SectorBlockListNode* light_node;
     Light* light;
@@ -2436,9 +2434,9 @@ void light_render_internal(GameDrawInfo* draw_info)
         rect_node = rect_node->next;
     }
 
-    v1 = draw_info->sectors;
-    while (v1 != NULL) {
-        if (sector_lock(v1->sec, &sector)) {
+    sector_node = draw_info->sectors;
+    while (sector_node != NULL) {
+        if (sector_lock(sector_node->sec, &sector)) {
             light_node = sector->lights.head;
             while (light_node != NULL) {
                 light = (Light*)light_node->data;
@@ -2524,9 +2522,9 @@ void light_render_internal(GameDrawInfo* draw_info)
                 }
                 light_node = light_node->next;
             }
-            sector_unlock(v1->sec);
+            sector_unlock(sector_node->sec);
         }
-        v1 = v1->next;
+        sector_node = sector_node->next;
     }
 
     while (head != NULL) {

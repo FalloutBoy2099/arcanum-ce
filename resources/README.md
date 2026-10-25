@@ -17,8 +17,8 @@ The catalog uses these IDs:
 | `1` | Catalog version (`4`); prevents older layouts from supplying incorrect titles. |
 | `10`–`15` | Left menu: Game, Audio, Video, Interface, Shortcuts, Done. |
 | `20`–`22` | Page label, language restart notice and hover prompt. |
-| `101`–`116` | Game setting titles: Module = `101`, Language = `102`, etc. |
-| `201`–`209` | Audio setting titles. |
+| `101`–`118` | Game setting titles: Module = `101`, Language = `102`, etc. |
+| `201`–`210` | Audio setting titles. |
 | `301`–`311` | Video setting titles. The empty screen slot does not consume an ID. |
 | `401`–`407` | Interface setting titles. |
 | `501` onward | Reserved for future Shortcuts settings. |
@@ -174,3 +174,12 @@ applied to CE.
 alternate weapon labels for barter comparisons of fixed effect descriptions.
 Install English into the common pack and its `mes/ce_fallback/` directory,
 and French into the French pack, like the other localized CE catalogs.
+
+## Level cap 127
+
+`rules/xp_level.mes` extends experience progression through playable level 127,
+with level 128 retained only as the internal stopping threshold. Install it as
+`data/rules/xp_level.mes`, together with `rules/level_cap.NOTICE.txt` and
+`rules/level_cap.COPYING` in the same destination directory. The original binary
+patcher is not required. The engine also generates a safe extension when only
+the original level table is available. See `docs/level_cap_127_20261025.md`.

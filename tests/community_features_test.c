@@ -979,12 +979,16 @@ static void test_startup_fps(void)
     }
     settings_set_value(&settings, "show_fps", 1);
     settings_set_value(&settings, "auto_exit_combat", 1);
+    settings_set_value(&settings, "utility_ai", 2);
+    settings_set_value(&settings, "gpu_cursor", 1);
     settings_save(&settings);
     settings_exit(&settings);
     settings_init(&settings, "arcanum.ini");
     settings_load(&settings);
     CHECK(settings_get_value(&settings, "show_fps") == 1);
     CHECK(settings_get_value(&settings, "auto_exit_combat") == 1);
+    CHECK(settings_get_value(&settings, "utility_ai") == 2);
+    CHECK(settings_get_value(&settings, "gpu_cursor") == 1);
 }
 
 static void test_bindings(void)
@@ -1310,6 +1314,40 @@ static void test_language_labels(const char* path)
     tig_font_destroy(handle);
 }
 
+static void test_modern_outline_glyphs(const char* path)
+{
+    if (path == NULL || path[0] == '\0') return;
+    const int sizes[] = { 12, 13, 15, 16, 17, 19 };
+    for (int i = 0; i < SDL_arraysize(sizes); i++) {
+        TigFont font = { 0 };
+        font.flags = TIG_FONT_MODERN;
+        font.modern_font_path = path;
+        font.modern_font_size = (float)sizes[i];
+        tig_font_handle_t handle;
+        tig_font_create(&font, &handle);
+        TTF_Font* native = ((TigFont*)handle)->modern_font;
+        CHECK(native != NULL);
+        if (native != NULL && TTF_FontIsScalable(native)) {
+            SDL_Color white = { 255, 255, 255, 255 };
+            SDL_Surface* surface = TTF_RenderText_Blended(native, "Merci O\xc3\xb9 moyennant", 0, white);
+            CHECK(surface != NULL);
+            if (surface != NULL) {
+                int smooth_edges = 0;
+                for (int y = 0; y < surface->h; y++) {
+                    for (int x = 0; x < surface->w; x++) {
+                        Uint8 red, green, blue, alpha;
+                        CHECK(SDL_ReadSurfacePixel(surface, x, y, &red, &green, &blue, &alpha));
+                        if (alpha > 0 && alpha < 255) smooth_edges++;
+                    }
+                }
+                CHECK(smooth_edges > 0);
+                SDL_DestroySurface(surface);
+            }
+        }
+        tig_font_destroy(handle);
+    }
+}
+
 static void test_modern_cache(const char* path)
 {
     if (path == NULL || path[0] == '\0') return;
@@ -1477,6 +1515,7 @@ int main(int argc, char** argv)
     if (argc > 1) {
         test_language_labels(argv[1]);
         test_modern_measurement(argv[1]);
+        test_modern_outline_glyphs(argv[1]);
         test_modern_cache(argv[1]);
         test_large_floating_dialogue(argv[1]);
         test_modern_brackets(argv[1], 400);

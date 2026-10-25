@@ -1,3 +1,5 @@
+#include "ui/asset_warmup.h"
+#include <tig/performance.h>
 #include "ui/mainmenu_ui.h"
 
 #include <stdio.h>
@@ -62,7 +64,7 @@ typedef struct MainmenuArtAnimation {
     /* 0010 */ int y;
 } MainmenuArtAnimation;
 
-static void mainmenu_ui_game_enter(bool a1);
+static void mainmenu_ui_game_enter(bool skip_interface_restore);
 static void mainmenu_ui_close_game_panels(void);
 static TigWindowModalDialogChoice mainmenu_ui_confirm(int num);
 static void mainmenu_ui_tab_escape_expand_legacy(char* dst, const char* src);
@@ -84,7 +86,7 @@ static void mainmenu_ui_current_window_refresh(TigRect* rect);
 static bool mainmenu_ui_load_game_execute(int btn);
 static bool mainmenu_ui_load_game_button_pressed(tig_button_handle_t button_handle);
 static bool mainmenu_ui_load_game_button_released(tig_button_handle_t button_handle);
-static void mainmenu_ui_load_game_mouse_up(int a1, int a2);
+static void mainmenu_ui_load_game_mouse_up(int x, int y);
 static void mainmenu_ui_selected_load_info_refresh(void);
 static void mainmenu_ui_load_game_refresh(TigRect* rect);
 static void mainmenu_ui_text_draw_truncated(char* str, TigRect* rect, tig_font_handle_t font);
@@ -150,7 +152,7 @@ static void mainmenu_ui_create_shared_radio_buttons(void);
 static bool mainmenu_ui_message_filter(TigMessage* msg);
 static void mainmenu_ui_refresh_button_text(int btn, unsigned int flags);
 static void mainmenu_ui_art_animation_schedule(void);
-static void mainmenu_ui_navigation_action_process(int a1);
+static void mainmenu_ui_navigation_action_process(int action);
 static void mainmenu_ui_scrollbar_refresh(void);
 static void mainmenu_ui_scroll_to(int top_index);
 static void mainmenu_ui_textedit_end(void);
@@ -184,7 +186,7 @@ static int mainmenu_font_colors[MM_COLOR_COUNT][3] = {
 };
 
 // 0x5C3618
-int dword_5C3618 = -1;
+int mainmenu_reserved_selection = -1;
 
 // 0x5C361C
 static int mainmenu_ui_pregen_char_cnt = 9;
@@ -226,7 +228,7 @@ static TigRect mainmenu_ui_bottom_bar_cover_rects[3] = {
 };
 
 // 0x5C36B0
-static bool stru_5C36B0[6][2] = {
+static bool mainmenu_ui_mode_behavior_flags[6][2] = {
     /*        MM_TYPE_DEFAULT */ { false, true },
     /*              MM_TYPE_1 */ { false, true },
     /*        MM_TYPE_IN_PLAY */ { true, false },
@@ -260,7 +262,7 @@ static MainMenuButtonInfo mainmenu_without_load_buttons[] = {
 };
 
 // 0x5C3AB0
-static MainMenuWindowInfo stru_5C3AB0 = {
+static MainMenuWindowInfo mainmenu_reserved_primary_window = {
     2,
     NULL,
     NULL,
@@ -294,7 +296,7 @@ static MainMenuWindowInfo stru_5C3AB0 = {
 };
 
 // 0x5C3B48
-static MainMenuWindowInfo stru_5C3B48 = {
+static MainMenuWindowInfo mainmenu_reserved_secondary_window = {
     2,
     NULL,
     NULL,
@@ -405,22 +407,22 @@ static mes_file_handle_t mainmenu_ui_options_mes_file = MES_FILE_HANDLE_INVALID;
 static int mainmenu_execute_result = -1;
 
 // 0x5C3FC0
-static TigRect stru_5C3FC0 = { 260, 293, 60, 20 };
+static TigRect mainmenu_unused_small_label_rect = { 260, 293, 60, 20 };
 
 // 0x5C3FD0
-static TigRect stru_5C3FD0 = { 160, 263, 150, 20 };
+static TigRect mainmenu_unused_left_label_rect = { 160, 263, 150, 20 };
 
 // 0x5C3FE0
-static TigRect stru_5C3FE0 = { 160, 263, 150, 20 };
+static TigRect mainmenu_unused_secondary_label_rect = { 160, 263, 150, 20 };
 
 // 0x5C3FF0
-static TigRect stru_5C3FF0 = { 560, 203, 150, 20 };
+static TigRect mainmenu_unused_right_label_rect = { 560, 203, 150, 20 };
 
 // 0x5C4000
 static bool mainmenu_default_type_enabled = true;
 
 // 0x5C4004
-static bool dword_5C4004 = true;
+static bool mainmenu_ui_map_entry_hook_enabled = true;
 
 // 0x64C2F8
 static char mainmenu_ui_textedit_buffer[128];
@@ -476,7 +478,7 @@ static MainMenuButtonInfo mainmenu_ui_mainmenu_no_multiplayer_buttons[] = {
     { 410, 143, -1, TIG_BUTTON_HANDLE_INVALID, MM_WINDOW_SINGLE_PLAYER, 0, 0, { 0 }, -1 },
     { 410, 193, -1, TIG_BUTTON_HANDLE_INVALID, MM_WINDOW_OPTIONS, 0, 0, { 0 }, -1 },
     { 410, 243, -1, TIG_BUTTON_HANDLE_INVALID, MM_WINDOW_CREDITS, 0, 0, { 0 }, -1 },
-    { 410, 293, -1, TIG_BUTTON_HANDLE_INVALID, MM_WINDOW_0, 0, 0, { 0 }, -1 },
+    { 410, 293, -1, TIG_BUTTON_HANDLE_INVALID, MM_WINDOW_RESERVED_PRIMARY, 0, 0, { 0 }, -1 },
 };
 
 // 0x5C4170
@@ -1008,7 +1010,7 @@ static TigRect mainmenu_ui_new_char_race_hover_rect = { 22, 281, 276, 40 };
 static TigRect mainmenu_ui_shared_char_background_rect = { 66, 343, 186, 19 };
 
 // 0x5C4F40
-static TigRect stru_5C4F40 = { 22, 331, 276, 40 };
+static TigRect mainmenu_unused_background_hover_rect = { 22, 331, 276, 40 };
 
 // 0x5C4F50
 static TigRect mainmenu_character_summary_stat_rects[15] = {
@@ -1030,7 +1032,7 @@ static TigRect mainmenu_character_summary_stat_rects[15] = {
 };
 
 // 0x5C5040
-static TigRect stru_5C5040 = { 618, 105, 145, 15 };
+static TigRect mainmenu_unused_summary_detail_rect = { 618, 105, 145, 15 };
 
 // 0x5C5050
 static TigRect mainmenu_ui_shared_char_stats_view_rect = { 346, 46, 729, 74 };
@@ -1061,7 +1063,7 @@ static MainMenuButtonInfo mainmenu_ui_new_char_name_button = {
 };
 
 // 0x5C50D0
-static MainMenuButtonInfo stru_5C50D0 = {
+static MainMenuButtonInfo mainmenu_unused_gender_button = {
     22,
     272,
     -1,
@@ -1074,7 +1076,7 @@ static MainMenuButtonInfo stru_5C50D0 = {
 };
 
 // 0x5C5100
-static MainMenuButtonInfo stru_5C5100 = {
+static MainMenuButtonInfo mainmenu_unused_race_button = {
     22,
     322,
     -1,
@@ -1247,8 +1249,8 @@ static MainMenuWindowInfo mainmenu_ui_shop_info = {
 
 // 0x5C3A40
 static MainMenuWindowInfo* main_menu_window_info[MM_WINDOW_COUNT] = {
-    /*                       MM_WINDOW_0 */ &stru_5C3AB0,
-    /*                       MM_WINDOW_1 */ &stru_5C3B48,
+    /*                       MM_WINDOW_0 */ &mainmenu_reserved_primary_window,
+    /*                       MM_WINDOW_1 */ &mainmenu_reserved_secondary_window,
     /*                MM_WINDOW_MAINMENU */ &mainmenu_ui_mainmenu_window_info,
     /*        MM_WINDOW_MAINMENU_IN_PLAY */ &mainmenu_ui_mainmenu_in_play_window_info,
     /* MM_WINDOW_MAINMENU_IN_PLAY_LOCKED */ &mainmenu_ui_mainmenu_in_play_locked_window_info,
@@ -1322,7 +1324,7 @@ static ScrollbarUiControlInfo mainmenu_save_list_scrollbar_info;
 static mes_file_handle_t mainmenu_ui_rules_mainmenu_mes_file;
 
 // 0x64C378
-static int dword_64C378;
+static int mainmenu_unused_counter;
 
 // 0x64C37C
 static char* mainmenu_save_list_module_name;
@@ -1342,7 +1344,7 @@ static bool mainmenu_skip_history_push;
 // 0x64C390
 
 // 0x64C394
-static char byte_64C394[128];
+static char mainmenu_unused_text_buffer[128];
 
 // 0x64C414
 static MainMenuWindowType mainmenu_ui_window_type;
@@ -1351,10 +1353,10 @@ static MainMenuWindowType mainmenu_ui_window_type;
 static bool mainmenu_ui_start_new_game;
 
 // 0x64C41C
-int64_t* dword_64C41C;
+int64_t* mainmenu_reserved_object_handles;
 
 // 0x64C420
-int dword_64C420;
+int mainmenu_reserved_object_count;
 
 // 0x64C424
 static bool mainmenu_ui_auto_equip_items_on_start;
@@ -1500,7 +1502,7 @@ bool mainmenu_ui_init(GameInitInfo* init_info)
     strncpy(mainmenu_ui_textedit_buffer, mes_file_entry.str, 23);
 
     mainmenu_ui_initialized = true;
-    mainmenu_ui_window_type = MM_WINDOW_0;
+    mainmenu_ui_window_type = MM_WINDOW_RESERVED_PRIMARY;
 
     mainmenu_initial_start_in_progress = true;
     mainmenu_ui_start(MM_TYPE_DEFAULT);
@@ -1544,8 +1546,8 @@ void mainmenu_ui_exit(void)
         mainmenu_ui_options_mes_file = MES_FILE_HANDLE_INVALID;
     }
 
-    if (dword_64C41C != NULL) {
-        FREE(dword_64C41C);
+    if (mainmenu_reserved_object_handles != NULL) {
+        FREE(mainmenu_reserved_object_handles);
     }
 
     mainmenu_ui_initialized = false;
@@ -1595,25 +1597,25 @@ void mainmenu_ui_start(MainMenuType type)
         switch (type) {
         case MM_TYPE_IN_PLAY:
             mainmenu_ui_window_type = MM_WINDOW_MAINMENU_IN_PLAY;
-            dword_5C4004 = false;
+            mainmenu_ui_map_entry_hook_enabled = false;
             mainmenu_ui_open();
             object_hover_obj_set(OBJ_HANDLE_NULL);
             break;
         case MM_TYPE_IN_PLAY_LOCKED:
             mainmenu_ui_window_type = MM_WINDOW_MAINMENU_IN_PLAY_LOCKED;
-            dword_5C4004 = false;
+            mainmenu_ui_map_entry_hook_enabled = false;
             mainmenu_ui_open();
             object_hover_obj_set(OBJ_HANDLE_NULL);
             break;
         case MM_TYPE_OPTIONS:
             mainmenu_ui_window_type = MM_WINDOW_OPTIONS;
-            dword_5C4004 = false;
+            mainmenu_ui_map_entry_hook_enabled = false;
             mainmenu_ui_open();
             object_hover_obj_set(OBJ_HANDLE_NULL);
             break;
         case MM_TYPE_IN_PLAY_WITHOUT_LOAD:
             mainmenu_ui_window_type = MM_WINDOW_MAINMENU_WITHOUT_LOAD;
-            dword_5C4004 = false;
+            mainmenu_ui_map_entry_hook_enabled = false;
             mainmenu_ui_open();
             object_hover_obj_set(OBJ_HANDLE_NULL);
             break;
@@ -1622,8 +1624,8 @@ void mainmenu_ui_start(MainMenuType type)
                 tig_debug_printf("mainmenu_ui_start: ERROR: tig_mouse_hide failed!\n");
                 exit(EXIT_FAILURE);
             }
-            mainmenu_ui_window_type = MM_WINDOW_0;
-            dword_5C4004 = true;
+            mainmenu_ui_window_type = MM_WINDOW_RESERVED_PRIMARY;
+            mainmenu_ui_map_entry_hook_enabled = true;
             mainmenu_ui_open();
             object_hover_obj_set(OBJ_HANDLE_NULL);
             break;
@@ -1653,7 +1655,7 @@ void mainmenu_ui_start_at_window(MainMenuWindowType window_type)
 
     mainmenu_ui_type = MM_TYPE_OPTIONS;
     mainmenu_ui_window_type = window_type;
-    dword_5C4004 = false;
+    mainmenu_ui_map_entry_hook_enabled = false;
     mainmenu_ui_open();
     object_hover_obj_set(OBJ_HANDLE_NULL);
 }
@@ -1665,7 +1667,7 @@ void mainmenu_ui_game_resume(void)
 }
 
 // 0x5412E0
-void mainmenu_ui_game_enter(bool a1)
+void mainmenu_ui_game_enter(bool skip_interface_restore)
 {
     int64_t pc_obj;
     int map;
@@ -1692,7 +1694,7 @@ void mainmenu_ui_game_enter(bool a1)
             mainmenu_ui_auto_equip_items_on_start = false;
         }
 
-        if (mainmenu_ui_window_type != MM_WINDOW_0 || !stru_5C36B0[mainmenu_ui_type][1]) {
+        if (mainmenu_ui_window_type != MM_WINDOW_RESERVED_PRIMARY || !mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][1]) {
             if (mainmenu_ui_start_new_game) {
                 mainmenu_ui_start_new_game = false;
 
@@ -1738,7 +1740,7 @@ void mainmenu_ui_game_enter(bool a1)
 
                 wmap_rnd_schedule();
             } else {
-                if (dword_5C4004) {
+                if (mainmenu_ui_map_entry_hook_enabled) {
                     map_game_entry_hook_stub();
                 }
                 gamelib_draw();
@@ -1750,7 +1752,7 @@ void mainmenu_ui_game_enter(bool a1)
 
     intgame_refresh_cursor();
     intgame_message_callback_set(0);
-    if (!a1) {
+    if (!skip_interface_restore) {
         intgame_draw_bars();
 
         if (mainmenu_ui_was_compact_interface) {
@@ -1765,7 +1767,17 @@ void mainmenu_ui_game_enter(bool a1)
 }
 
 // 0x541590
+static bool mainmenu_ui_handle_internal(void);
+
 bool mainmenu_ui_handle(void)
+{
+    Uint64 start = tig_performance_begin();
+    bool result = mainmenu_ui_handle_internal();
+    tig_performance_end_detail(TIG_PERF_MENU_MODAL, start, "mainmenu");
+    return result;
+}
+
+static bool mainmenu_ui_handle_internal(void)
 {
     tig_timestamp_t timestamp;
     TigMessage msg;
@@ -1789,6 +1801,7 @@ bool mainmenu_ui_handle(void)
 
     while (mainmenu_ui_active) {
         tig_ping();
+        ui_asset_warmup_tick(!gamelib_in_load() && !gamelib_in_reset() && !gamelib_in_save());
         tig_timer_now(&timestamp);
         timeevent_ping(timestamp);
         gamelib_ping();
@@ -1818,7 +1831,7 @@ bool mainmenu_ui_handle(void)
                     // Cmd+S/L, etc.) — do we route ESC through the full
                     // exit-to-game restore for the "in-game" menu types.
                     if (mainmenu_ui_history.count <= 1
-                        && stru_5C36B0[mainmenu_ui_type][0]) {
+                        && mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][0]) {
                         mainmenu_ui_game_resume();
                     } else {
                         mainmenu_ui_close(true);
@@ -1927,7 +1940,7 @@ void mainmenu_ui_close(bool back)
 
     if (back) {
         mainmenu_ui_window_type = mainmenu_ui_pop_window_stack();
-        if (mainmenu_ui_window_type != MM_WINDOW_0) {
+        if (mainmenu_ui_window_type != MM_WINDOW_RESERVED_PRIMARY) {
             mainmenu_ui_open();
         }
     }
@@ -2098,14 +2111,14 @@ bool mainmenu_ui_press_mainmenu_in_play(tig_button_handle_t button_handle)
     }
 
     if (button_handle == window->buttons[4].button_handle) {
-        if (stru_5C36B0[mainmenu_ui_type][0]) {
+        if (mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][0]) {
             mainmenu_ui_game_resume();
             return false;
         }
 
         mainmenu_ui_close(true);
 
-        if (mainmenu_ui_window_type == MM_WINDOW_0) {
+        if (mainmenu_ui_window_type == MM_WINDOW_RESERVED_PRIMARY) {
             mainmenu_ui_game_resume();
             return false;
         }
@@ -2133,14 +2146,14 @@ bool mainmenu_ui_press_mainmenu_in_play_locked(tig_button_handle_t button_handle
     }
 
     if (button_handle == window->buttons[2].button_handle) {
-        if (stru_5C36B0[mainmenu_ui_type][0]) {
+        if (mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][0]) {
             mainmenu_ui_game_resume();
             return false;
         }
 
         mainmenu_ui_close(true);
 
-        if (mainmenu_ui_window_type == MM_WINDOW_0) {
+        if (mainmenu_ui_window_type == MM_WINDOW_RESERVED_PRIMARY) {
             mainmenu_ui_game_resume();
             return false;
         }
@@ -2172,7 +2185,7 @@ void mainmenu_ui_create_options(void)
     mainmenu_ui_window_type = MM_WINDOW_OPTIONS;
     mainmenu_ui_create_window_func(false);
     mainmenu_selected_options_tab = 0;
-    options_ui_start(OPTIONS_UI_TAB_GAME, mainmenu_ui_window_handle, stru_5C36B0[mainmenu_ui_type][1] == 0);
+    options_ui_start(OPTIONS_UI_TAB_GAME, mainmenu_ui_window_handle, mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][1] == 0);
     mainmenu_ui_draw_version();
 
     // The options background and Done button provide the complete interface.
@@ -2225,11 +2238,11 @@ bool mainmenu_ui_press_options(tig_button_handle_t button_handle)
     // fully exit to game when we're at the top of the stack (the O key
     // shortcut or similar direct entry).
     if (mainmenu_ui_history.count <= 1
-        && stru_5C36B0[mainmenu_ui_type][0]) {
+        && mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][0]) {
         mainmenu_ui_game_resume();
     } else {
         mainmenu_ui_close(true);
-        if (mainmenu_ui_window_type == MM_WINDOW_0) {
+        if (mainmenu_ui_window_type == MM_WINDOW_RESERVED_PRIMARY) {
             mainmenu_ui_game_resume();
         }
     }
@@ -2246,19 +2259,19 @@ void mainmenu_ui_options_tab_select(int tab)
         mainmenu_selected_options_tab = tab;
         switch (mainmenu_selected_options_tab) {
         case 0:
-            options_ui_start(OPTIONS_UI_TAB_GAME, mainmenu_ui_window_handle, stru_5C36B0[mainmenu_ui_type][1] == 0);
+            options_ui_start(OPTIONS_UI_TAB_GAME, mainmenu_ui_window_handle, mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][1] == 0);
             break;
         case 1:
-            options_ui_start(OPTIONS_UI_TAB_VIDEO, mainmenu_ui_window_handle, stru_5C36B0[mainmenu_ui_type][1] == 0);
+            options_ui_start(OPTIONS_UI_TAB_VIDEO, mainmenu_ui_window_handle, mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][1] == 0);
             break;
         case 2:
-            options_ui_start(OPTIONS_UI_TAB_AUDIO, mainmenu_ui_window_handle, stru_5C36B0[mainmenu_ui_type][1] == 0);
+            options_ui_start(OPTIONS_UI_TAB_AUDIO, mainmenu_ui_window_handle, mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][1] == 0);
             break;
         case 3:
-            options_ui_start(OPTIONS_UI_TAB_INTERFACE, mainmenu_ui_window_handle, stru_5C36B0[mainmenu_ui_type][1] == 0);
+            options_ui_start(OPTIONS_UI_TAB_INTERFACE, mainmenu_ui_window_handle, mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][1] == 0);
             break;
         case 4:
-            options_ui_start(OPTIONS_UI_TAB_SHORTCUTS, mainmenu_ui_window_handle, stru_5C36B0[mainmenu_ui_type][1] == 0);
+            options_ui_start(OPTIONS_UI_TAB_SHORTCUTS, mainmenu_ui_window_handle, mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][1] == 0);
             break;
         }
     }
@@ -2356,7 +2369,7 @@ void mainmenu_ui_load_game_create(void)
         location_origin_set(obj_field_int64_get(pc_obj, OBJ_F_LOCATION));
     }
 
-    if (!stru_5C36B0[mainmenu_ui_type][0]) {
+    if (!mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][0]) {
         // Pre-game Load Game (reached from the main menu, no game in
         // session) — `player_get_local_pc_obj()` can return a stub PC
         // here, so gate on the same "exit to game" menu-type flag the
@@ -2398,9 +2411,9 @@ void mainmenu_ui_load_game_destroy(void)
 }
 
 // 0x542280
-void mainmenu_ui_list_top_index_set(int a1)
+void mainmenu_ui_list_top_index_set(int top_index)
 {
-    main_menu_window_info[mainmenu_ui_window_type]->top_index = a1;
+    main_menu_window_info[mainmenu_ui_window_type]->top_index = top_index;
 }
 
 // 0x5422A0
@@ -3091,7 +3104,7 @@ void mainmenu_ui_save_game_destroy(void)
 // 0x5435D0
 bool mainmenu_ui_save_game_execute(int btn)
 {
-    int v1;
+    int selected_slot;
     char fname[COMPAT_MAX_FNAME];
     const char* name;
     MesFileEntry mes_file_entry;
@@ -3100,14 +3113,14 @@ bool mainmenu_ui_save_game_execute(int btn)
 
     (void)btn;
 
-    v1 = main_menu_window_info[mainmenu_ui_window_type]->selected_index;
-    if (v1 == -1) {
+    selected_slot = main_menu_window_info[mainmenu_ui_window_type]->selected_index;
+    if (selected_slot == -1) {
         return false;
     }
 
-    if (v1 > 0) {
-        name = strcpy(fname, mainmenu_ui_gsl.names[v1 - 1]);
-        strcpy(mainmenu_ui_textedit_buffer, mainmenu_ui_gsl.names[v1 - 1] + 8);
+    if (selected_slot > 0) {
+        name = strcpy(fname, mainmenu_ui_gsl.names[selected_slot - 1]);
+        strcpy(mainmenu_ui_textedit_buffer, mainmenu_ui_gsl.names[selected_slot - 1] + 8);
         fname[8] = '\0';
 
         if (mainmenu_ui_confirm(5064)) {
@@ -4634,7 +4647,7 @@ void mainmenu_ui_refresh_background(void)
         tig_window_destroy(mainmenu_ui_wood_window);
         mainmenu_ui_wood_window = TIG_WINDOW_HANDLE_INVALID;
     }
-    if (stru_5C36B0[mainmenu_ui_type][0]
+    if (mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][0]
         || settings_get_value(&settings, MAIN_MENU_ART_KEY) != 2) {
         return;
     }
@@ -4695,7 +4708,7 @@ void mainmenu_ui_create_window_func(bool should_display)
     tig_art_id_t art_id;
     tig_font_handle_t font;
     tig_window_handle_t window_handle;
-    bool v1 = false;
+    bool cover_windows_needed_or_created = false;
     int idx;
     int rc;
 
@@ -4716,7 +4729,7 @@ void mainmenu_ui_create_window_func(bool should_display)
                 mainmenu_ui_window_rect = mainmenu_ui_window_fullscreen_rect;
             } else {
                 mainmenu_ui_window_rect = mainmenu_ui_window_partial_rect;
-                v1 = true;
+                cover_windows_needed_or_created = true;
             }
         }
 
@@ -4751,11 +4764,11 @@ void mainmenu_ui_create_window_func(bool should_display)
             tig_window_blit_art(mainmenu_ui_window_handle, &art_blit_info);
         }
     } else {
-        v1 = true;
+        cover_windows_needed_or_created = true;
     }
 
-    if (v1) {
-        v1 = false;
+    if (cover_windows_needed_or_created) {
+        cover_windows_needed_or_created = false;
 
         tig_art_interface_id_create(335, 0, 0, 0, &art_id);
         if (tig_art_anim_data(art_id, &art_anim_data) == TIG_OK) {
@@ -4794,7 +4807,7 @@ void mainmenu_ui_create_window_func(bool should_display)
 
                 tig_window_blit_art(mainmenu_ui_bottom_bar_cover_window_handles[idx], &art_blit_info);
 
-                v1 = true;
+                cover_windows_needed_or_created = true;
             }
         }
 
@@ -4823,7 +4836,7 @@ void mainmenu_ui_create_window_func(bool should_display)
             art_blit_info.dst_rect = &dst_rect;
 
             if (tig_window_create(&window_data, &mainmenu_ui_top_bar_cover_window_handle) != TIG_OK) {
-                if (!v1) {
+                if (!cover_windows_needed_or_created) {
                     tig_debug_printf("mainmenu_ui_create_window_func: ERROR: tig_art_anim_data2 failed!\n");
                     exit(EXIT_SUCCESS); // FIXME: Should be `EXIT_FAILURE`.
                 }
@@ -4831,7 +4844,7 @@ void mainmenu_ui_create_window_func(bool should_display)
 
             tig_window_blit_art(mainmenu_ui_top_bar_cover_window_handle, &art_blit_info);
         } else {
-            if (!v1) {
+            if (!cover_windows_needed_or_created) {
                 tig_debug_printf("mainmenu_ui_create_window_func: ERROR: tig_art_anim_data2 failed!\n");
                 exit(EXIT_SUCCESS); // FIXME: Should be `EXIT_FAILURE`.
             }
@@ -4971,7 +4984,7 @@ void mainmenu_ui_create_window_func(bool should_display)
     // create their tig window through this same function. Out-of-game
     // menus skip — no world to show.
     if (mainmenu_ui_window_handle != TIG_WINDOW_HANDLE_INVALID
-        && stru_5C36B0[mainmenu_ui_type][0]) {
+        && mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][0]) {
         intgame_apply_translucent_black(mainmenu_ui_window_handle, true);
     }
 
@@ -5140,7 +5153,7 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
     MesFileEntry description_mes_file_entry;
     UiMessage ui_message;
     char str[MAX_STRING];
-    int v2;
+    int description_message_id;
     int original_screen_x = 0;
     int original_screen_y = 0;
     TigMessage tmp_msg = *msg;
@@ -5266,7 +5279,7 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
             //     pause) and main-menu → Load → click-outside (back to
             //     main menu) symmetrically.
             {
-                bool in_game = stru_5C36B0[mainmenu_ui_type][0];
+                bool in_game = mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][0];
                 bool dismissible_window = in_game
                     || mainmenu_ui_window_type == MM_WINDOW_OPTIONS
                     || mainmenu_ui_window_type == MM_WINDOW_LOAD_GAME
@@ -5287,8 +5300,8 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                 }
             }
             switch (mainmenu_ui_window_type) {
-            case MM_WINDOW_0:
-            case MM_WINDOW_1:
+            case MM_WINDOW_RESERVED_PRIMARY:
+            case MM_WINDOW_RESERVED_SECONDARY:
                 mainmenu_ui_close(false);
                 mainmenu_ui_window_type = MM_WINDOW_MAINMENU;
                 mainmenu_ui_open();
@@ -5333,8 +5346,8 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
         case TIG_MESSAGE_MOUSE_RIGHT_BUTTON_UP:
         case TIG_MESSAGE_MOUSE_MIDDLE_BUTTON_UP:
             switch (mainmenu_ui_window_type) {
-            case MM_WINDOW_0:
-            case MM_WINDOW_1:
+            case MM_WINDOW_RESERVED_PRIMARY:
+            case MM_WINDOW_RESERVED_SECONDARY:
                 mainmenu_ui_close(false);
                 mainmenu_ui_window_type = MM_WINDOW_MAINMENU;
                 mainmenu_ui_open();
@@ -5384,18 +5397,18 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
 
                     if (window->buttons[idx].destination_window == 0) {
                         mainmenu_ui_game_resume();
-                        if (stru_5C36B0[mainmenu_ui_type][1]
+                        if (mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][1]
                             || mainmenu_ui_window_type == MM_WINDOW_MAINMENU
                             || mainmenu_ui_window_type == MM_WINDOW_MAINMENU_IN_PLAY) {
                             mainmenu_ui_exit_game();
                         }
-                        mainmenu_ui_window_type = MM_WINDOW_0;
+                        mainmenu_ui_window_type = MM_WINDOW_RESERVED_PRIMARY;
                         return true;
                     }
 
                     if (window->buttons[idx].destination_window == -2) {
                         mainmenu_ui_close(true);
-                        if (mainmenu_ui_window_type == MM_WINDOW_0) {
+                        if (mainmenu_ui_window_type == MM_WINDOW_RESERVED_PRIMARY) {
                             mainmenu_ui_game_resume();
                         }
                     }
@@ -5420,22 +5433,22 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                     mainmenu_ui_refresh_button_text(idx, 0x2);
                 }
 
-                v2 = window->buttons[idx].description_message_id;
+                description_message_id = window->buttons[idx].description_message_id;
             } else {
-                v2 = -1;
+                description_message_id = -1;
             }
 
-            if (v2 == 0) {
+            if (description_message_id == 0) {
                 if (msg->data.button.button_handle == mainmenu_load_preview_button.button_handle) {
-                    v2 = mainmenu_load_preview_button.description_message_id;
+                    description_message_id = mainmenu_load_preview_button.description_message_id;
                 } else if (msg->data.button.button_handle == mainmenu_save_preview_button.button_handle) {
-                    v2 = mainmenu_save_preview_button.description_message_id;
+                    description_message_id = mainmenu_save_preview_button.description_message_id;
                 } else {
                     return false;
                 }
             }
 
-            if (v2 > 0) {
+            if (description_message_id > 0) {
                 mes_file_entry.num = 6999;
                 if (!mes_search(mainmenu_ui_mainmenu_mes_file, &mes_file_entry)) {
                     tig_debug_printf("MMUI: ERROR: Hover Text for button is Unreachable!\n");
@@ -5444,7 +5457,7 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
 
                 mes_get_msg(mainmenu_ui_mainmenu_mes_file, &mes_file_entry);
 
-                description_mes_file_entry.num = v2;
+                description_mes_file_entry.num = description_message_id;
                 mes_get_msg(mainmenu_ui_mainmenu_mes_file, &description_mes_file_entry);
 
                 snprintf(str, sizeof(str), "%s\n%s", mes_file_entry.str, description_mes_file_entry.str);
@@ -5472,22 +5485,22 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                     mainmenu_ui_refresh_button_text(idx, 0);
                 }
 
-                v2 = window->buttons[idx].description_message_id;
+                description_message_id = window->buttons[idx].description_message_id;
             } else {
-                v2 = -1;
+                description_message_id = -1;
             }
 
-            if (v2 == 0) {
+            if (description_message_id == 0) {
                 if (msg->data.button.button_handle == mainmenu_load_preview_button.button_handle) {
-                    v2 = mainmenu_load_preview_button.description_message_id;
+                    description_message_id = mainmenu_load_preview_button.description_message_id;
                 } else if (msg->data.button.button_handle == mainmenu_save_preview_button.button_handle) {
-                    v2 = mainmenu_save_preview_button.description_message_id;
+                    description_message_id = mainmenu_save_preview_button.description_message_id;
                 } else {
                     return false;
                 }
             }
 
-            if (v2 > 0) {
+            if (description_message_id > 0) {
                 intgame_message_window_clear();
                 return true;
             }
@@ -5507,9 +5520,9 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
 
         if (!msg->data.keyboard.pressed) {
             switch (mainmenu_ui_window_type) {
-            case MM_WINDOW_0:
+            case MM_WINDOW_RESERVED_PRIMARY:
                 return false;
-            case MM_WINDOW_1:
+            case MM_WINDOW_RESERVED_SECONDARY:
                 mainmenu_ui_close(false);
                 mainmenu_ui_window_type = 2;
                 mainmenu_ui_open();
@@ -5527,7 +5540,7 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                     // window and was auto-dismissing it. Swallow the key
                     // either way so it doesn't fall through to other
                     // handlers.
-                    if (!stru_5C36B0[mainmenu_ui_type][1]
+                    if (!mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][1]
                         && mainmenu_ui_history.count <= 1) {
                         mainmenu_ui_game_resume();
                     }
@@ -5538,7 +5551,7 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                 if (input_binding_matches_keyboard(INPUT_ACTION_MAIN_MENU, msg)) {
                     gsound_play_sfx(0, 1);
                     mainmenu_ui_close(true);
-                    if (mainmenu_ui_window_type == MM_WINDOW_0) {
+                    if (mainmenu_ui_window_type == MM_WINDOW_RESERVED_PRIMARY) {
                         mainmenu_ui_game_resume();
                     }
                     return true;
@@ -5568,7 +5581,7 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                 if (input_binding_matches_keyboard(INPUT_ACTION_MAIN_MENU, msg)) {
                     gsound_play_sfx(0, 1);
                     mainmenu_ui_close(true);
-                    if (mainmenu_ui_window_type == MM_WINDOW_0) {
+                    if (mainmenu_ui_window_type == MM_WINDOW_RESERVED_PRIMARY) {
                         mainmenu_ui_game_resume();
                     }
                     return true;
@@ -5598,7 +5611,7 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                 if (input_binding_matches_keyboard(INPUT_ACTION_MAIN_MENU, msg)) {
                     gsound_play_sfx(0, 1);
                     mainmenu_ui_close(true);
-                    if (mainmenu_ui_window_type == MM_WINDOW_0) {
+                    if (mainmenu_ui_window_type == MM_WINDOW_RESERVED_PRIMARY) {
                         mainmenu_ui_game_resume();
                     }
                     return true;
@@ -5671,18 +5684,18 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
 
             if (window->buttons[idx].destination_window == 0) {
                 mainmenu_ui_game_resume();
-                if (stru_5C36B0[mainmenu_ui_type][1]
+                if (mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][1]
                     || mainmenu_ui_window_type == MM_WINDOW_MAINMENU
                     || mainmenu_ui_window_type == MM_WINDOW_MAINMENU_IN_PLAY) {
                     mainmenu_ui_exit_game();
                 }
-                mainmenu_ui_window_type = MM_WINDOW_0;
+                mainmenu_ui_window_type = MM_WINDOW_RESERVED_PRIMARY;
                 return true;
             }
 
             if (window->buttons[idx].destination_window == -2) {
                 mainmenu_ui_close(true);
-                if (mainmenu_ui_window_type == MM_WINDOW_0) {
+                if (mainmenu_ui_window_type == MM_WINDOW_RESERVED_PRIMARY) {
                     mainmenu_ui_game_resume();
                 }
                 return true;
@@ -5700,10 +5713,10 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                         }
                         return true;
                     case 4:
-                        if (!stru_5C36B0[mainmenu_ui_type][0]) {
+                        if (!mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][0]) {
                             mainmenu_ui_close(true);
 
-                            if (mainmenu_ui_window_type == MM_WINDOW_0) {
+                            if (mainmenu_ui_window_type == MM_WINDOW_RESERVED_PRIMARY) {
                                 mainmenu_ui_game_resume();
                             }
                         }
@@ -5721,10 +5734,10 @@ bool mainmenu_ui_message_filter(TigMessage* msg)
                         }
                         return true;
                     case 2:
-                        if (!stru_5C36B0[mainmenu_ui_type][0]) {
+                        if (!mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][0]) {
                             mainmenu_ui_close(true);
 
-                            if (mainmenu_ui_window_type == MM_WINDOW_0) {
+                            if (mainmenu_ui_window_type == MM_WINDOW_RESERVED_PRIMARY) {
                                 mainmenu_ui_game_resume();
                             }
                         }
@@ -5864,12 +5877,12 @@ bool mainmenu_ui_process_callback(TimeEvent* timeevent)
 }
 
 // 0x5480C0
-void mainmenu_ui_navigation_action_process(int a1)
+void mainmenu_ui_navigation_action_process(int action)
 {
     MainMenuWindowInfo* window;
 
     window = main_menu_window_info[mainmenu_ui_window_type];
-    switch (a1) {
+    switch (action) {
     case 0:
         mainmenu_ui_scroll_to(window->top_index - 1);
         return;
@@ -5902,7 +5915,7 @@ void mainmenu_ui_navigation_action_process(int a1)
             // When stacked under a parent menu (pause menu → Save/Load),
             // fall back to the normal close-back that pops to the parent.
             if (mainmenu_ui_history.count <= 1
-                && stru_5C36B0[mainmenu_ui_type][0]) {
+                && mainmenu_ui_mode_behavior_flags[mainmenu_ui_type][0]) {
                 mainmenu_ui_game_resume();
             } else {
                 mainmenu_ui_close(true);
@@ -5978,19 +5991,19 @@ void mainmenu_ui_scrollbar_refresh(void)
 }
 
 // 0x548FF0
-void mainmenu_ui_scroll_to(int a1)
+void mainmenu_ui_scroll_to(int top_index)
 {
     MainMenuWindowInfo* curr_window_info;
 
     curr_window_info = main_menu_window_info[mainmenu_ui_window_type];
-    if (a1 < 0) {
-        a1 = 0;
-    } else if (a1 > curr_window_info->max_top_index) {
-        a1 = curr_window_info->max_top_index;
+    if (top_index < 0) {
+        top_index = 0;
+    } else if (top_index > curr_window_info->max_top_index) {
+        top_index = curr_window_info->max_top_index;
     }
 
-    if (curr_window_info->top_index != a1) {
-        curr_window_info->top_index = a1;
+    if (curr_window_info->top_index != top_index) {
+        curr_window_info->top_index = top_index;
         mainmenu_ui_scrollbar_refresh();
         if (curr_window_info->refresh_func != NULL) {
             curr_window_info->refresh_func(NULL);
@@ -6275,9 +6288,9 @@ void mainmenu_ui_button_labels_refresh(void)
 }
 
 // 0x549990
-void mainmenu_ui_history_route_seed(int* a1, int num)
+void mainmenu_ui_history_route_seed(int* window_types, int num)
 {
-    if (!mainmenu_history_seed(&mainmenu_ui_history, a1, num)) {
+    if (!mainmenu_history_seed(&mainmenu_ui_history, window_types, num)) {
         tig_debug_printf("MainMenu: rejected history route (length %d).\n", num);
     }
 }

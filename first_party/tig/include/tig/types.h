@@ -101,6 +101,7 @@ typedef unsigned int TigInitFlags;
 // Use `TigInitInfo::window_name` to set window name (otherwise it's set to
 // the executable name).
 #define TIG_INITIALIZE_SET_WINDOW_NAME 0x4000u
+#define TIG_INITIALIZE_HIDDEN 0x8000u
 
 typedef int (*TigArtFilePathResolver)(tig_art_id_t art_id, char* path, size_t maxlen);
 typedef tig_art_id_t (*TigArtIdResetFunc)(tig_art_id_t art_id);

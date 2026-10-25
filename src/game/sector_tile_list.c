@@ -161,19 +161,21 @@ bool sector_tile_list_load_with_dif_internal(SectorTileList* list, TigFile* stre
     }
 
     // Process each change entry.
+    if (!tig_file_count_fits(stream, cnt, SDL_arraysize(list->art_ids), sizeof(int) + sizeof(tig_art_id_t))) return false;
     for (index = 0; index < cnt; index++) {
         // Read the index of the tile.
         if (tig_file_fread(&tile, sizeof(tile), 1, stream) != 1) {
             return false;
         }
 
+        if (tile < 0 || tile >= (int)SDL_arraysize(list->art_ids)) return false;
         // Read the new art ID.
         if (tig_file_fread(&(list->art_ids[tile]), sizeof(list->art_ids[tile]), 1, stream) != 1) {
             return false;
         }
 
         // Mark appopriate tile as changed.
-        list->difmask[tile / 32] |= 1 << (tile % 32);
+        list->difmask[tile / 32] |= UINT32_C(1) << (tile % 32);
         list->dif = true;
     }
 
@@ -207,7 +209,7 @@ bool sector_tile_list_save_with_dif_internal(SectorTileList* list, TigFile* stre
 
     // Iterate through all tiles to find those marked as changed.
     for (tile = 0; tile < 4096; tile++) {
-        if ((list->difmask[tile / 32] & (1 << (tile % 32))) != 0) {
+        if ((list->difmask[tile / 32] & (UINT32_C(1) << (tile % 32))) != 0) {
             // Write the index of the tile.
             if (tig_file_fwrite(&tile, sizeof(tile), 1, stream) != 1) {
                 return false;

@@ -173,17 +173,17 @@ typedef struct DialogFile {
 } DialogFile;
 
 static void dialog_state_init(int64_t npc_obj, int64_t pc_obj, DialogState* state);
-static void dialog_response_dispatch(int a1, int a2, int a3, int a4, DialogState* state);
+static void dialog_response_dispatch(int response_type, int response_value, int response_extra_value, int option_index, DialogState* state);
 static void dialog_turn_build(DialogState* state, bool randomize);
-static int dialog_collect_eligible_options(DialogState* state, int* a2);
-static bool dialog_conditions_evaluate(DialogState* state, char* a2);
-static bool dialog_actions_execute(DialogState* state, char* a2, int a3);
+static int dialog_collect_eligible_options(DialogState* state, int* line_numbers);
+static bool dialog_conditions_evaluate(DialogState* state, char* conditions);
+static bool dialog_actions_execute(DialogState* state, char* actions, int option_index);
 static int dialog_parse_integer_after_first(const char* str);
-static bool dialog_npc_reply_build(DialogState* state, bool a2);
+static bool dialog_npc_reply_build(DialogState* state, bool skip_actions);
 static bool dialog_search(int dlg, DialogFileEntry* entry);
 static void dialog_expand_name_tokens(char* dst, char* src, DialogState* state);
-static bool dialog_pc_option_build(int a1, int a2, DialogState* state);
-static void dialog_response_decode(int a1, int* a2, int* a3);
+static bool dialog_pc_option_build(int line_number, int option_index, DialogState* state);
+static void dialog_response_decode(int encoded_response, int* response_type_ptr, int* response_value_ptr);
 static bool find_dialog(const char* path, int* index_ptr);
 static void dialog_load_internal(DialogFile* dialog);
 static bool dialog_parse_entry(TigFile* stream, DialogFileEntry* entry, int* line_ptr);
@@ -204,39 +204,39 @@ static void dialog_copy_npc_class_specific_msg(char* buffer, DialogState* state,
 static void dialog_copy_npc_race_specific_msg(char* buffer, DialogState* state, int num);
 static void dialog_copy_npc_generic_msg(char* buffer, DialogState* state, int start, int end);
 static bool dialog_copy_npc_override_msg(char* buffer, DialogState* state, int num);
-static int dialog_speech_id_encode(const char* a1, int a2);
-static void dialog_ask_money(int amt, int param1, int param2, int a4, int a5, DialogState* state);
-static void dialog_payment_process(int a1, DialogState* state);
-static void dialog_acknowledgement_build(int a1, int a2, int a3, DialogState* state);
+static int dialog_speech_id_encode(const char* speech_line_text, int script_number);
+static void dialog_ask_money(int amt, int param1, int param2, int fallback_response_type, int fallback_response_value, DialogState* state);
+static void dialog_payment_process(int cost, DialogState* state);
+static void dialog_acknowledgement_build(int message_id, int response_type, int response_value, DialogState* state);
 static void dialog_offer_training(int* skills, int cnt, int back_response_val, DialogState* state);
 static void dialog_ask_money_for_training(int skill, DialogState* state);
 static void dialog_perform_training(int skill, DialogState* state);
 static void dialog_ask_money_for_rumor(int cost, int* rumors, int num_rumors, int response_val, DialogState* state);
-static void dialog_tell_rumor(int rumor, int a2, int a3, DialogState* state);
-static void dialog_build_pc_insult_option(int a1, int a2, int a3, DialogState* a4);
-static void dialog_insult_reply(int a1, int a2, DialogState* state);
-static void dialog_generated_greeting_build(DialogState* state, const char* a2);
-static bool dialog_greeting_override_apply(unsigned int flags, int a2, DialogState* state);
+static void dialog_tell_rumor(int rumor, int response_type, int response_value, DialogState* state);
+static void dialog_build_pc_insult_option(int index, int response_value, int extra_value, DialogState* state);
+static void dialog_insult_reply(int response_type, int response_value, DialogState* state);
+static void dialog_generated_greeting_build(DialogState* state, const char* str);
+static bool dialog_greeting_override_apply(unsigned int flags, int response_value, DialogState* state);
 static void dialog_offer_healing(DialogHealingOfferType type, int response_val, DialogState* state);
 static void dialog_build_use_skill_option(int index, int skill, int response_val, DialogState* state);
 static void dialog_build_use_spell_option(int index, int spell, int response_val, DialogState* state);
 static void dialog_ask_money_for_skill(int skill, int response_val, DialogState* state);
-static void dialog_ask_money_for_spell(int a1, int a2, DialogState* a3);
-static void dialog_use_skill(int a1, int a2, int a3, DialogState* a4);
-static void dialog_use_spell(int spell, int a2, int a3, DialogState* state);
+static void dialog_ask_money_for_spell(int spell, int response_val, DialogState* state);
+static void dialog_use_skill(int skill, int response_type, int response_value, DialogState* state);
+static void dialog_use_spell(int spell, int response_type, int response_value, DialogState* state);
 static int filter_unknown_areas(int64_t obj, int* areas, int cnt);
 static void dialog_offer_directions(const char* str, int response_val, int offset, bool mark, DialogState* state);
 static void dialog_ask_money_for_directions(int cost, int area, int response_val, DialogState* state);
-static void dialog_give_directions(int area, int a2, int a3, DialogState* state);
+static void dialog_give_directions(int area, int response_type, int response_value, DialogState* state);
 static void dialog_ask_money_for_mark_area(int cost, int area, int response_val, DialogState* state);
-static void dialog_mark_area(int area, int a2, int a3, DialogState* state);
+static void dialog_mark_area(int area, int response_type, int response_value, DialogState* state);
 static void dialog_check_story(int response_val, DialogState* state);
 static void dialog_copy_npc_story_msg(char* buffer, DialogState* state);
 static void dialog_ask_about_buying_newspapers(int response_val, DialogState* state);
 static void dialog_offer_today_newspaper(int response_val, DialogState* state);
 static void dialog_offer_older_newspaper(int response_val, DialogState* state);
 static void dialog_ask_money_for_newspaper(int newspaper, int response_val, DialogState* state);
-static void dialog_buy_newspaper(int a1, int a2, int a3, DialogState* a4);
+static void dialog_buy_newspaper(int newspaper, int response_type, int response_value, DialogState* state);
 
 // 0x5A063C
 static const char* dialog_gd_mes_file_names[GD_COUNT] = {
@@ -515,9 +515,9 @@ bool dialog_conversation_begin(DialogState* state)
 // 0x413130
 void dialog_option_select(DialogState* state, int index)
 {
-    int v1;
-    int v2;
-    int v3;
+    int response_type;
+    int response_value;
+    int response_extra_value;
 
     if (state->turn_status == 4
         || state->turn_status == 5
@@ -534,18 +534,18 @@ void dialog_option_select(DialogState* state, int index)
     }
 
     if (state->turn_status == 3) {
-        dialog_response_decode(state->response_value, &v1, &v2);
-        v3 = 0;
+        dialog_response_decode(state->response_value, &response_type, &response_value);
+        response_extra_value = 0;
     } else if (dialog_actions_execute(state, state->actions[index], index)) {
-        v1 = state->option_response_types[index];
-        v2 = state->option_response_values[index];
-        v3 = state->option_response_extra_values[index];
+        response_type = state->option_response_types[index];
+        response_value = state->option_response_values[index];
+        response_extra_value = state->option_response_extra_values[index];
     } else {
         return;
     }
 
     if (critter_is_dead(state->npc_obj) || ai_check_kos(state->npc_obj, state->pc_obj) == AI_KOS_NO) {
-        dialog_response_dispatch(v1, v2, v3, index, state);
+        dialog_response_dispatch(response_type, response_value, response_extra_value, index, state);
     } else {
         dialog_copy_npc_race_specific_msg(state->reply, state, 1000);
         state->turn_status = 4;
@@ -744,9 +744,9 @@ void dialog_copy_npc_let_me_handle_msg(int64_t npc_obj, int64_t pc_obj, char* bu
 
 // Loads the current NPC reply, optionally bypassing the speech eligibility check.
 // 0x413A30
-void dialog_prepare_npc_reply(DialogState* state, bool a2)
+void dialog_prepare_npc_reply(DialogState* state, bool skip_speech_check)
 {
-    if (a2 || ai_can_speak(state->npc_obj, state->pc_obj, false) == AI_SPEAK_OK) {
+    if (skip_speech_check || ai_can_speak(state->npc_obj, state->pc_obj, false) == AI_SPEAK_OK) {
         state->response_value = state->num;
         state->turn_status = 0;
         dialog_npc_reply_build(state, 0);
@@ -1164,14 +1164,14 @@ void dialog_copy_npc_repair_msg(int64_t npc_obj, int64_t pc_obj, char* buffer)
 
 // Dispatches a response code to a new line, conversation state or service action.
 // 0x414810
-void dialog_response_dispatch(int a1, int a2, int a3, int a4, DialogState* state)
+void dialog_response_dispatch(int response_type, int response_value, int response_extra_value, int option_index, DialogState* state)
 {
-    int v1[100];
+    int parsed_parameters[100];
     int cnt;
 
-    switch (a1) {
+    switch (response_type) {
     case 0:
-        state->response_value = a2;
+        state->response_value = response_value;
         state->turn_status = 0;
         dialog_turn_build(state, 0);
         break;
@@ -1179,100 +1179,100 @@ void dialog_response_dispatch(int a1, int a2, int a3, int a4, DialogState* state
         state->turn_status = 1;
         break;
     case 2:
-        state->response_value = a2;
+        state->response_value = response_value;
         state->turn_status = 2;
         break;
     case 3:
-        state->response_value = a2;
+        state->response_value = response_value;
         state->turn_status = 3;
         break;
     case 4:
-        dialog_payment_process(a2, state);
+        dialog_payment_process(response_value, state);
         break;
     case 5:
-        cnt = dialog_parse_params(v1, &(state->options[a4][strlen(state->options[a4]) + 1]));
-        dialog_offer_training(v1, cnt, a2, state);
+        cnt = dialog_parse_params(parsed_parameters, &(state->options[option_index][strlen(state->options[option_index]) + 1]));
+        dialog_offer_training(parsed_parameters, cnt, response_value, state);
         break;
     case 6:
-        dialog_ask_money_for_training(a2, state);
+        dialog_ask_money_for_training(response_value, state);
         break;
     case 7:
-        dialog_perform_training(a2, state);
+        dialog_perform_training(response_value, state);
         break;
     case 8: {
         char* pch;
         int cost;
 
-        pch = strchr(&(state->options[a4][strlen(state->options[a4]) + 1]), '$');
+        pch = strchr(&(state->options[option_index][strlen(state->options[option_index]) + 1]), '$');
         cost = atoi(pch + 1);
 
         pch = strchr(pch, ',');
-        cnt = dialog_parse_params(v1, pch + 1);
-        dialog_ask_money_for_rumor(cost, v1, cnt, a2, state);
+        cnt = dialog_parse_params(parsed_parameters, pch + 1);
+        dialog_ask_money_for_rumor(cost, parsed_parameters, cnt, response_value, state);
         break;
     }
     case 9:
-        dialog_tell_rumor(a2, state->option_response_types[1], state->option_response_values[1], state);
+        dialog_tell_rumor(response_value, state->option_response_types[1], state->option_response_values[1], state);
         break;
     case 10:
-        dialog_insult_reply(a2, a3, state);
+        dialog_insult_reply(response_value, response_extra_value, state);
         break;
     case 11:
-        dialog_offer_healing(DIALOG_HEALING_OFFER_OPTIONS, a2, state);
+        dialog_offer_healing(DIALOG_HEALING_OFFER_OPTIONS, response_value, state);
         break;
     case 12:
-        dialog_offer_healing(DIALOG_HEALING_OFFER_MAGICKAL_HEALING, a2, state);
+        dialog_offer_healing(DIALOG_HEALING_OFFER_MAGICKAL_HEALING, response_value, state);
         break;
     case 13:
-        dialog_offer_healing(DIALOG_HEALING_OFFER_MAGICKAL_POISON_HEALING, a2, state);
+        dialog_offer_healing(DIALOG_HEALING_OFFER_MAGICKAL_POISON_HEALING, response_value, state);
         break;
     case 14:
-        dialog_ask_money_for_skill(a2, a3, state);
+        dialog_ask_money_for_skill(response_value, response_extra_value, state);
         break;
     case 15:
-        dialog_ask_money_for_spell(a2, a3, state);
+        dialog_ask_money_for_spell(response_value, response_extra_value, state);
         break;
     case 16:
-        dialog_use_skill(a2, state->option_response_types[1], state->option_response_values[1], state);
+        dialog_use_skill(response_value, state->option_response_types[1], state->option_response_values[1], state);
         break;
     case 17:
-        dialog_use_spell(a2, state->option_response_types[1], state->option_response_values[1], state);
+        dialog_use_spell(response_value, state->option_response_types[1], state->option_response_values[1], state);
         break;
     case 18:
-        dialog_offer_directions(&(state->options[a4][strlen(state->options[a4]) + 1]), a2, a3, false, state);
+        dialog_offer_directions(&(state->options[option_index][strlen(state->options[option_index]) + 1]), response_value, response_extra_value, false, state);
         break;
     case 19:
-        dialog_ask_money_for_directions(state->response_value, a2, a3, state);
+        dialog_ask_money_for_directions(state->response_value, response_value, response_extra_value, state);
         break;
     case 20:
-        dialog_give_directions(a2, state->option_response_types[1], state->option_response_values[1], state);
+        dialog_give_directions(response_value, state->option_response_types[1], state->option_response_values[1], state);
         break;
     case 21:
-        dialog_offer_directions(&(state->options[a4][strlen(state->options[a4]) + 1]), a2, a3, true, state);
+        dialog_offer_directions(&(state->options[option_index][strlen(state->options[option_index]) + 1]), response_value, response_extra_value, true, state);
         break;
     case 22:
-        dialog_ask_money_for_mark_area(state->response_value, a2, a3, state);
+        dialog_ask_money_for_mark_area(state->response_value, response_value, response_extra_value, state);
         break;
     case 23:
-        dialog_mark_area(a2, state->option_response_types[1], state->option_response_values[1], state);
+        dialog_mark_area(response_value, state->option_response_types[1], state->option_response_values[1], state);
         break;
     case 24:
-        dialog_check_story(a2, state);
+        dialog_check_story(response_value, state);
         break;
     case 25:
-        dialog_ask_about_buying_newspapers(a2, state);
+        dialog_ask_about_buying_newspapers(response_value, state);
         break;
     case 26:
-        dialog_offer_today_newspaper(a2, state);
+        dialog_offer_today_newspaper(response_value, state);
         break;
     case 27:
-        dialog_offer_older_newspaper(a2, state);
+        dialog_offer_older_newspaper(response_value, state);
         break;
     case 28:
-        dialog_ask_money_for_newspaper(a2, a3, state);
+        dialog_ask_money_for_newspaper(response_value, response_extra_value, state);
         break;
     case 29:
-        dialog_buy_newspaper(a2, state->option_response_types[1], state->option_response_values[1], state);
+        dialog_buy_newspaper(response_value, state->option_response_types[1], state->option_response_values[1], state);
         break;
     case 30:
         state->turn_status = 6;
@@ -1285,8 +1285,8 @@ void dialog_response_dispatch(int a1, int a2, int a3, int a4, DialogState* state
 void dialog_turn_build(DialogState* state, bool randomize)
 {
     int index;
-    int v1[DIALOG_MAX_OPTIONS];
-    int v2;
+    int eligible_lines[DIALOG_MAX_OPTIONS];
+    int discarded_options;
 
     for (index = 0; index < DIALOG_MAX_OPTIONS; index++) {
         state->actions[index] = NULL;
@@ -1300,14 +1300,14 @@ void dialog_turn_build(DialogState* state, bool randomize)
     }
 
     if (dialog_npc_reply_build(state, randomize)) {
-        state->num_options = dialog_collect_eligible_options(state, v1);
-        v2 = 0;
+        state->num_options = dialog_collect_eligible_options(state, eligible_lines);
+        discarded_options = 0;
         for (index = 0; index < state->num_options; index++) {
-            if (!dialog_pc_option_build(v1[index], index - v2, state)) {
-                v2++;
+            if (!dialog_pc_option_build(eligible_lines[index], index - discarded_options, state)) {
+                discarded_options++;
             }
         }
-        state->num_options -= v2;
+        state->num_options -= discarded_options;
         if (state->num_options == 0) {
             dialog_copy_pc_generic_msg(state->options[0], state, 400, 499);
             state->option_response_types[0] = 1;
@@ -1318,7 +1318,7 @@ void dialog_turn_build(DialogState* state, bool randomize)
 
 // Collects option line numbers filtered by gender, intelligence and dialog conditions.
 // 0x414F50
-int dialog_collect_eligible_options(DialogState* state, int* a2)
+int dialog_collect_eligible_options(DialogState* state, int* line_numbers)
 {
     DialogFileEntry key;
     int gender;
@@ -1360,7 +1360,7 @@ int dialog_collect_eligible_options(DialogState* state, int* a2)
             if ((entry->iq < 0 && intelligence <= -entry->iq)
                 || (entry->iq >= 0 && intelligence >= entry->iq)) {
                 if (entry->conditions == NULL || dialog_conditions_evaluate(state, entry->conditions)) {
-                    a2[cnt++] = entry->num;
+                    line_numbers[cnt++] = entry->num;
                 }
             }
         }
@@ -1371,7 +1371,7 @@ int dialog_collect_eligible_options(DialogState* state, int* a2)
 
 // Evaluates the two-character condition operators from a dialog condition string.
 // 0x4150D0
-bool dialog_conditions_evaluate(DialogState* state, char* a2)
+bool dialog_conditions_evaluate(DialogState* state, char* conditions)
 {
     char* pch;
     int cond;
@@ -1381,19 +1381,19 @@ bool dialog_conditions_evaluate(DialogState* state, char* a2)
     int gold;
     int training;
     int level;
-    int v39;
-    int v40;
+    int required_college_level;
+    int current_college_level;
     bool inverse;
     int64_t substitute_inventory_obj;
     char code[3];
 
-    if (a2 == NULL || a2[0] == '\0') {
+    if (conditions == NULL || conditions[0] == '\0') {
         return true;
     }
 
     code[2] = '\0';
 
-    pch = a2;
+    pch = conditions;
     while (*pch != '\0') {
         while (*pch != '\0' && !SDL_isalpha(*pch) && *pch != '$') {
             pch++;
@@ -1850,14 +1850,14 @@ bool dialog_conditions_evaluate(DialogState* state, char* a2)
             }
             break;
         case DIALOG_COND_SC:
-            v39 = dialog_parse_integer_after_first(pch);
-            v40 = spell_college_level_get(state->pc_obj, value);
-            if (v39 > 0) {
-                if (v40 < v39) {
+            required_college_level = dialog_parse_integer_after_first(pch);
+            current_college_level = spell_college_level_get(state->pc_obj, value);
+            if (required_college_level > 0) {
+                if (current_college_level < required_college_level) {
                     return false;
                 }
             } else {
-                if (v40 > -v39) {
+                if (current_college_level > -required_college_level) {
                     return false;
                 }
             }
@@ -1873,24 +1873,24 @@ bool dialog_conditions_evaluate(DialogState* state, char* a2)
 
 // Executes dialog action operators and reports whether normal response handling can continue.
 // 0x415BA0
-bool dialog_actions_execute(DialogState* state, char* a2, int a3)
+bool dialog_actions_execute(DialogState* state, char* actions, int option_index)
 {
     char* pch;
     int act;
     int value;
     ObjectList followers;
     ObjectNode* node;
-    bool v57 = true;
+    bool continue_dialog = true;
     bool attack = false;
     char code[3];
 
-    if (a2 == NULL || a2[0] == '\0') {
+    if (actions == NULL || actions[0] == '\0') {
         return true;
     }
 
     code[2] = '\0';
 
-    pch = a2;
+    pch = actions;
     while (*pch != '\0') {
         while (*pch != '\0' && !SDL_isalpha(*pch) && *pch != '$') {
             pch++;
@@ -1976,7 +1976,7 @@ bool dialog_actions_execute(DialogState* state, char* a2, int a3)
             state->num = value;
             dialog_prepare_npc_reply(state, false);
             state->turn_status = 4;
-            v57 = false;
+            continue_dialog = false;
             break;
         case DIALOG_ACTION_CO:
             attack = true;
@@ -2097,25 +2097,25 @@ bool dialog_actions_execute(DialogState* state, char* a2, int a3)
             rumor_qstate_set(value);
             break;
         case DIALOG_ACTION_JO: {
-            int v41;
+            int join_response_value;
             int rc;
 
-            v41 = dialog_parse_integer_after_first(pch);
+            join_response_value = dialog_parse_integer_after_first(pch);
             rc = ai_check_follow(state->npc_obj, state->pc_obj, value);
             if (rc == AI_FOLLOW_OK) {
                 critter_follow(state->npc_obj, state->pc_obj, value);
-                state->response_value = v41;
+                state->response_value = join_response_value;
                 state->turn_status = 0;
                 dialog_turn_build(state, false);
-                v57 = false;
+                continue_dialog = false;
             } else {
                 dialog_copy_npc_wont_follow_msg(state->npc_obj, state->pc_obj, rc, state->reply, &(state->speech_id));
                 state->num_options = 1;
                 dialog_copy_pc_generic_msg(state->options[0], state, 600, 699);
-                state->option_response_types[0] = state->option_response_types[a3];
-                state->option_response_values[0] = state->option_response_values[a3];
+                state->option_response_types[0] = state->option_response_types[option_index];
+                state->option_response_values[0] = state->option_response_values[option_index];
                 state->actions[0] = 0;
-                v57 = false;
+                continue_dialog = false;
             }
             break;
         }
@@ -2135,25 +2135,25 @@ bool dialog_actions_execute(DialogState* state, char* a2, int a3)
             critter_spread_out(state->npc_obj);
             break;
         case DIALOG_ACTION_UW: {
-            int v43;
+            int unwait_response_value;
             int rc;
 
-            v43 = dialog_parse_integer_after_first(pch);
+            unwait_response_value = dialog_parse_integer_after_first(pch);
             rc = ai_check_follow(state->npc_obj, state->pc_obj, value);
             if (rc == AI_FOLLOW_OK) {
                 ai_npc_unwait(state->npc_obj, value);
-                state->response_value = v43;
+                state->response_value = unwait_response_value;
                 state->turn_status = 0;
                 dialog_turn_build(state, false);
-                v57 = false;
+                continue_dialog = false;
             } else {
                 dialog_copy_npc_wont_follow_msg(state->npc_obj, state->pc_obj, rc, state->reply, &(state->speech_id));
                 state->num_options = 1;
                 dialog_copy_pc_generic_msg(state->options[0], state, 600, 699);
-                state->option_response_types[0] = state->option_response_types[a3];
-                state->option_response_values[0] = state->option_response_values[a3];
+                state->option_response_types[0] = state->option_response_types[option_index];
+                state->option_response_values[0] = state->option_response_values[option_index];
                 state->actions[0] = NULL;
-                v57 = false;
+                continue_dialog = false;
             }
             break;
         }
@@ -2182,7 +2182,7 @@ bool dialog_actions_execute(DialogState* state, char* a2, int a3)
         case DIALOG_ACTION_CE:
             dialog_copy_npc_order_ok_msg(state->npc_obj, state->pc_obj, state->reply, &(state->speech_id));
             state->turn_status = 5;
-            v57 = false;
+            continue_dialog = false;
             break;
         case DIALOG_ACTION_FP:
             stat_base_set(state->pc_obj,
@@ -2192,7 +2192,7 @@ bool dialog_actions_execute(DialogState* state, char* a2, int a3)
         case DIALOG_ACTION_SU:
             dialog_copy_npc_order_ok_msg(state->npc_obj, state->pc_obj, state->reply, &(state->speech_id));
             state->turn_status = 7;
-            v57 = false;
+            continue_dialog = false;
             break;
         case DIALOG_ACTION_OR:
             critter_origin_set(state->npc_obj, value);
@@ -2200,19 +2200,19 @@ bool dialog_actions_execute(DialogState* state, char* a2, int a3)
         case DIALOG_ACTION_II:
             dialog_copy_npc_order_ok_msg(state->npc_obj, state->pc_obj, state->reply, &(state->speech_id));
             state->turn_status = 8;
-            v57 = false;
+            continue_dialog = false;
             break;
         case DIALOG_ACTION_RI:
             dialog_copy_npc_order_ok_msg(state->npc_obj, state->pc_obj, state->reply, &(state->speech_id));
             state->turn_status = 9;
-            v57 = false;
+            continue_dialog = false;
             break;
         case DIALOG_ACTION_ET: {
-            int v50;
+            int training_response_value;
             int training;
             int level;
 
-            v50 = dialog_parse_integer_after_first(pch);
+            training_response_value = dialog_parse_integer_after_first(pch);
             if (IS_TECH_SKILL(value)) {
                 level = tech_skill_level(state->pc_obj, GET_TECH_SKILL(value));
                 training = tech_skill_training_get(state->pc_obj, GET_TECH_SKILL(value));
@@ -2226,30 +2226,30 @@ bool dialog_actions_execute(DialogState* state, char* a2, int a3)
                 dialog_copy_npc_generic_msg(state->reply, state, 6200, 6299);
                 state->num_options = 1;
                 dialog_copy_pc_generic_msg(state->options[0], state, 600, 699);
-                state->option_response_types[0] = state->option_response_types[a3];
-                state->option_response_values[0] = state->option_response_values[a3];
+                state->option_response_types[0] = state->option_response_types[option_index];
+                state->option_response_values[0] = state->option_response_values[option_index];
                 state->actions[0] = NULL;
-                v57 = false;
+                continue_dialog = false;
             } else if (training < TRAINING_APPRENTICE) {
                 dialog_copy_npc_wont_follow_msg(state->npc_obj, state->pc_obj, 34, state->reply, &(state->speech_id));
                 dialog_copy_npc_generic_msg(state->reply, state, 6300, 6399);
                 state->num_options = 1;
                 dialog_copy_pc_generic_msg(state->options[0], state, 600, 699);
-                state->option_response_types[0] = state->option_response_types[a3];
-                state->option_response_values[0] = state->option_response_values[a3];
+                state->option_response_types[0] = state->option_response_types[option_index];
+                state->option_response_values[0] = state->option_response_values[option_index];
                 state->actions[0] = NULL;
-                v57 = false;
+                continue_dialog = false;
             } else {
-                state->response_value = v50;
+                state->response_value = training_response_value;
                 state->turn_status = 0;
                 dialog_turn_build(state, false);
-                v57 = false;
+                continue_dialog = false;
             }
             break;
         }
         default:
             // Unknown action.
-            return v57;
+            return continue_dialog;
         }
     }
 
@@ -2257,7 +2257,7 @@ bool dialog_actions_execute(DialogState* state, char* a2, int a3)
         ai_attack(state->pc_obj, state->npc_obj, LOUDNESS_NORMAL, 0);
     }
 
-    return v57;
+    return continue_dialog;
 }
 
 // Skips leading whitespace and unsigned decimal digits, then applies atoi to the remainder.
@@ -2277,7 +2277,7 @@ int dialog_parse_integer_after_first(const char* str)
 
 // Loads a reply line, optionally executes its actions, and expands generated reply operators.
 // 0x416840
-bool dialog_npc_reply_build(DialogState* state, bool a2)
+bool dialog_npc_reply_build(DialogState* state, bool skip_actions)
 {
     DialogFileEntry entry;
 
@@ -2292,7 +2292,7 @@ bool dialog_npc_reply_build(DialogState* state, bool a2)
     state->npc_response_value = entry.response_val;
     state->speech_id = dialog_speech_id_encode(entry.conditions, state->script_num);
 
-    if (!a2) {
+    if (!skip_actions) {
         dialog_actions_execute(state, entry.actions, 0);
     }
 
@@ -2313,22 +2313,22 @@ bool dialog_npc_reply_build(DialogState* state, bool a2)
 
     if (SDL_strncasecmp(entry.str, "m:", 2) == 0) {
         char* pch;
-        int v2;
-        int v3;
-        int v4;
-        int v5;
-        int v6;
-        int v7;
+        int payment_amount;
+        int payment_response;
+        int payment_response_type;
+        int payment_response_value;
+        int fallback_response_type;
+        int fallback_response_value;
 
         pch = strchr(entry.str, '$') + 1;
-        v2 = atoi(pch);
+        payment_amount = atoi(pch);
 
         pch = strchr(pch, ',') + 1;
-        v3 = atoi(pch);
+        payment_response = atoi(pch);
 
-        dialog_response_decode(v3, &v4, &v5);
-        dialog_response_decode(entry.response_val, &v6, &v7);
-        dialog_ask_money(v2, v4, v5, v6, v7, state);
+        dialog_response_decode(payment_response, &payment_response_type, &payment_response_value);
+        dialog_response_decode(entry.response_val, &fallback_response_type, &fallback_response_value);
+        dialog_ask_money(payment_amount, payment_response_type, payment_response_value, fallback_response_type, fallback_response_value, state);
 
         return false;
     }
@@ -2412,107 +2412,107 @@ void dialog_expand_name_tokens(char* dst, char* src, DialogState* state)
 
 // Builds a PC option from literal text or a generated option operator, recording its response and actions.
 // 0x416C10
-bool dialog_pc_option_build(int a1, int a2, DialogState* state)
+bool dialog_pc_option_build(int line_number, int option_index, DialogState* state)
 {
     DialogFileEntry entry;
     char* pch;
     int values[100];
     int cnt;
-    int v2;
-    int v3;
-    int v4;
+    int response_type;
+    int response_value;
+    int option_argument;
 
-    entry.num = a1;
+    entry.num = line_number;
     dialog_search(state->dlg, &entry);
 
     if (SDL_strcasecmp(entry.str, "a:") == 0) {
-        dialog_copy_pc_class_specific_msg(state->options[a2], state, 1000);
-        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
+        dialog_copy_pc_class_specific_msg(state->options[option_index], state, 1000);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[option_index]), &(state->option_response_values[option_index]));
     } else if (SDL_strcasecmp(entry.str, "b:") == 0) {
         if (critter_leader_get(state->npc_obj) == state->pc_obj) {
-            dialog_copy_pc_generic_msg(state->options[a2], state, 1600, 1699);
+            dialog_copy_pc_generic_msg(state->options[option_index], state, 1600, 1699);
         } else {
-            dialog_copy_pc_generic_msg(state->options[a2], state, 300, 399);
+            dialog_copy_pc_generic_msg(state->options[option_index], state, 300, 399);
         }
-        state->option_response_types[a2] = 3;
-        state->option_response_values[a2] = entry.response_val;
+        state->option_response_types[option_index] = 3;
+        state->option_response_values[option_index] = entry.response_val;
     } else if (SDL_strncasecmp(entry.str, "c:", 2) == 0) {
-        dialog_copy_pc_story_msg(state->options[a2], state);
-        state->option_response_types[a2] = 24;
-        state->option_response_values[a2] = entry.response_val;
+        dialog_copy_pc_story_msg(state->options[option_index], state);
+        state->option_response_types[option_index] = 24;
+        state->option_response_values[option_index] = entry.response_val;
     } else if (SDL_strncasecmp(entry.str, "d:", 2) == 0) {
         pch = strchr(entry.str, ',');
         cnt = dialog_parse_params(values, pch + 1);
         if (filter_unknown_areas(state->pc_obj, values, cnt) == 0) {
             return false;
         }
-        dialog_copy_pc_generic_msg(state->options[a2], state, 1300, 1399);
+        dialog_copy_pc_generic_msg(state->options[option_index], state, 1300, 1399);
 
-        pch = state->options[a2];
+        pch = state->options[option_index];
         strcpy(&(pch[strlen(pch) + 1]), entry.str + 2);
-        state->option_response_types[a2] = 18;
-        state->option_response_values[a2] = entry.response_val;
-        state->option_response_extra_values[a2] = 0;
+        state->option_response_types[option_index] = 18;
+        state->option_response_values[option_index] = entry.response_val;
+        state->option_response_extra_values[option_index] = 0;
     } else if (SDL_strcasecmp(entry.str, "e:") == 0) {
-        dialog_copy_pc_generic_msg(state->options[a2], state, 400, 499);
-        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
+        dialog_copy_pc_generic_msg(state->options[option_index], state, 400, 499);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[option_index]), &(state->option_response_values[option_index]));
     } else if (SDL_strcasecmp(entry.str, "f:") == 0) {
-        dialog_copy_pc_generic_msg(state->options[a2], state, 800, 899);
-        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
+        dialog_copy_pc_generic_msg(state->options[option_index], state, 800, 899);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[option_index]), &(state->option_response_values[option_index]));
     } else if (SDL_strcasecmp(entry.str, "h:") == 0) {
-        dialog_copy_pc_generic_msg(state->options[a2], state, 700, 799);
-        state->option_response_types[a2] = 11;
-        state->option_response_values[a2] = entry.response_val;
+        dialog_copy_pc_generic_msg(state->options[option_index], state, 700, 799);
+        state->option_response_types[option_index] = 11;
+        state->option_response_values[option_index] = entry.response_val;
     } else if (SDL_strcasecmp(entry.str, "i:") == 0) {
-        dialog_response_decode(entry.response_val, &v2, &v3);
-        dialog_build_pc_insult_option(a2, v2, v3, state);
+        dialog_response_decode(entry.response_val, &response_type, &response_value);
+        dialog_build_pc_insult_option(option_index, response_type, response_value, state);
     } else if (SDL_strcasecmp(entry.str, "k:") == 0) {
-        dialog_copy_pc_generic_msg(state->options[a2], state, 1500, 1599);
-        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
+        dialog_copy_pc_generic_msg(state->options[option_index], state, 1500, 1599);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[option_index]), &(state->option_response_values[option_index]));
     } else if (SDL_strcasecmp(entry.str, "l:") == 0) {
-        dialog_copy_pc_generic_msg(state->options[a2], state, 2300, 2399);
-        state->option_response_types[a2] = 30;
-        state->option_response_values[a2] = entry.response_val;
+        dialog_copy_pc_generic_msg(state->options[option_index], state, 2300, 2399);
+        state->option_response_types[option_index] = 30;
+        state->option_response_values[option_index] = entry.response_val;
     } else if (SDL_strcasecmp(entry.str, "n:") == 0) {
-        dialog_copy_pc_generic_msg(state->options[a2], state, 100, 199);
-        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
+        dialog_copy_pc_generic_msg(state->options[option_index], state, 100, 199);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[option_index]), &(state->option_response_values[option_index]));
     } else if (SDL_strcasecmp(entry.str, "p:") == 0) {
-        dialog_copy_pc_generic_msg(state->options[a2], state, 1900, 1999);
-        state->option_response_types[a2] = 25;
-        state->option_response_values[a2] = entry.response_val;
+        dialog_copy_pc_generic_msg(state->options[option_index], state, 1900, 1999);
+        state->option_response_types[option_index] = 25;
+        state->option_response_values[option_index] = entry.response_val;
     } else if (SDL_strncasecmp(entry.str, "q:", 2) == 0) {
-        v4 = quest_dialog_line(state->pc_obj, state->npc_obj, atoi(entry.str + 2));
-        if (v4 != -1) {
-            return dialog_pc_option_build(v4, a2, state);
+        option_argument = quest_dialog_line(state->pc_obj, state->npc_obj, atoi(entry.str + 2));
+        if (option_argument != -1) {
+            return dialog_pc_option_build(option_argument, option_index, state);
         }
         return false;
     } else if (SDL_strncasecmp(entry.str, "r:", 2) == 0) {
-        dialog_copy_pc_class_specific_msg(state->options[a2], state, 2000);
+        dialog_copy_pc_class_specific_msg(state->options[option_index], state, 2000);
 
-        pch = state->options[a2];
+        pch = state->options[option_index];
         strcpy(&(pch[strlen(pch) + 1]), entry.str + 2);
-        state->option_response_types[a2] = 8;
-        state->option_response_values[a2] = entry.response_val;
+        state->option_response_types[option_index] = 8;
+        state->option_response_values[option_index] = entry.response_val;
     } else if (SDL_strcasecmp(entry.str, "s:") == 0) {
-        dialog_copy_pc_generic_msg(state->options[a2], state, 200, 299);
-        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
+        dialog_copy_pc_generic_msg(state->options[option_index], state, 200, 299);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[option_index]), &(state->option_response_values[option_index]));
     } else if (SDL_strncasecmp(entry.str, "t:", 2) == 0) {
-        dialog_copy_pc_generic_msg(state->options[a2], state, 500, 599);
+        dialog_copy_pc_generic_msg(state->options[option_index], state, 500, 599);
 
-        pch = state->options[a2];
+        pch = state->options[option_index];
         strcpy(&(pch[strlen(pch) + 1]), entry.str + 2);
-        state->option_response_types[a2] = 5;
-        state->option_response_values[a2] = entry.response_val;
+        state->option_response_types[option_index] = 5;
+        state->option_response_values[option_index] = entry.response_val;
     } else if (SDL_strncasecmp(entry.str, "u:", 2) == 0) {
-        v4 = atoi(entry.str + 2);
-        if (ai_check_use_skill(state->npc_obj, state->pc_obj, skill_supplementary_item(state->npc_obj, v4), v4) != AI_USE_SKILL_OK) {
+        option_argument = atoi(entry.str + 2);
+        if (ai_check_use_skill(state->npc_obj, state->pc_obj, skill_supplementary_item(state->npc_obj, option_argument), option_argument) != AI_USE_SKILL_OK) {
             return false;
         }
 
-        dialog_build_use_skill_option(a2, v4, entry.response_val, state);
+        dialog_build_use_skill_option(option_index, option_argument, entry.response_val, state);
     } else if (SDL_strcasecmp(entry.str, "w:") == 0) {
-        dialog_copy_pc_generic_msg(state->options[a2], state, 1800, 1899);
-        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
+        dialog_copy_pc_generic_msg(state->options[option_index], state, 1800, 1899);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[option_index]), &(state->option_response_values[option_index]));
     } else if (SDL_strncasecmp(entry.str, "x:", 2) == 0) {
         pch = strchr(entry.str, ',');
         cnt = dialog_parse_params(values, pch + 1);
@@ -2520,23 +2520,23 @@ bool dialog_pc_option_build(int a1, int a2, DialogState* state)
             return false;
         }
 
-        dialog_copy_pc_generic_msg(state->options[a2], state, 1400, 1499);
-        pch = state->options[a2];
+        dialog_copy_pc_generic_msg(state->options[option_index], state, 1400, 1499);
+        pch = state->options[option_index];
         strcpy(&(pch[strlen(pch) + 1]), entry.str + 2);
-        state->option_response_types[a2] = 21;
-        state->option_response_values[a2] = entry.response_val;
-        state->option_response_extra_values[a2] = 0;
+        state->option_response_types[option_index] = 21;
+        state->option_response_values[option_index] = entry.response_val;
+        state->option_response_extra_values[option_index] = 0;
     } else if (SDL_strcasecmp(entry.str, "y:") == 0) {
-        dialog_copy_pc_generic_msg(state->options[a2], state, 1, 99);
-        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
+        dialog_copy_pc_generic_msg(state->options[option_index], state, 1, 99);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[option_index]), &(state->option_response_values[option_index]));
     } else if (SDL_strncasecmp(entry.str, "z:", 2) == 0) {
-        dialog_build_use_spell_option(a2, atoi(entry.str + 2), entry.response_val, state);
+        dialog_build_use_spell_option(option_index, atoi(entry.str + 2), entry.response_val, state);
     } else {
-        dialog_expand_name_tokens(state->options[a2], entry.str, state);
-        dialog_response_decode(entry.response_val, &(state->option_response_types[a2]), &(state->option_response_values[a2]));
+        dialog_expand_name_tokens(state->options[option_index], entry.str, state);
+        dialog_response_decode(entry.response_val, &(state->option_response_types[option_index]), &(state->option_response_values[option_index]));
     }
 
-    state->actions[a2] = entry.actions;
+    state->actions[option_index] = entry.actions;
 
     if (dialog_numbers_enabled) {
         char str[20];
@@ -2546,10 +2546,10 @@ bool dialog_pc_option_build(int a1, int a2, DialogState* state)
         snprintf(str, sizeof(str), "[%d]", entry.num);
         len = strlen(str);
         for (pos = 999; pos >= len; pos--) {
-            state->options[a2][pos] = state->options[a2][pos - len];
+            state->options[option_index][pos] = state->options[option_index][pos - len];
         }
         if (len > 0) {
-            strncpy(state->options[a2], str, len);
+            strncpy(state->options[option_index], str, len);
         }
     }
 
@@ -2558,16 +2558,16 @@ bool dialog_pc_option_build(int a1, int a2, DialogState* state)
 
 // Maps a signed response value to normal line, end-dialog or negative-line action code.
 // 0x417590
-void dialog_response_decode(int a1, int* a2, int* a3)
+void dialog_response_decode(int encoded_response, int* response_type_ptr, int* response_value_ptr)
 {
-    if (a1 > 0) {
-        *a2 = 0;
-        *a3 = a1;
-    } else if (a1 < 0) {
-        *a2 = 2;
-        *a3 = -a1;
+    if (encoded_response > 0) {
+        *response_type_ptr = 0;
+        *response_value_ptr = encoded_response;
+    } else if (encoded_response < 0) {
+        *response_type_ptr = 2;
+        *response_value_ptr = -encoded_response;
     } else {
-        *a2 = 1;
+        *response_type_ptr = 1;
     }
 }
 
@@ -3299,10 +3299,10 @@ bool dialog_copy_npc_override_msg(char* buffer, DialogState* state, int num)
 
 // Combines a script number and textual voice number into a speech ID, or returns minus one.
 // 0x4189C0
-int dialog_speech_id_encode(const char* a1, int a2)
+int dialog_speech_id_encode(const char* speech_line_text, int script_number)
 {
-    if (a1 != NULL && a2 != 0) {
-        return ((a2 & 0x7FFF) << 16) | (atoi(a1) & 0xFFFF);
+    if (speech_line_text != NULL && script_number != 0) {
+        return ((script_number & 0x7FFF) << 16) | (atoi(speech_line_text) & 0xFFFF);
     } else {
         return -1;
     }
@@ -3310,19 +3310,19 @@ int dialog_speech_id_encode(const char* a1, int a2)
 
 // Splits a speech ID into script and voice numbers; minus one produces zeros.
 // 0x418A00
-void dialog_speech_id_decode(int a1, int* a2, int* a3)
+void dialog_speech_id_decode(int speech_id, int* script_number_ptr, int* speech_line_ptr)
 {
-    if (a1 != -1) {
-        *a2 = (a1 >> 16) & 0x7FFF;
-        *a3 = a1 & 0xFFFF;
+    if (speech_id != -1) {
+        *script_number_ptr = (speech_id >> 16) & 0x7FFF;
+        *speech_line_ptr = speech_id & 0xFFFF;
     } else {
-        *a2 = 0;
-        *a3 = 0;
+        *script_number_ptr = 0;
+        *speech_line_ptr = 0;
     }
 }
 
 // 0x418A40
-void dialog_ask_money(int amt, int param1, int param2, int a4, int a5, DialogState* state)
+void dialog_ask_money(int amt, int param1, int param2, int fallback_response_type, int fallback_response_value, DialogState* state)
 {
     char buffer[1000];
 
@@ -3343,8 +3343,8 @@ void dialog_ask_money(int amt, int param1, int param2, int a4, int a5, DialogSta
 
     // PC: "No."
     dialog_copy_pc_generic_msg(state->options[1], state, 100, 199);
-    state->option_response_types[1] = a4;
-    state->option_response_values[1] = a5;
+    state->option_response_types[1] = fallback_response_type;
+    state->option_response_values[1] = fallback_response_value;
     state->actions[1] = NULL;
 
     state->num_options = 2;
@@ -3355,25 +3355,25 @@ void dialog_ask_money(int amt, int param1, int param2, int a4, int a5, DialogSta
 
 // Checks available gold, then transfers payment and dispatches continuation or builds the insufficient-funds reply.
 // 0x418B30
-void dialog_payment_process(int a1, DialogState* state)
+void dialog_payment_process(int cost, DialogState* state)
 {
-    if (item_gold_get(state->pc_obj) < a1) {
+    if (item_gold_get(state->pc_obj) < cost) {
         dialog_acknowledgement_build(2000, state->option_response_types[1], state->option_response_values[1], state);
     } else {
-        item_gold_transfer(state->pc_obj, state->npc_obj, a1, OBJ_HANDLE_NULL);
+        item_gold_transfer(state->pc_obj, state->npc_obj, cost, OBJ_HANDLE_NULL);
         dialog_response_dispatch(state->option_response_types[2], state->option_response_values[2], state->option_response_extra_values[2], 2, state);
     }
 }
 
 // Builds a class-specific NPC reply and one generic PC acknowledgement option.
 // 0x418C40
-void dialog_acknowledgement_build(int a1, int a2, int a3, DialogState* state)
+void dialog_acknowledgement_build(int message_id, int response_type, int response_value, DialogState* state)
 {
-    dialog_copy_npc_class_specific_msg(state->reply, state, a1);
+    dialog_copy_npc_class_specific_msg(state->reply, state, message_id);
     state->num_options = 1;
     dialog_copy_pc_generic_msg(state->options[0], state, 600, 699);
-    state->option_response_types[0] = a2;
-    state->option_response_values[0] = a3;
+    state->option_response_types[0] = response_type;
+    state->option_response_values[0] = response_value;
     state->actions[0] = NULL;
 }
 
@@ -3481,8 +3481,8 @@ void dialog_ask_money_for_rumor(int cost, int* rumors, int num_rumors, int respo
 {
     int index;
     int num_known_rumors = 0;
-    int v1;
-    int v2;
+    int response_type;
+    int response_value;
 
     for (index = 0; index < num_rumors; index++) {
         if (!rumor_qstate_get(rumors[index])
@@ -3491,14 +3491,14 @@ void dialog_ask_money_for_rumor(int cost, int* rumors, int num_rumors, int respo
         }
     }
 
-    dialog_response_decode(response_val, &v1, &v2);
+    dialog_response_decode(response_val, &response_type, &response_value);
 
     if (num_known_rumors != 0) {
         index = random_between(0, num_known_rumors - 1);
         if (cost > 0) {
-            dialog_ask_money(cost, 9, rumors[index], v1, v2, state);
+            dialog_ask_money(cost, 9, rumors[index], response_type, response_value, state);
         } else {
-            dialog_tell_rumor(rumors[index], v1, v2, state);
+            dialog_tell_rumor(rumors[index], response_type, response_value, state);
         }
     } else {
         // NPC: "I have no information to impart."
@@ -3506,8 +3506,8 @@ void dialog_ask_money_for_rumor(int cost, int* rumors, int num_rumors, int respo
 
         // PC: "[continue]"
         dialog_copy_pc_generic_msg(state->options[0], state, 600, 699);
-        state->option_response_types[0] = v1;
-        state->option_response_values[0] = v2;
+        state->option_response_types[0] = response_type;
+        state->option_response_values[0] = response_value;
 
         state->num_options = 1;
 
@@ -3516,7 +3516,7 @@ void dialog_ask_money_for_rumor(int cost, int* rumors, int num_rumors, int respo
 }
 
 // 0x4190E0
-void dialog_tell_rumor(int rumor, int a2, int a3, DialogState* state)
+void dialog_tell_rumor(int rumor, int response_type, int response_value, DialogState* state)
 {
     char buffer[1000];
 
@@ -3529,8 +3529,8 @@ void dialog_tell_rumor(int rumor, int a2, int a3, DialogState* state)
 
     // PC: "Thank you."
     dialog_copy_pc_class_specific_msg(state->options[0], state, 1000);
-    state->option_response_types[0] = a2;
-    state->option_response_values[0] = a3;
+    state->option_response_types[0] = response_type;
+    state->option_response_values[0] = response_value;
 
     state->num_options = 1;
 
@@ -3538,20 +3538,20 @@ void dialog_tell_rumor(int rumor, int a2, int a3, DialogState* state)
 }
 
 // 0x419190
-void dialog_build_pc_insult_option(int index, int a2, int a3, DialogState* state)
+void dialog_build_pc_insult_option(int index, int response_value, int extra_value, DialogState* state)
 {
     dialog_copy_pc_class_specific_msg(state->options[index], state, 3000);
     state->option_response_types[index] = 10;
-    state->option_response_values[index] = a2;
-    state->option_response_extra_values[index] = a3;
+    state->option_response_values[index] = response_value;
+    state->option_response_extra_values[index] = extra_value;
 }
 
 // 0x4191E0
-void dialog_insult_reply(int a1, int a2, DialogState* state)
+void dialog_insult_reply(int response_type, int response_value, DialogState* state)
 {
     reaction_adj(state->npc_obj, state->pc_obj, -10);
     if (reaction_get(state->npc_obj, state->pc_obj) > 20) {
-        dialog_response_dispatch(a1, a2, 0, 0, state);
+        dialog_response_dispatch(response_type, response_value, 0, 0, state);
     } else {
         // NPC: "You insolent worm! How dare you?"
         dialog_copy_npc_race_specific_msg(state->reply, state, 1000);
@@ -3761,17 +3761,17 @@ void dialog_generated_greeting_build(DialogState* state, const char* str)
 }
 
 // 0x4197D0
-bool dialog_greeting_override_apply(unsigned int flags, int a2, DialogState* state)
+bool dialog_greeting_override_apply(unsigned int flags, int response_value, DialogState* state)
 {
     if ((flags & 0x1) != 0) {
-        state->num = a2;
+        state->num = response_value;
         dialog_prepare_npc_reply(state, 0);
         state->turn_status = 4;
         return true;
     }
 
     if ((flags & 0x4) != 0) {
-        state->response_value = a2;
+        state->response_value = response_value;
         state->turn_status = 0;
         dialog_turn_build(state, 0);
         return true;
@@ -3887,15 +3887,15 @@ void dialog_build_use_spell_option(int index, int spell, int response_val, Dialo
 // 0x419B50
 void dialog_ask_money_for_skill(int skill, int response_val, DialogState* state)
 {
-    int v1;
-    int v2;
+    int response_type;
+    int response_value;
     int skill_level;
     int training;
     int amt;
 
-    dialog_response_decode(response_val, &v1, &v2);
+    dialog_response_decode(response_val, &response_type, &response_value);
     if (critter_leader_get(state->npc_obj) == state->pc_obj) {
-        dialog_use_skill(skill, v1, v2, state);
+        dialog_use_skill(skill, response_type, response_value, state);
     } else {
         if (IS_TECH_SKILL(skill)) {
             skill_level = tech_skill_level(state->npc_obj, GET_TECH_SKILL(skill));
@@ -3906,28 +3906,28 @@ void dialog_ask_money_for_skill(int skill, int response_val, DialogState* state)
             training = basic_skill_training_get(state->npc_obj, GET_BASIC_SKILL(skill));
             amt = basic_skill_money(GET_BASIC_SKILL(skill), skill_level, training);
         }
-        dialog_ask_money(amt, 16, skill, v1, v2, state);
+        dialog_ask_money(amt, 16, skill, response_type, response_value, state);
     }
 }
 
 // 0x419C30
 void dialog_ask_money_for_spell(int spell, int response_val, DialogState* state)
 {
-    int v1;
-    int v2;
+    int response_type;
+    int response_value;
     int amt;
 
-    dialog_response_decode(response_val, &v1, &v2);
+    dialog_response_decode(response_val, &response_type, &response_value);
     if (critter_leader_get(state->npc_obj) == state->pc_obj) {
-        dialog_use_spell(spell, v1, v2, state);
+        dialog_use_spell(spell, response_type, response_value, state);
     } else {
         amt = spell_money(spell);
-        dialog_ask_money(amt, 17, spell, v1, v2, state);
+        dialog_ask_money(amt, 17, spell, response_type, response_value, state);
     }
 }
 
 // 0x419CB0
-void dialog_use_skill(int skill, int a2, int a3, DialogState* state)
+void dialog_use_skill(int skill, int response_type, int response_value, DialogState* state)
 {
     unsigned int flags;
     int64_t item_obj;
@@ -3946,15 +3946,15 @@ void dialog_use_skill(int skill, int a2, int a3, DialogState* state)
 
     // PC: "Thank you."
     dialog_copy_pc_class_specific_msg(state->options[0], state, 1000);
-    state->option_response_types[0] = a2;
-    state->option_response_values[0] = a3;
+    state->option_response_types[0] = response_type;
+    state->option_response_values[0] = response_value;
     state->actions[0] = NULL;
 
     state->num_options = 1;
 }
 
 // 0x419D50
-void dialog_use_spell(int spell, int a2, int a3, DialogState* state)
+void dialog_use_spell(int spell, int response_type, int response_value, DialogState* state)
 {
     MagicTechInvocation mt_invocation;
 
@@ -3970,8 +3970,8 @@ void dialog_use_spell(int spell, int a2, int a3, DialogState* state)
 
     // PC: "Thank you."
     dialog_copy_pc_class_specific_msg(state->options[0], state, 1000);
-    state->option_response_types[0] = a2;
-    state->option_response_values[0] = a3;
+    state->option_response_types[0] = response_type;
+    state->option_response_values[0] = response_value;
     state->actions[0] = NULL;
 
     state->num_options = 1;
@@ -4060,19 +4060,19 @@ void dialog_offer_directions(const char* str, int response_val, int offset, bool
 // 0x41A0F0
 void dialog_ask_money_for_directions(int cost, int area, int response_val, DialogState* state)
 {
-    int v1;
-    int v2;
+    int response_type;
+    int response_value;
 
-    dialog_response_decode(response_val, &v1, &v2);
+    dialog_response_decode(response_val, &response_type, &response_value);
     if (cost > 0) {
-        dialog_ask_money(cost, 20, area, v1, v2, state);
+        dialog_ask_money(cost, 20, area, response_type, response_value, state);
     } else {
-        dialog_give_directions(area, v1, v2, state);
+        dialog_give_directions(area, response_type, response_value, state);
     }
 }
 
 // 0x41A150
-void dialog_give_directions(int area, int a2, int a3, DialogState* state)
+void dialog_give_directions(int area, int response_type, int response_value, DialogState* state)
 {
     int64_t src_loc;
     int64_t dst_loc;
@@ -4101,8 +4101,8 @@ void dialog_give_directions(int area, int a2, int a3, DialogState* state)
 
     // PC: "Thank you."
     dialog_copy_pc_class_specific_msg(state->options[0], state, 1000);
-    state->option_response_types[0] = a2;
-    state->option_response_values[0] = a3;
+    state->option_response_types[0] = response_type;
+    state->option_response_values[0] = response_value;
     state->actions[0] = NULL;
 
     state->num_options = 1;
@@ -4111,19 +4111,19 @@ void dialog_give_directions(int area, int a2, int a3, DialogState* state)
 // 0x41A230
 void dialog_ask_money_for_mark_area(int cost, int area, int response_val, DialogState* state)
 {
-    int v1;
-    int v2;
+    int response_type;
+    int response_value;
 
-    dialog_response_decode(response_val, &v1, &v2);
+    dialog_response_decode(response_val, &response_type, &response_value);
     if (cost > 0) {
-        dialog_ask_money(cost, 23, area, v1, v2, state);
+        dialog_ask_money(cost, 23, area, response_type, response_value, state);
     } else {
-        dialog_mark_area(area, v1, v2, state);
+        dialog_mark_area(area, response_type, response_value, state);
     }
 }
 
 // 0x41A290
-void dialog_mark_area(int area, int a2, int a3, DialogState* state)
+void dialog_mark_area(int area, int response_type, int response_value, DialogState* state)
 {
     int64_t loc;
     int64_t area_loc;
@@ -4156,8 +4156,8 @@ void dialog_mark_area(int area, int a2, int a3, DialogState* state)
 
     // PC: "Thank you."
     dialog_copy_pc_class_specific_msg(state->options[0], state, 1000);
-    state->option_response_types[0] = a2;
-    state->option_response_values[0] = a3;
+    state->option_response_types[0] = response_type;
+    state->option_response_values[0] = response_value;
     state->actions[0] = NULL;
 
     state->num_options = 1;
@@ -4334,15 +4334,15 @@ void dialog_offer_older_newspaper(int response_val, DialogState* state)
 // 0x41A880
 void dialog_ask_money_for_newspaper(int newspaper, int response_val, DialogState* state)
 {
-    int v1;
-    int v2;
+    int response_type;
+    int response_value;
 
-    dialog_response_decode(response_val, &v1, &v2);
-    dialog_ask_money(2, 29, newspaper, v1, v2, state);
+    dialog_response_decode(response_val, &response_type, &response_value);
+    dialog_ask_money(2, 29, newspaper, response_type, response_value, state);
 }
 
 // 0x41A8C0
-void dialog_buy_newspaper(int newspaper, int a2, int a3, DialogState* state)
+void dialog_buy_newspaper(int newspaper, int response_type, int response_value, DialogState* state)
 {
     int64_t loc;
     int64_t obj;
@@ -4356,8 +4356,8 @@ void dialog_buy_newspaper(int newspaper, int a2, int a3, DialogState* state)
 
     // PC: "Thank you."
     dialog_copy_pc_class_specific_msg(state->options[0], state, 1000);
-    state->option_response_types[0] = a2;
-    state->option_response_values[0] = a3;
+    state->option_response_types[0] = response_type;
+    state->option_response_values[0] = response_value;
 
     state->actions[0] = NULL;
 }

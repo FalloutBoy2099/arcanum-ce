@@ -1,0 +1,6173 @@
+{
+  "verification": {
+    "files": 111,
+    "substitutions": 4396,
+    "exact_inverse_verified": true,
+    "details": [
+      {
+        "file": "src/main.c",
+        "substitutions": 1
+      },
+      {
+        "file": "src/net_compat.h",
+        "substitutions": 6
+      },
+      {
+        "file": "tests/asset_prefetch_test.c",
+        "substitutions": 2
+      },
+      {
+        "file": "tests/path_weighted_baseline.c",
+        "substitutions": 25
+      },
+      {
+        "file": "tests/ui_mode_test.c",
+        "substitutions": 4
+      },
+      {
+        "file": "src/game/ai.c",
+        "substitutions": 246
+      },
+      {
+        "file": "src/game/ai.h",
+        "substitutions": 7
+      },
+      {
+        "file": "src/game/anim.c",
+        "substitutions": 351
+      },
+      {
+        "file": "src/game/anim.h",
+        "substitutions": 10
+      },
+      {
+        "file": "src/game/anim_private.c",
+        "substitutions": 12
+      },
+      {
+        "file": "src/game/anim_private.h",
+        "substitutions": 12
+      },
+      {
+        "file": "src/game/a_name.c",
+        "substitutions": 226
+      },
+      {
+        "file": "src/game/a_name.h",
+        "substitutions": 6
+      },
+      {
+        "file": "src/game/combat.c",
+        "substitutions": 46
+      },
+      {
+        "file": "src/game/combat.h",
+        "substitutions": 5
+      },
+      {
+        "file": "src/game/critter.c",
+        "substitutions": 21
+      },
+      {
+        "file": "src/game/critter.h",
+        "substitutions": 4
+      },
+      {
+        "file": "src/game/dialog.c",
+        "substitutions": 296
+      },
+      {
+        "file": "src/game/facade.c",
+        "substitutions": 4
+      },
+      {
+        "file": "src/game/facade.h",
+        "substitutions": 2
+      },
+      {
+        "file": "src/game/gameinit.c",
+        "substitutions": 15
+      },
+      {
+        "file": "src/game/gamelib.c",
+        "substitutions": 2
+      },
+      {
+        "file": "src/game/gamelib.h",
+        "substitutions": 9
+      },
+      {
+        "file": "src/game/invensource.c",
+        "substitutions": 2
+      },
+      {
+        "file": "src/game/item.c",
+        "substitutions": 72
+      },
+      {
+        "file": "src/game/item.h",
+        "substitutions": 12
+      },
+      {
+        "file": "src/game/light.c",
+        "substitutions": 49
+      },
+      {
+        "file": "src/game/light.h",
+        "substitutions": 2
+      },
+      {
+        "file": "src/game/magictech.c",
+        "substitutions": 241
+      },
+      {
+        "file": "src/game/magictech.h",
+        "substitutions": 38
+      },
+      {
+        "file": "src/game/map.c",
+        "substitutions": 13
+      },
+      {
+        "file": "src/game/map.h",
+        "substitutions": 3
+      },
+      {
+        "file": "src/game/mp_utils.c",
+        "substitutions": 104
+      },
+      {
+        "file": "src/game/mp_utils.h",
+        "substitutions": 95
+      },
+      {
+        "file": "src/game/mt_ai.c",
+        "substitutions": 3
+      },
+      {
+        "file": "src/game/mt_ai.h",
+        "substitutions": 2
+      },
+      {
+        "file": "src/game/mt_obj_node.c",
+        "substitutions": 9
+      },
+      {
+        "file": "src/game/mt_obj_node.h",
+        "substitutions": 1
+      },
+      {
+        "file": "src/game/multiplayer.c",
+        "substitutions": 244
+      },
+      {
+        "file": "src/game/multiplayer.h",
+        "substitutions": 6
+      },
+      {
+        "file": "src/game/name.c",
+        "substitutions": 19
+      },
+      {
+        "file": "src/game/obj.c",
+        "substitutions": 129
+      },
+      {
+        "file": "src/game/obj.h",
+        "substitutions": 1
+      },
+      {
+        "file": "src/game/object.c",
+        "substitutions": 148
+      },
+      {
+        "file": "src/game/object.h",
+        "substitutions": 5
+      },
+      {
+        "file": "src/game/obj_id.c",
+        "substitutions": 2
+      },
+      {
+        "file": "src/game/obj_id.h",
+        "substitutions": 1
+      },
+      {
+        "file": "src/game/obj_private.h",
+        "substitutions": 1
+      },
+      {
+        "file": "src/game/party.c",
+        "substitutions": 9
+      },
+      {
+        "file": "src/game/path.c",
+        "substitutions": 57
+      },
+      {
+        "file": "src/game/portal.c",
+        "substitutions": 2
+      },
+      {
+        "file": "src/game/portal.h",
+        "substitutions": 1
+      },
+      {
+        "file": "src/game/proto.c",
+        "substitutions": 95
+      },
+      {
+        "file": "src/game/reaction.c",
+        "substitutions": 50
+      },
+      {
+        "file": "src/game/reaction.h",
+        "substitutions": 3
+      },
+      {
+        "file": "src/game/roof.c",
+        "substitutions": 28
+      },
+      {
+        "file": "src/game/script.c",
+        "substitutions": 27
+      },
+      {
+        "file": "src/game/sector.c",
+        "substitutions": 8
+      },
+      {
+        "file": "src/game/sector_object_list.c",
+        "substitutions": 16
+      },
+      {
+        "file": "src/game/sector_object_list.h",
+        "substitutions": 1
+      },
+      {
+        "file": "src/game/skill.c",
+        "substitutions": 9
+      },
+      {
+        "file": "src/game/skill.h",
+        "substitutions": 1
+      },
+      {
+        "file": "src/game/target.c",
+        "substitutions": 64
+      },
+      {
+        "file": "src/game/target.h",
+        "substitutions": 11
+      },
+      {
+        "file": "src/game/tb.c",
+        "substitutions": 2
+      },
+      {
+        "file": "src/game/terrain.c",
+        "substitutions": 64
+      },
+      {
+        "file": "src/game/tf.c",
+        "substitutions": 2
+      },
+      {
+        "file": "src/game/tile.c",
+        "substitutions": 167
+      },
+      {
+        "file": "src/game/tile.h",
+        "substitutions": 2
+      },
+      {
+        "file": "src/game/timeevent_node.h",
+        "substitutions": 1
+      },
+      {
+        "file": "src/game/townmap.h",
+        "substitutions": 1
+      },
+      {
+        "file": "src/game/ui.c",
+        "substitutions": 40
+      },
+      {
+        "file": "src/game/ui.h",
+        "substitutions": 72
+      },
+      {
+        "file": "src/game/wall.c",
+        "substitutions": 2
+      },
+      {
+        "file": "src/game/wall.h",
+        "substitutions": 2
+      },
+      {
+        "file": "src/game/wallcheck.c",
+        "substitutions": 28
+      },
+      {
+        "file": "src/game/wp.c",
+        "substitutions": 1
+      },
+      {
+        "file": "src/ui/charedit_ui.c",
+        "substitutions": 60
+      },
+      {
+        "file": "src/ui/combat_ui.c",
+        "substitutions": 7
+      },
+      {
+        "file": "src/ui/compact_ui.c",
+        "substitutions": 8
+      },
+      {
+        "file": "src/ui/dialog_ui.c",
+        "substitutions": 14
+      },
+      {
+        "file": "src/ui/dialog_ui.h",
+        "substitutions": 1
+      },
+      {
+        "file": "src/ui/hotkey_ui.c",
+        "substitutions": 28
+      },
+      {
+        "file": "src/ui/hotkey_ui.h",
+        "substitutions": 1
+      },
+      {
+        "file": "src/ui/intgame.c",
+        "substitutions": 124
+      },
+      {
+        "file": "src/ui/intgame.h",
+        "substitutions": 1
+      },
+      {
+        "file": "src/ui/inven_ui.c",
+        "substitutions": 327
+      },
+      {
+        "file": "src/ui/inven_ui.h",
+        "substitutions": 3
+      },
+      {
+        "file": "src/ui/iso.c",
+        "substitutions": 2
+      },
+      {
+        "file": "src/ui/mainmenu_history.c",
+        "substitutions": 2
+      },
+      {
+        "file": "src/ui/mainmenu_history.h",
+        "substitutions": 2
+      },
+      {
+        "file": "src/ui/mainmenu_ui.c",
+        "substitutions": 78
+      },
+      {
+        "file": "src/ui/mainmenu_ui.h",
+        "substitutions": 3
+      },
+      {
+        "file": "src/ui/skill_ui.c",
+        "substitutions": 4
+      },
+      {
+        "file": "src/ui/skill_ui.h",
+        "substitutions": 1
+      },
+      {
+        "file": "src/ui/spell_ui.c",
+        "substitutions": 3
+      },
+      {
+        "file": "src/ui/tb_ui.c",
+        "substitutions": 10
+      },
+      {
+        "file": "src/ui/types.h",
+        "substitutions": 1
+      },
+      {
+        "file": "src/ui/wmap_rnd.c",
+        "substitutions": 9
+      },
+      {
+        "file": "src/ui/wmap_ui.c",
+        "substitutions": 185
+      },
+      {
+        "file": "first_party/tig/src/art.c",
+        "substitutions": 149
+      },
+      {
+        "file": "first_party/tig/src/database.c",
+        "substitutions": 2
+      },
+      {
+        "file": "first_party/tig/src/file.c",
+        "substitutions": 12
+      },
+      {
+        "file": "first_party/tig/src/video.c",
+        "substitutions": 4
+      },
+      {
+        "file": "first_party/tig/src/window.c",
+        "substitutions": 40
+      },
+      {
+        "file": "first_party/tig/include/tig/art.h",
+        "substitutions": 23
+      },
+      {
+        "file": "first_party/tig/include/tig/database.h",
+        "substitutions": 3
+      },
+      {
+        "file": "first_party/tig/include/tig/file.h",
+        "substitutions": 3
+      },
+      {
+        "file": "first_party/tig/include/tig/font.h",
+        "substitutions": 2
+      },
+      {
+        "file": "first_party/tig/include/tig/video.h",
+        "substitutions": 1
+      },
+      {
+        "file": "first_party/tig/include/tig/window.h",
+        "substitutions": 3
+      }
+    ]
+  },
+  "global_renames": {
+    "qword_5FC238": "combat_saved_object_reference",
+    "dword_5D1100": "obj_field_group_simple_counts",
+    "dword_5E75DC": "magictech_current_run_had_effect",
+    "dword_5E75E4": "magictech_unused_state",
+    "dword_5E7600": "magictech_ignore_intelligence_requirements",
+    "dword_5D11EC": "map_start_state_flag",
+    "dword_602AC0": "tb_unused_black_color",
+    "dword_6028C0": "tf_unused_black_color",
+    "dword_64C710": "iso_unused_state",
+    "dword_6103A4": "tig_video_legacy_setting",
+    "dword_604754": "tig_art_warn_invalid_scaled_dimensions",
+    "byte_64D714": "charedit_unused_text_buffer",
+    "dword_5FC62C": "invensource_editor_prompt_suppressed",
+    "byte_5E8D50": "multiplayer_unused_name_buffer",
+    "byte_5E8DB8": "multiplayer_unused_description_buffer",
+    "byte_5F0D18": "multiplayer_unused_path_buffer",
+    "dword_5F0E14": "multiplayer_disconnect_pending",
+    "stru_5C6F30": "intgame_legacy_action_button",
+    "stru_64C4A8": "intgame_rotwin_text_buttons",
+    "dword_5C729C": "intgame_unused_lookup_values",
+    "stru_5C3AB0": "mainmenu_reserved_primary_window",
+    "stru_5C3B48": "mainmenu_reserved_secondary_window",
+    "stru_5C3FC0": "mainmenu_unused_small_label_rect",
+    "stru_5C3FD0": "mainmenu_unused_left_label_rect",
+    "stru_5C3FE0": "mainmenu_unused_secondary_label_rect",
+    "stru_5C3FF0": "mainmenu_unused_right_label_rect",
+    "stru_5C4F40": "mainmenu_unused_background_hover_rect",
+    "stru_5C5040": "mainmenu_unused_summary_detail_rect",
+    "stru_5C50D0": "mainmenu_unused_gender_button",
+    "stru_5C5100": "mainmenu_unused_race_button",
+    "dword_5C3618": "mainmenu_reserved_selection",
+    "dword_64C378": "mainmenu_unused_counter",
+    "byte_64C394": "mainmenu_unused_text_buffer",
+    "dword_64C41C": "mainmenu_reserved_object_handles",
+    "dword_64C420": "mainmenu_reserved_object_count",
+    "dword_5C9B18": "wmap_unused_selection",
+    "dword_64E030": "wmap_unused_blue_color",
+    "dword_65E970": "wmap_unused_green_color",
+    "dword_66D9CC": "wmap_legacy_initialization_seen",
+    "MM_WINDOW_0": "MM_WINDOW_RESERVED_PRIMARY",
+    "MM_WINDOW_1": "MM_WINDOW_RESERVED_SECONDARY",
+    "sub_5280F0": "tig_net_shutdown_status_stub",
+    "sub_52A940": "tig_net_legacy_play_begin_stub",
+    "sub_52A950": "tig_net_legacy_play_end_stub",
+    "sub_52B210": "tig_net_legacy_session_ready_stub",
+    "sub_5286E0": "tig_net_legacy_preferences_applied_stub",
+    "sub_52A9E0": "tig_net_legacy_timed_event_stub",
+    "dword_739E44": "anim_serialized_reserved_slot_01",
+    "dword_739E40": "anim_serialized_reserved_slot_02",
+    "dword_5DE650": "anim_serialized_reserved_slot_03",
+    "dword_5DE658": "anim_serialized_reserved_slot_04",
+    "dword_5DE608": "anim_serialized_reserved_slot_05",
+    "dword_5DE640": "anim_serialized_reserved_slot_06",
+    "dword_5DE648": "anim_serialized_reserved_slot_07",
+    "dword_5DE660": "anim_serialized_reserved_slot_08",
+    "dword_5DE668": "anim_serialized_reserved_slot_09",
+    "dword_5DE6B8": "anim_serialized_reserved_slot_10",
+    "dword_5DE6B0": "anim_serialized_reserved_slot_11",
+    "dword_5DE6A0": "anim_serialized_reserved_slot_12",
+    "dword_5DE69C": "anim_serialized_reserved_slot_13",
+    "dword_5DE6C4": "anim_serialized_reserved_slot_14",
+    "dword_5DE6C0": "anim_serialized_reserved_slot_15",
+    "dword_5FC308": "gameinit_unused_state_1",
+    "dword_5FC310": "gameinit_unused_state_2",
+    "dword_5FC314": "gameinit_unused_state_3",
+    "dword_5FC318": "gameinit_unused_state_4",
+    "dword_5FC31C": "gameinit_unused_state_5",
+    "dword_5B99E8": "terrain_unused_direction_masks",
+    "TIG_ART_0x01": "TIG_ART_SINGLE_ROTATION",
+    "TIG_ART_0x02": "TIG_ART_RESERVED_FLAG_SECOND",
+    "TIG_ART_0x04": "TIG_ART_RESERVED_FLAG_THIRD",
+    "TIG_ART_0x08": "TIG_ART_RESERVED_FLAG_FOURTH",
+    "TIG_ART_0x10": "TIG_ART_RESERVED_FLAG_FIFTH",
+    "TIG_ART_0x20": "TIG_ART_RESERVED_FLAG_SIXTH",
+    "TIG_DATABASE_ENTRY_0x100": "TIG_DATABASE_ENTRY_OVERRIDE_UNCHECKED",
+    "TIG_DATABASE_ENTRY_0x200": "TIG_DATABASE_ENTRY_OVERRIDE_PRESENT",
+    "TIG_FILE_ATTRIBUTE_0x01": "TIG_FILE_ATTRIBUTE_RESERVED_FIRST",
+    "TIG_FILE_ATTRIBUTE_0x08": "TIG_FILE_ATTRIBUTE_RESERVED_FOURTH",
+    "TIG_FILE_ATTRIBUTE_0x80": "TIG_FILE_ATTRIBUTE_DATABASE",
+    "MAGICTECH_RUN_0x20": "MAGICTECH_RUN_RESERVED_FLAG"
+  },
+  "function_scoped_renames": {
+    "a_name_tile_aid_to_fname": {
+      "v1": "transition_mask",
+      "v2": "variant"
+    },
+    "build_tile_file_name": {
+      "a3": "transition_mask",
+      "a4": "variant",
+      "v1": "first_tile_index",
+      "v2": "second_tile_index"
+    },
+    "load_tile_edges": {
+      "v1": "adjacency_matrix",
+      "v2": "first_tile_index",
+      "v3": "second_tile_index",
+      "v4": "first_step_index"
+    },
+    "a_name_tile_transition_path_search": {
+      "a1": "path",
+      "a2": "path_depth",
+      "a3": "destination_index",
+      "a4": "adjacency_matrix",
+      "v1": "visited_index"
+    },
+    "a_name_tile_transition_base_get": {
+      "v1": "first_tile_index",
+      "v2": "second_tile_index",
+      "v3": "transition_tile_index"
+    },
+    "a_name_tile_variant_counts_init": {
+      "v1": "transition_mask",
+      "v2": "first_tile_index",
+      "v3": "second_tile_index"
+    },
+    "a_name_tile_variant_count_scan": {
+      "a1": "first_tile_index",
+      "a2": "second_tile_index",
+      "a3": "transition_mask",
+      "a4": "outdoor",
+      "a5": "first_flippable",
+      "a6": "second_flippable"
+    },
+    "a_name_tile_variant_count_get": {
+      "a1": "first_tile_index",
+      "a2": "second_tile_index",
+      "a3": "transition_mask",
+      "a4": "outdoor",
+      "a5": "first_flippable",
+      "a6": "second_flippable"
+    },
+    "a_name_tile_variant_cache_load": {
+      "v1": "art_file_count",
+      "v2": "cached_art_file_count"
+    },
+    "a_name_wall_aid_to_fname": {
+      "v1": "wall_name_index"
+    },
+    "ai_context_prepare_for_processing": {
+      "v1": "conversation_pc"
+    },
+    "ai_heal_func": {
+      "v1": "spell_candidates",
+      "a3": "allow_noncritical_healing"
+    },
+    "ai_attack": {
+      "v1": "target_group_leader",
+      "v3": "current_reaction"
+    },
+    "ai_followers_notify_attack": {
+      "a1": "leader_obj",
+      "a2": "target_obj",
+      "a3": "notify_upset",
+      "a4": "passive_notify_only"
+    },
+    "ai_nearby_attack_witnesses_notify": {
+      "a1": "victim_obj",
+      "a2": "attacker_obj"
+    },
+    "ai_attack_witness_process": {
+      "a1": "witness_obj",
+      "a2": "attacker_obj",
+      "a3": "victim_obj"
+    },
+    "ai_hostility_end_against_group": {
+      "a1": "critter_obj",
+      "a2": "target_obj",
+      "v1": "target_group_leader"
+    },
+    "ai_engage_or_flee_from_target": {
+      "a1": "critter_obj",
+      "a2": "threat_obj"
+    },
+    "ai_danger_state_set": {
+      "v1": "current_reaction"
+    },
+    "ai_flee_spell_select": {
+      "v1": "spell_candidates"
+    },
+    "ai_find_target": {
+      "v1": "selected_target"
+    },
+    "ai_combat_target_is_valid": {
+      "v1": "preferred_target"
+    },
+    "ai_combat_spell_select": {
+      "v3": "spell_candidates"
+    },
+    "ai_schedule_immediate": {
+      "a2": "event_processing_flags"
+    },
+    "combat_create_projectile": {
+      "a3": "offset_x",
+      "a4": "offset_y"
+    },
+    "combat_projectile_finish_from_context": {
+      "a1": "projectile_obj",
+      "a2": "attacker_obj"
+    },
+    "combat_projectile_finish": {
+      "a2": "projectile_owner_obj",
+      "a3": "original_target_obj",
+      "a5": "allow_return"
+    },
+    "combat_projectile_step_resolve": {
+      "a7": "original_target_obj"
+    },
+    "combat_attack_resolve": {
+      "v3": "aptitude_failure_percent"
+    },
+    "combat_projectile_rot": {
+      "v1": "angle_radians"
+    },
+    "critter_alignment_adjust_for_victim": {
+      "a3": "full_adjustment",
+      "v1": "alignment_delta"
+    },
+    "critter_disband": {
+      "v1": "mind_control_caster"
+    },
+    "critter_fatigue_timeevent_process": {
+      "v3": "fatigue_adjustment"
+    },
+    "facade_location_rect_clip": {
+      "a2": "clipped_offset_x",
+      "a3": "clipped_offset_y"
+    },
+    "gamelib_savelist_sort": {
+      "a3": "include_autosave_in_sort"
+    },
+    "item_find_matching_hotkey_item": {
+      "a2": "reference_item"
+    },
+    "item_count_items_matching_prototype": {
+      "a2": "reference_item"
+    },
+    "item_inventory_destroy_except_persistent": {
+      "a2": "preserve_persistent"
+    },
+    "item_inventory_spawn_prepare": {
+      "v1": "no_active_inventory_owner",
+      "v2": "substitute_inventory_owner"
+    },
+    "item_inventory_parent_links_restore": {
+      "a2": "repaired_count",
+      "a3": "visited_count",
+      "v1": "repaired_links",
+      "v2": "visited_items"
+    },
+    "item_total_attack": {
+      "v2": "total_score_weight",
+      "v3": "weighted_attack_score"
+    },
+    "item_wield_set": {
+      "v1": "inventory_insert_location"
+    },
+    "item_critter_armor_art_id_build": {
+      "a1": "armor_obj",
+      "a2": "critter_obj"
+    },
+    "item_weapon_damage": {
+      "a5": "ignore_weapon_effects",
+      "v1": "melee_damage_range_percent"
+    },
+    "item_key_ring_collect_inventory": {
+      "a2": "destination_key_ring_obj"
+    },
+    "object_ping": {
+      "v1": "sector_rect",
+      "v2": "sector_row",
+      "v3": "tile_row",
+      "v4": "tile_column"
+    },
+    "object_draw": {
+      "v1": "sector_rect",
+      "v2": "sector_row",
+      "v3": "tile_row",
+      "v4": "tile_column",
+      "v5": "location_row_rewind",
+      "v71": "skip_wading_overlay"
+    },
+    "object_list_rect": {
+      "v1": "sector_rect",
+      "v2": "sector_row",
+      "v3": "tile_row",
+      "v4": "tile_column"
+    },
+    "object_npc_ai_schedule_immediate": {
+      "a2": "event_processing_flags"
+    },
+    "object_location_environment_refresh": {
+      "a2": "refresh_mode",
+      "v1": "hovered_obj"
+    },
+    "path_make_impl": {
+      "v1": "ignore_art_blocking",
+      "v2": "path_length"
+    },
+    "path_try_nearby_destination": {
+      "v1": "path_length",
+      "v2": "best_partial_length"
+    },
+    "path_make_direct_local": {
+      "v1": "ignore_art_blocking"
+    },
+    "path_make_local_astar": {
+      "v1": "ignore_art_blocking"
+    },
+    "path_grid_direction_between_indices": {
+      "a1": "from_index",
+      "a2": "to_index",
+      "a3": "grid_width",
+      "v3": "delta_x",
+      "v4": "delta_y"
+    },
+    "portal_delete": {
+      "a2": "delete_original"
+    },
+    "proto_critter_text_defaults_apply": {
+      "v1": "entry_description"
+    },
+    "proto_critter_text_entry_read": {
+      "v2": "primary_value",
+      "v3": "secondary_value",
+      "v4": "packed_counters"
+    },
+    "proto_critter_text_field_parse": {
+      "a3": "primary_value_ptr",
+      "a4": "secondary_value_ptr",
+      "a5": "packed_counters_ptr",
+      "v1": "counter_low_byte",
+      "v2": "counter_second_byte",
+      "v3": "counter_third_byte",
+      "v4": "counter_high_byte"
+    },
+    "reaction_adjust_for_trade_surplus": {
+      "a1": "npc_obj",
+      "a2": "pc_obj",
+      "a3": "trade_surplus",
+      "v1": "reaction_delta"
+    },
+    "reaction_stored_remember": {
+      "v1": "new_reaction_distance",
+      "v2": "stored_reaction_distance",
+      "v3": "candidate_reaction_distance"
+    },
+    "reaction_modifiers_get": {
+      "v1": "total_modifier"
+    },
+    "roof_recalc": {
+      "v5": "subtile_x",
+      "v6": "subtile_y"
+    },
+    "roof_fill": {
+      "a3": "fill_direction"
+    },
+    "script_execute_action": {
+      "v1": "current_seconds_of_day"
+    },
+    "script_float_line": {
+      "v1": "dialog_state"
+    },
+    "script_print_line": {
+      "v1": "dialog_state"
+    },
+    "sector_load_game": {
+      "v2": "relocation_sector_id"
+    },
+    "objlist_fold": {
+      "a4": "event_processing_flags"
+    },
+    "sector_object_node_insert_sorted": {
+      "v1": "new_offset_x",
+      "v2": "new_offset_y",
+      "v3": "current_offset_x",
+      "v4": "current_offset_y"
+    },
+    "skill_disarm_trap": {
+      "a2": "skill_use_flag_shift"
+    },
+    "skill_invocation_difficulty": {
+      "v2": "source_path_cost",
+      "v6": "target_path_cost"
+    },
+    "target_pick_at_local_xy": {
+      "v1": "evaluation",
+      "v2": "picked_obj"
+    },
+    "target_context_evaluate": {
+      "v1": "target_group_leader",
+      "v2": "source_group_leader",
+      "v51": "tile_empty",
+      "v54": "tile_without_immobiles"
+    },
+    "terrain_open": {
+      "v1": "header_loaded"
+    },
+    "terrain_editor_bitmap_render_stub": {
+      "a1": "bitmap_x",
+      "a2": "bitmap_y"
+    },
+    "terrain_sector_path": {
+      "v1": "secondary_type",
+      "v2": "transition_mask",
+      "v3": "variant",
+      "v4": "variant_sector_id"
+    },
+    "terrain_init_transitions": {
+      "v1": "first_step_type"
+    },
+    "terrain_transition_path_search": {
+      "a1": "path",
+      "a2": "path_depth",
+      "a3": "destination_type",
+      "v4": "candidate_type",
+      "v6": "adjacency_row_offset",
+      "v7": "visited_index"
+    },
+    "tile_is_blocking": {
+      "a2": "ignore_art_blocking",
+      "v1": "blocking"
+    },
+    "tile_transition_art_id_create_random": {
+      "a4": "transition_mask",
+      "v1": "effective_transition_mask",
+      "v2": "variant"
+    },
+    "tile_topdown_sampling_tables_build": {
+      "v1": "sample_center",
+      "v2": "rotated_half_extent",
+      "v3": "horizontal_scale",
+      "v4": "vertical_scale",
+      "v5": "scaled_horizontal_step",
+      "v6": "scaled_vertical_step",
+      "v7": "rotated_y",
+      "v8": "rotated_x"
+    },
+    "tile_draw_iso": {
+      "v1": "sector_rect",
+      "v2": "sector_row_index",
+      "v3": "sector_row",
+      "v4": "sector_column_index",
+      "v36": "corner_colors",
+      "v51": "grid_colors",
+      "v10": "row_screen_offset_x",
+      "v11": "row_screen_offset_y",
+      "v15": "sector_column",
+      "v38": "tile_row",
+      "v42": "tile_column"
+    },
+    "ui_skill_activate": {
+      "a3": "skill"
+    },
+    "ui_spell_apply": {
+      "a1": "source_obj",
+      "a2": "spell_context",
+      "a3": "spell"
+    },
+    "ui_end_dialog": {
+      "a3": "end_reason"
+    },
+    "ui_optional_event_dispatch": {
+      "a1": "event_type",
+      "a2": "event_code",
+      "a3": "event_payload"
+    },
+    "ui_multiplayer_named_confirmation": {
+      "a1": "title",
+      "a2": "message"
+    },
+    "ui_reserved_string_callback_144_dispatch": {
+      "a1": "text"
+    },
+    "ui_reserved_string_callback_148_dispatch": {
+      "a1": "text"
+    },
+    "ui_reserved_string_pair_callback_14c_dispatch": {
+      "a1": "first_text",
+      "a2": "second_text"
+    },
+    "ui_reserved_string_pair_callback_150_dispatch": {
+      "a1": "first_text",
+      "a2": "second_text"
+    },
+    "ui_reserved_integer_pair_callback_154_dispatch": {
+      "a1": "first_value",
+      "a2": "second_value"
+    },
+    "ui_reserved_string_pair_callback_158_dispatch": {
+      "a1": "first_text",
+      "a2": "second_text"
+    },
+    "wall_editor_pair_hook_stub": {
+      "a1": "source_wall",
+      "a2": "target_wall"
+    },
+    "wallcheck_recalc": {
+      "v2": "quadrant_y",
+      "v3": "viewer_quadrant_mask",
+      "v1": "quadrant_x"
+    },
+    "wallcheck_roof_fade_acquire": {
+      "a1": "roof_location"
+    },
+    "wallcheck_roof_index_find": {
+      "a1": "roof_location"
+    },
+    "anim_goal_step_after_hook_stub": {
+      "a2": "step_result"
+    },
+    "anim_event_schedule": {
+      "a2": "base_time"
+    },
+    "anim_goal_stack_pop_with_cleanup": {
+      "a5": "goal_changed_ptr"
+    },
+    "anim_goal_combat_path_invalidation_process": {
+      "v1": "blocking_obj"
+    },
+    "anim_destination_traversal_is_blocked": {
+      "a1": "moving_obj",
+      "a2": "from_location",
+      "a3": "destination_location",
+      "a4": "rotation",
+      "a5": "ignored_obj",
+      "v1": "original_no_block",
+      "v2": "blocked",
+      "v3": "blocking_obj",
+      "v4": "traversal_flags"
+    },
+    "anim_path_build_between_locations": {
+      "v1": "max_rotations",
+      "v2": "starts_at_tile_center"
+    },
+    "anim_goal_path_away_from_object_build": {
+      "v1": "max_rotations",
+      "v2": "starts_at_tile_center"
+    },
+    "anim_goal_next_step_window_find": {
+      "v1": "window_obj"
+    },
+    "anim_attack_target_is_reachable": {
+      "v1": "blocking_obj"
+    },
+    "anim_goal_target_in_weapon_range_check": {
+      "v1": "blocking_obj"
+    },
+    "anim_goal_is_too_close_for_formation": {
+      "v2": "minimum_distance"
+    },
+    "anim_goal_movement_begin": {
+      "v2": "action_point_cost"
+    },
+    "anim_movement_art_select": {
+      "a4": "running",
+      "a5": "action_point_cost_ptr"
+    },
+    "anim_offset_is_within_direction_halfplane": {
+      "a1": "rotation",
+      "a2": "offset_x",
+      "a3": "offset_y"
+    },
+    "AGupdateAnimMoveStraight": {
+      "v1": "steps_per_update"
+    },
+    "anim_goal_projectile_movement_step": {
+      "v1": "original_target_obj"
+    },
+    "anim_goal_movement_update": {
+      "v1": "running",
+      "v2": "jump_phase",
+      "v3": "step_state_or_ap_cost"
+    },
+    "anim_movement_action_points_consume": {
+      "v1": "movement_cost_threshold"
+    },
+    "anim_goal_floating_offset_update": {
+      "v1": "bobbing_phase"
+    },
+    "anim_move_to_tile_request": {
+      "a3": "force_new_goal"
+    },
+    "anim_goal_projectile": {
+      "a4": "offset_x",
+      "a5": "offset_y",
+      "v1": "weapon_fx"
+    },
+    "anim_pick_locks_goal_start": {
+      "v1": "lockpick_duration"
+    },
+    "anim_overlapping_critters_spread_out": {
+      "v1": "stationary_anchor",
+      "v2": "moving_anchor"
+    },
+    "anim_root_goal_parent_set_legacy": {
+      "a1": "obj"
+    },
+    "anim_attack_fps_calculate": {
+      "v1": "weapon_animation_bias",
+      "v12": "normal_fps",
+      "v13": "minimum_fps",
+      "v14": "maximum_fps"
+    },
+    "anim_reserved_predicate_stub": {
+      "a1": "reserved_first",
+      "a2": "reserved_second",
+      "a3": "reserved_third"
+    },
+    "light_object_render_lights_create": {
+      "a2": "register_light"
+    },
+    "shadow_apply": {
+      "v1": "maximum_shadow_grey"
+    },
+    "light_object_colors_sample": {
+      "v87": "object_tile_x",
+      "v88": "object_tile_y",
+      "v1": "scan_direction",
+      "v2": "sector_list"
+    },
+    "light_set_flags_internal": {
+      "v1": "needs_invalidation"
+    },
+    "light_unset_flags_internal": {
+      "v1": "needs_invalidation"
+    },
+    "light_move_and_invalidate": {
+      "v1": "unattached"
+    },
+    "light_render_internal": {
+      "v1": "sector_node"
+    },
+    "obj_id_a_replace": {
+      "a2": "allocated_id"
+    },
+    "object_arrayfield_count_get": {
+      "v1": "descriptor"
+    },
+    "object_arrayfield_remove_index": {
+      "v1": "descriptor"
+    },
+    "object_field_bitmap_word_count": {
+      "v1": "last_bitmap_word"
+    },
+    "object_inst_enumerate_overridden_fields_func": {
+      "v1": "storage_index"
+    },
+    "object_inst_enumerate_available_fields_func": {
+      "v1": "storage_index"
+    },
+    "name_normalize_aid": {
+      "v1": "rotation"
+    },
+    "name_first_art_id_get": {
+      "v1": "category"
+    },
+    "name_art_picker_message_filter": {
+      "v1": "next_art_id"
+    },
+    "tig_art_id_rotation_set": {
+      "v1": "primary_wall_piece",
+      "v2": "damage_flags",
+      "v3": "rotated_damage_flags"
+    },
+    "tig_art_frame_pixels_copy_legacy": {
+      "v2": "frame_index"
+    },
+    "tig_art_frames_for_displacement_get": {
+      "a2": "distance_x",
+      "a3": "distance_y",
+      "v0": "frame_count",
+      "v1": "accumulated_x",
+      "v2": "accumulated_y",
+      "v3": "frame_offset_x",
+      "v4": "frame_offset_y"
+    },
+    "tig_art_tile_id_create": {
+      "a3": "transition_mask",
+      "a4": "variant",
+      "a8": "palette"
+    },
+    "tig_art_tile_id_variant_set": {
+      "v1": "transition_mask"
+    },
+    "tig_art_portal_id_create": {
+      "a3": "damage_flags"
+    },
+    "tig_window_region_composite": {
+      "v38": "overlay_count",
+      "v45": "destination_origin_x",
+      "v47": "destination_origin_y"
+    },
+    "tig_window_tint": {
+      "a3": "tint_mode",
+      "a4": "color"
+    },
+    "item_cost": {
+      "a4": "ignore_trade_restrictions"
+    },
+    "charedit_category_list_draw": {
+      "a3": "text_entries",
+      "a5": "text_x",
+      "a6": "entry_count"
+    },
+    "charedit_skill_group_select": {
+      "v1": "training_suffix_buffers",
+      "v2": "training_labels"
+    },
+    "charedit_spell_icon_draw": {
+      "a1": "spell_tier",
+      "a2": "learned_tiers"
+    },
+    "charedit_refresh_spells_win": {
+      "v1": "visible_tier_count"
+    },
+    "charedit_tech_win_message_filter": {
+      "v1": "current_degree"
+    },
+    "charedit_spells_win_message_filter": {
+      "v1": "current_college_level"
+    },
+    "combat_ui_action_points_bar_draw": {
+      "a1": "preview_action_point_cost"
+    },
+    "compact_ui_health_bar_draw": {
+      "a1": "refresh_flags"
+    },
+    "compact_ui_hotkey_bar_draw": {
+      "a1": "refresh_flags"
+    },
+    "dialog_ui_end_dialog": {
+      "a2": "end_reason"
+    },
+    "dialog_ui_speech_start": {
+      "v1": "dialog_number",
+      "v2": "line_number"
+    },
+    "hotkey_ui_drag_drop_process": {
+      "v2": "dragged_item_obj",
+      "v3": "original_parent"
+    },
+    "hotkey_ui_drag_source_restore": {
+      "a2": "hotkey_slot"
+    },
+    "hotkey_ui_item_slot_bind": {
+      "v1": "original_parent"
+    },
+    "intgame_load": {
+      "v1": "legacy_saved_state"
+    },
+    "intgame_draw_bar_rect": {
+      "v14": "top_cap_height",
+      "v15": "visible_fill_height",
+      "v16": "empty_top_offset"
+    },
+    "intgame_process_event": {
+      "v2": "dragged_item_obj"
+    },
+    "intgame_target_action_dispatch": {
+      "v1": "evaluation"
+    },
+    "intgame_hotkey_activate": {
+      "v1": "candidate_item_obj",
+      "v2": "hotkey_item_obj"
+    },
+    "intgame_hotkey_item_equip": {
+      "v1": "equip_result"
+    },
+    "intgame_text_edit_refresh_color": {
+      "a4": "scroll_to_end"
+    },
+    "intgame_clock_refresh": {
+      "v1": "strip_offset",
+      "v2": "moon_phase_day"
+    },
+    "intgame_message_percentage_bar_draw": {
+      "a1": "background_art_number",
+      "a2": "foreground_art_number"
+    },
+    "intgame_weapon_skill_summary_draw": {
+      "a1": "source_obj",
+      "a2": "target_obj",
+      "v3": "aptitude_penalty_percent"
+    },
+    "inven_ui_item_cursor_begin": {
+      "a1": "item_obj",
+      "a2": "prompt_for_quantity"
+    },
+    "inven_ui_message_filter": {
+      "v45": "close_requested"
+    },
+    "redraw_inven": {
+      "a1": "initial_draw",
+      "v102": "grid_top",
+      "v109": "grid_height",
+      "v112": "grid_left"
+    },
+    "inven_ui_trade_offer_refresh": {
+      "a1": "item_obj",
+      "a2": "owner_obj"
+    },
+    "inven_ui_drag_item_insert_or_transfer": {
+      "a4": "transaction_flags"
+    },
+    "inven_ui_item_transaction_send": {
+      "a1": "transaction_quantity"
+    },
+    "inven_ui_item_transaction_process": {
+      "v1": "source_owner",
+      "v2": "item_obj",
+      "v3": "destination_owner",
+      "v4": "merchant_obj",
+      "v5": "inventory_target_obj",
+      "v6": "pc_obj"
+    },
+    "inven_ui_gambling_offer_check": {
+      "a2": "silent",
+      "v1": "item_price",
+      "v2": "gamble_succeeded"
+    },
+    "mainmenu_ui_save_game_execute": {
+      "v1": "selected_slot"
+    },
+    "mainmenu_ui_message_filter": {
+      "v2": "description_message_id"
+    },
+    "mainmenu_ui_navigation_action_process": {
+      "a1": "action"
+    },
+    "skill_ui_activate": {
+      "a3": "requested_skill"
+    },
+    "tb_ui_spell_apply": {
+      "a2": "target_descriptor",
+      "a3": "spell"
+    },
+    "tb_ui_multiplayer_named_confirmation": {
+      "a2": "message"
+    },
+    "wmap_rnd_mes_count_entries": {
+      "v1": "previous_entry_number"
+    },
+    "wmap_rnd_spawn_position_offset": {
+      "v1": "diagonal_offset"
+    },
+    "wmap_load_worldmap_info": {
+      "v1": "tile"
+    },
+    "wmap_ui_mode_set": {
+      "v2": "compass_mode"
+    },
+    "wmap_ui_scroll_rect_refresh": {
+      "a2": "reserved_horizontal",
+      "a3": "reserved_vertical",
+      "a4": "scroll_distance"
+    },
+    "wmap_ui_viewport_scroll": {
+      "a2": "reserved_horizontal",
+      "a3": "reserved_vertical",
+      "a4": "scroll_distance"
+    },
+    "wmap_ui_scroll_origin_set": {
+      "a2": "refresh",
+      "v1": "scroll_x",
+      "v2": "scroll_y"
+    },
+    "wmap_ui_note_changed_hook_stub": {
+      "a1": "note_index",
+      "a2": "change_flags"
+    },
+    "wmap_ui_waypoint_drag_hook_stub": {
+      "a1": "waypoint_index"
+    },
+    "wmap_ui_selected_waypoint_value_hook_stub": {
+      "a1": "waypoint_value"
+    },
+    "wmap_ui_bkg_process_callback": {
+      "v8": "previous_coordinates",
+      "v6": "next_coordinates",
+      "v9": "travel_duration",
+      "v0": "waypoint_reached",
+      "v1": "enter_destination"
+    },
+    "wmap_world_refresh_rect": {
+      "v2": "tile"
+    },
+    "wmap_ui_note_blit": {
+      "a2": "viewport_rect",
+      "a3": "clip_rect"
+    },
+    "wmap_ui_route_draw": {
+      "a2": "viewport_rect",
+      "a3": "clip_rect"
+    },
+    "wmap_ui_note_icon_draw": {
+      "a3": "viewport_rect",
+      "a4": "clip_rect"
+    },
+    "dialog_option_select": {
+      "v1": "response_type",
+      "v2": "response_value",
+      "v3": "response_extra_value"
+    },
+    "dialog_response_dispatch": {
+      "a1": "response_type",
+      "a2": "response_value",
+      "a3": "response_extra_value",
+      "a4": "option_index",
+      "v1": "parsed_parameters"
+    },
+    "dialog_turn_build": {
+      "v1": "eligible_lines",
+      "v2": "discarded_options"
+    },
+    "dialog_collect_eligible_options": {
+      "a2": "line_numbers"
+    },
+    "dialog_conditions_evaluate": {
+      "a2": "conditions",
+      "v39": "required_college_level",
+      "v40": "current_college_level"
+    },
+    "dialog_actions_execute": {
+      "a2": "actions",
+      "a3": "option_index",
+      "v57": "continue_dialog",
+      "v41": "join_response_value",
+      "v43": "unwait_response_value",
+      "v50": "training_response_value"
+    },
+    "dialog_npc_reply_build": {
+      "v2": "payment_amount",
+      "v3": "payment_response",
+      "v4": "payment_response_type",
+      "v5": "payment_response_value",
+      "v6": "fallback_response_type",
+      "v7": "fallback_response_value",
+      "a2": "skip_actions"
+    },
+    "dialog_pc_option_build": {
+      "a1": "line_number",
+      "a2": "option_index",
+      "v2": "response_type",
+      "v3": "response_value",
+      "v4": "option_argument"
+    },
+    "dialog_ask_money": {
+      "a4": "fallback_response_type",
+      "a5": "fallback_response_value"
+    },
+    "dialog_ask_money_for_rumor": {
+      "v1": "response_type",
+      "v2": "response_value"
+    },
+    "dialog_ask_money_for_skill": {
+      "v1": "response_type",
+      "v2": "response_value"
+    },
+    "dialog_use_skill": {
+      "a2": "response_type",
+      "a3": "response_value"
+    },
+    "dialog_give_directions": {
+      "a2": "response_type",
+      "a3": "response_value"
+    },
+    "dialog_mark_area": {
+      "a2": "response_type",
+      "a3": "response_value"
+    },
+    "magictech_spell_components_load_all": {
+      "a1": "reserved_rule_set",
+      "a2": "reserved_rule_path",
+      "a3": "message_base"
+    },
+    "magictech_cost_check_or_consume": {
+      "a3": "consume_cost"
+    },
+    "magictech_current_target_resistance_resolve": {
+      "v1": "accumulated_resistance_penalty",
+      "v2": "resistance_difficulty",
+      "v3": "resistance_roll"
+    },
+    "magictech_component_obj_flag": {
+      "a2": "source_obj",
+      "a4": "flag_mask",
+      "a5": "operation",
+      "a6": "caster_obj",
+      "a7": "power_source_obj",
+      "v16": "change_allowed",
+      "v17": "lock_changed"
+    },
+    "magictech_matching_spell_flag_instances_count": {
+      "a3": "flag_mask",
+      "a4": "include_base_flag"
+    },
+    "magictech_unlock_difficulty_check": {
+      "a1": "caster_obj",
+      "a2": "power_source_obj",
+      "a3": "locked_obj"
+    },
+    "magictech_item_effective_power_check": {
+      "a1": "caster_obj",
+      "a2": "parent_obj",
+      "a3": "item_obj"
+    },
+    "magictech_run_target_revalidate": {
+      "v3": "evaluation"
+    },
+    "magictech_projectile_effect_describe": {
+      "a5": "foreground_overlay_index",
+      "a6": "background_overlay_index",
+      "a7": "light_overlay_index",
+      "a8": "effect_list_index"
+    },
+    "magictech_recharge_timeevent_process": {
+      "v1": "start_time",
+      "v2": "remaining_mana",
+      "v3": "elapsed_intervals",
+      "v4": "recovered_mana"
+    },
+    "magictech_target_resistance_check": {
+      "v2": "resistance_margin",
+      "v3": "save_penalty",
+      "v4": "save_difficulty"
+    },
+    "magictech_invisible_target_can_be_seen": {
+      "a1": "observer_obj",
+      "a2": "target_obj"
+    },
+    "multiplayer_end": {
+      "v1": "shutdown_status"
+    },
+    "multiplayer_host_game_load": {
+      "a1": "module_name",
+      "a2": "save_name"
+    },
+    "multiplayer_packet_67_send": {
+      "a1": "packet_value"
+    },
+    "multiplayer_map_state_transfer": {
+      "a1": "client_id",
+      "a2": "transfer_event_value"
+    },
+    "multiplayer_autoequip_skill_items_grant": {
+      "v1": "granted_count"
+    },
+    "multiplayer_autoequip_weapons_grant": {
+      "v1": "granted_count"
+    },
+    "multiplayer_module_guid_suffix_check": {
+      "a1": "module_path",
+      "a2": "normalized_path"
+    },
+    "mp_ui_message_send": {
+      "a3": "message_flags"
+    },
+    "mp_ui_packet_dispatch": {
+      "v1": "pc_obj",
+      "v2": "target_obj"
+    },
+    "mp_inventory_destroy_request": {
+      "a2": "preserve_persistent"
+    },
+    "ai_follower_attack_react": {
+      "a2": "leader_obj",
+      "a4": "notify_upset",
+      "a5": "passive_notify_only",
+      "a6": "lock_target"
+    },
+    "ai_waypoints_process": {
+      "a2": "teleport_to_waypoint"
+    },
+    "ai_standpoints_process": {
+      "a2": "teleport_to_standpoint"
+    },
+    "ai_timeevent_process": {
+      "v1": "sector_is_loaded"
+    },
+    "ai_can_speak": {
+      "a3": "ignore_combat_and_animation"
+    },
+    "ai_notify_portal_container_guards": {
+      "a3": "apply_reaction_penalty"
+    },
+    "anim_object_interrupt_by_priority": {
+      "a3": "use_lowest_priority",
+      "a4": "suppress_network"
+    },
+    "anim_path_critter_capabilities_apply": {
+      "a2": "ignore_noncombat_critters"
+    },
+    "anim_window_in_direction_find": {
+      "a4": "reserved_flags",
+      "v1": "window_piece_found"
+    },
+    "anim_goal_path_near_object_build": {
+      "v1": "target_hidden_for_path",
+      "v2": "excluded_target_steps"
+    },
+    "anim_fidget_timeevent_process": {
+      "v1": "stunned_animation_override"
+    },
+    "anim_goal_follow_obj": {
+      "v1": "replace_existing_follow"
+    },
+    "anim_goal_data_init_ex": {
+      "a4": "interrupt_existing_goals"
+    },
+    "anim_goal_add_func": {
+      "a3": "allocate_new_run"
+    },
+    "combat_critter_toggle_combat_mode": {
+      "v1": "concealed_fidget"
+    },
+    "combat_heal": {
+      "v2": "revived"
+    },
+    "item_inventory_drop_all": {
+      "a2": "use_decaying_junk_pile"
+    },
+    "item_inventory_drop_or_destroy_summoned": {
+      "a2": "use_decaying_junk_pile"
+    },
+    "item_inventory_drop_invulnerable": {
+      "a2": "use_decaying_junk_pile"
+    },
+    "light_color_at_location_sample": {
+      "a4": "ambient_only"
+    },
+    "map_open": {
+      "a3": "preserve_saved_map"
+    },
+    "map_open_in_game": {
+      "a2": "precache_start_sectors",
+      "a3": "skip_current_map_flush"
+    },
+    "obj_field_layouts_init": {
+      "v1": "complex_field_count",
+      "v2": "simple_field_count",
+      "v3": "field_group",
+      "v5": "base_complex_count",
+      "v6": "base_simple_count",
+      "v7": "item_complex_count",
+      "v8": "item_simple_count",
+      "v9": "critter_complex_count",
+      "v10": "critter_simple_count"
+    },
+    "objid_make_a": {
+      "a1": "allocated_id"
+    },
+    "object_get_resistance": {
+      "a2": "require_identification"
+    },
+    "object_get_ac": {
+      "a2": "require_identification"
+    },
+    "object_pick_at_screen_xy": {
+      "v1": "sector_rect",
+      "v3": "sector_row",
+      "v60": "tile_column",
+      "v62": "tile_row",
+      "v65": "bounds_hit_obj",
+      "v67": "pixel_hit_obj",
+      "v69": "nearby_pixel_hit_obj"
+    },
+    "party_join_feedback_schedule": {
+      "a1": "follower_obj",
+      "a2": "leader_obj",
+      "a3": "feedback_type"
+    },
+    "mainmenu_ui_game_enter": {
+      "a1": "skip_interface_restore"
+    },
+    "mainmenu_ui_create_window_func": {
+      "v1": "cover_windows_needed_or_created"
+    },
+    "spell_ui_activate": {
+      "v1": "restore_inventory"
+    },
+    "intgame_main_target_action_process": {
+      "v26": "use_alternate_pathfinding"
+    },
+    "intgame_hotkey_mouse_load": {
+      "a2": "use_centered_hotkey_cursor"
+    },
+    "hotkey_ui_begin_drag": {
+      "v1": "use_centered_hotkey_cursor"
+    },
+    "magictech_current_run_costs_and_stacking_check": {
+      "v1": "requirements_failed",
+      "v2": "consume_energy"
+    },
+    "magictech_current_run_advance_or_finish": {
+      "v0": "should_end_run",
+      "v1": "continue_processing"
+    },
+    "multiplayer_damage_is_disallowed": {
+      "a1": "attacker_obj",
+      "a2": "target_obj",
+      "a3": "target_leader_obj",
+      "a4": "attacker_leader_obj"
+    },
+    "tig_art_file_load": {
+      "a5": "load_selected_palette_only"
+    },
+    "inven_ui_message_filter_handle_mouse_move": {
+      "v1": "hovered_item_obj",
+      "v2": "owner_obj"
+    },
+    "inven_ui_message_filter_handle_mouse_lbutton_down": {
+      "v1": "clicked_item_obj",
+      "v2": "owner_obj"
+    },
+    "inven_ui_message_filter_handle_mouse_lbutton_up_accept_drop": {
+      "v2": "owner_obj",
+      "v3": "dragged_item_obj",
+      "v5": "returned_item_slot",
+      "v45": "close_requested_ptr"
+    },
+    "inven_ui_message_filter_handle_mouse_lbutton_up": {
+      "v1": "clicked_item_obj",
+      "v2": "owner_obj",
+      "v45": "close_requested_ptr"
+    },
+    "inven_ui_message_filter_handle_mouse_rbutton_up": {
+      "v1": "selected_obj",
+      "v2": "owner_obj",
+      "v5": "destination_slot",
+      "v6": "target_inventory_owner",
+      "v45": "close_requested_ptr",
+      "v3": "destination_owner"
+    },
+    "inven_ui_message_filter_handle_mouse_idle": {
+      "v1": "hovered_item_obj",
+      "v2": "owner_obj"
+    }
+  },
+  "callback_parameters": {
+    "CombatModeChangeNotify": {
+      "a1": "active"
+    },
+    "CombatActionPointsDraw": {
+      "a1": "preview_action_point_cost"
+    },
+    "CompactUiComponentDraw": {
+      "a1": "refresh_flags"
+    },
+    "UiSkillActivate": {
+      "a3": "skill"
+    },
+    "UiDialogScriptAndGreeting": {
+      "a1": "pc_obj",
+      "a2": "npc_obj"
+    },
+    "UiObjectExamineAndSelect": {
+      "a1": "observer_obj",
+      "a2": "target_obj"
+    },
+    "UiHotkeySlotClear": {
+      "a1": "slot"
+    },
+    "UiItemLocationAssign": {
+      "a1": "critter_obj",
+      "a2": "item_obj",
+      "a3": "inventory_location"
+    },
+    "UiItemHotkeyBind": {
+      "a1": "critter_obj",
+      "a2": "inventory_location"
+    },
+    "UiSpellApply": {
+      "a1": "source_obj",
+      "a3": "target_descriptor",
+      "a4": "spell"
+    },
+    "UiNumberedFeedbackDisplay": {
+      "a1": "message_id"
+    },
+    "UiNotifySectorChanged": {
+      "a1": "sector_id",
+      "a2": "obj"
+    },
+    "UiCharacterSheetOpen": {
+      "a1": "pc_obj",
+      "a2": "target_obj"
+    },
+    "UiEndDialog": {
+      "a3": "end_reason"
+    },
+    "UiOptionalEventCallback": {
+      "a1": "event_type",
+      "a2": "event_code",
+      "a3": "event_payload"
+    },
+    "UiTargetSkillResolve": {
+      "a1": "requested_skill"
+    },
+    "UiSchematicOpenRequest": {
+      "a1": "primary_obj",
+      "a2": "secondary_obj"
+    },
+    "UiMultiplayerNamedConfirmation": {
+      "a1": "title",
+      "a2": "message"
+    },
+    "UiInventoryOpenPreconditionsCheck": {
+      "a1": "pc_obj",
+      "a2": "target_obj",
+      "a3": "mode"
+    },
+    "UiInventoryGameModeSelect": {
+      "a1": "pc_obj",
+      "a2": "target_obj",
+      "a3": "mode"
+    },
+    "UiInventoryTargetPrepare": {
+      "a1": "pc_obj",
+      "a2": "target_obj",
+      "a3": "mode"
+    },
+    "UiReservedStringCallback144": {
+      "a1": "text"
+    },
+    "UiReservedStringCallback148": {
+      "a1": "text"
+    },
+    "UiReservedStringPairCallback14C": {
+      "a1": "first_text",
+      "a2": "second_text"
+    },
+    "UiReservedStringPairCallback150": {
+      "a1": "first_text",
+      "a2": "second_text"
+    },
+    "UiReservedIntegerPairCallback154": {
+      "a1": "first_value",
+      "a2": "second_value"
+    },
+    "UiReservedStringPairCallback158": {
+      "a1": "first_text",
+      "a2": "second_text"
+    }
+  },
+  "member_names_by_type": {
+    "TigVideoScreenshotSettings": {
+      "field_4": "legacy_mode"
+    },
+    "AnimID": {
+      "field_8": "reserved_id"
+    },
+    "AGModifyData": {
+      "field_14": "reserved_movement_code"
+    },
+    "Packet9": {
+      "field_4": "reserved_mode",
+      "field_18": "object_reference",
+      "field_48": "use_lowest_priority",
+      "field_C": "reserved_slot_1",
+      "field_10": "reserved_slot_2",
+      "field_14": "reserved_slot_3",
+      "field_4C": "reserved_slot_4",
+      "field_64": "reserved_slot_5"
+    },
+    "Packet8": {
+      "field_40": "extra_target_location",
+      "field_4": "reserved_slot_1",
+      "field_48": "reserved_slot_2",
+      "field_4C": "reserved_slot_3"
+    },
+    "Packet26": {
+      "field_20": "distance"
+    },
+    "Packet76": {
+      "field_24": "consume_cost"
+    },
+    "MagicTechSummonInfo": {
+      "field_60": "prototype_id",
+      "field_88": "summoned_object_id",
+      "field_0": "summoner",
+      "field_30": "target",
+      "field_A0": "source_swap_obj",
+      "field_A8": "source_swap_id",
+      "field_C8": "prototype_list",
+      "field_84": "reserved_slot_1",
+      "field_C4": "reserved_slot_2",
+      "field_CC": "reserved_slot_3"
+    },
+    "PacketMagicTechObjFlag": {
+      "field_8": "target_id"
+    },
+    "Packet84": {
+      "field_8": "message_flags"
+    },
+    "ObjectMovePacket": {
+      "field_30": "center_local_player_view"
+    },
+    "ObjectPullPacket": {
+      "field_8": "source_id",
+      "field_20": "target_id"
+    },
+    "InventoryDestroyPacket": {
+      "field_20": "preserve_persistent",
+      "field_4": "reserved_slot_1"
+    },
+    "MagicTechObjectNode": {
+      "field_30": "reserved_serialized_state"
+    },
+    "Object": {
+      "field_40": "reserved_runtime_state"
+    },
+    "Packet67": {
+      "field_4": "value"
+    },
+    "PacketNotifyPlayerLagging": {
+      "field_8": "object_reference"
+    },
+    "PacketNotifyPlayerRecovered": {
+      "field_8": "object_reference"
+    },
+    "Packet80": {
+      "field_3C": "request_mode"
+    },
+    "Packet93": {
+      "field_4": "client_id",
+      "field_20": "active"
+    },
+    "Packet97": {
+      "field_8": "viewer_id",
+      "field_20": "inventory_owner_id"
+    },
+    "TigArtBlitInfo": {
+      "field_14": "blend_colors",
+      "field_18": "blend_rect"
+    },
+    "InventoryTransactionPacket": {
+      "field_5C": "price",
+      "field_8": "transaction_flags",
+      "field_28": "source_owner_id",
+      "field_58": "destination_slot",
+      "field_10": "item_id",
+      "field_40": "destination_owner_id",
+      "field_70": "merchant_id",
+      "field_88": "target_inventory_owner_id",
+      "field_A0": "pc_id",
+      "field_60": "quantity",
+      "field_68": "client_id",
+      "field_4": "reserved_slot_1",
+      "field_C": "reserved_slot_2",
+      "field_64": "reserved_slot_3",
+      "field_6C": "reserved_slot_4"
+    },
+    "WmapRoute": {
+      "field_3C4": "default_travel_value",
+      "field_3CC": "reserved_slot_1"
+    },
+    "WmapTile": {
+      "field_18": "reserved_data",
+      "field_1C": "reserved_data_size"
+    },
+    "WmapRouteWaypoint": {
+      "field_4": "travel_value",
+      "field_0": "reserved_flags"
+    },
+    "MagicTechComponentInfo": {
+      "field_48": "indexed_trait_mode",
+      "field_3C": "reserved_slot_1"
+    },
+    "Packet70": {
+      "field_30": "reserved_creation_flags",
+      "field_C": "reserved_slot_1",
+      "field_34": "reserved_slot_2",
+      "field_38": "reserved_slot_3",
+      "field_50": "reserved_slot_4",
+      "field_54": "reserved_slot_5",
+      "field_58": "reserved_slot_6",
+      "field_5C": "reserved_slot_7",
+      "field_60": "reserved_slot_8",
+      "field_64": "reserved_slot_9"
+    },
+    "AnimRunInfo": {
+      "field_D18": "reserved_slot_1",
+      "field_D1C": "reserved_slot_2",
+      "field_D20": "reserved_slot_3",
+      "field_D24": "reserved_slot_4",
+      "field_D28": "reserved_slot_5",
+      "field_D2C": "reserved_slot_6",
+      "field_D30": "reserved_slot_7",
+      "field_D34": "reserved_slot_8"
+    },
+    "GameSaveInfo": {
+      "field_20C": "reserved_slot_1",
+      "field_31C": "reserved_slot_2",
+      "field_344": "reserved_slot_3",
+      "field_348": "reserved_slot_4",
+      "field_34C": "reserved_slot_5",
+      "field_350": "reserved_slot_6",
+      "field_354": "reserved_slot_7",
+      "field_358": "reserved_slot_8"
+    },
+    "MagicTechComponentTrait": {
+      "field_4": "reserved_slot_1",
+      "field_8": "reserved_slot_2",
+      "field_C": "reserved_slot_3"
+    },
+    "MagicTechInfo": {
+      "field_6C": "reserved_slot_1"
+    },
+    "MagicTechRunInfo": {
+      "field_C": "reserved_slot_1",
+      "field_154": "reserved_slot_2"
+    },
+    "Packet5": {
+      "field_8": "reserved_slot_1",
+      "field_10": "reserved_slot_2",
+      "field_198": "reserved_slot_3",
+      "field_1A4": "reserved_slot_4"
+    },
+    "Packet46": {
+      "field_8": "reserved_slot_1",
+      "field_C": "reserved_slot_2",
+      "field_10": "reserved_slot_3",
+      "field_14": "reserved_slot_4",
+      "field_18": "reserved_slot_5",
+      "field_1C": "reserved_slot_6"
+    },
+    "Packet64": {
+      "field_110": "reserved_slot_1",
+      "field_114": "reserved_slot_2",
+      "field_118": "reserved_slot_3",
+      "field_11C": "reserved_slot_4"
+    },
+    "Packet82": {
+      "field_4": "reserved_slot_1",
+      "field_8": "reserved_slot_2",
+      "field_20": "reserved_slot_3",
+      "field_38": "reserved_slot_4",
+      "field_3C": "reserved_slot_5",
+      "field_40": "reserved_slot_6"
+    },
+    "Packet83": {
+      "field_4": "reserved_slot_1",
+      "field_8": "reserved_slot_2",
+      "field_C": "reserved_slot_3"
+    },
+    "InventorySpawnPacket": {
+      "field_4": "reserved_slot_1"
+    },
+    "MagicTechAi": {
+      "field_24": "reserved_slot_1",
+      "field_2C": "reserved_slot_2"
+    },
+    "MultiplayerPlayerState": {
+      "field_4": "reserved_slot_1",
+      "field_20": "reserved_slot_2",
+      "field_24": "reserved_slot_3",
+      "field_28": "reserved_slot_4",
+      "field_2C": "reserved_slot_5",
+      "field_30": "reserved_slot_6",
+      "field_34": "reserved_slot_7",
+      "field_38": "reserved_slot_8"
+    },
+    "MultiplayerDeferredEntry": {
+      "field_0": "reserved_slot_1",
+      "field_4": "reserved_slot_2",
+      "field_8": "reserved_slot_3",
+      "field_C": "reserved_slot_4",
+      "field_10": "reserved_slot_5",
+      "field_14": "reserved_slot_6",
+      "field_18": "reserved_slot_7",
+      "field_1C": "reserved_slot_8",
+      "field_20": "reserved_slot_9",
+      "field_24": "reserved_slot_10",
+      "field_28": "reserved_slot_11",
+      "field_2C": "reserved_slot_12",
+      "field_30": "reserved_slot_13",
+      "field_34": "reserved_slot_14",
+      "field_38": "reserved_slot_15",
+      "field_3C": "reserved_slot_16",
+      "field_40": "reserved_slot_17",
+      "field_44": "reserved_slot_18",
+      "field_48": "reserved_slot_19",
+      "field_4C": "reserved_slot_20",
+      "field_50": "reserved_slot_21",
+      "field_54": "reserved_slot_22",
+      "field_58": "reserved_slot_23",
+      "field_5C": "reserved_slot_24",
+      "field_60": "reserved_slot_25",
+      "field_64": "reserved_slot_26",
+      "field_68": "reserved_slot_27",
+      "field_6C": "reserved_slot_28",
+      "field_70": "reserved_slot_29",
+      "field_74": "reserved_slot_30",
+      "field_78": "reserved_slot_31",
+      "field_7C": "reserved_slot_32",
+      "field_80": "reserved_slot_33",
+      "field_84": "reserved_slot_34",
+      "field_88": "reserved_slot_35",
+      "field_8C": "reserved_slot_36",
+      "field_90": "reserved_slot_37",
+      "field_94": "reserved_slot_38",
+      "field_98": "reserved_slot_39",
+      "field_9C": "reserved_slot_40",
+      "field_A0": "reserved_slot_41",
+      "field_A4": "reserved_slot_42",
+      "field_A8": "reserved_slot_43",
+      "field_AC": "reserved_slot_44",
+      "field_B0": "reserved_slot_45",
+      "field_B4": "reserved_slot_46",
+      "field_B8": "reserved_slot_47",
+      "field_BC": "reserved_slot_48",
+      "field_C0": "reserved_slot_49",
+      "field_C4": "reserved_slot_50",
+      "field_C8": "reserved_slot_51",
+      "field_CC": "reserved_slot_52",
+      "field_D0": "reserved_slot_53",
+      "field_D4": "reserved_slot_54",
+      "field_D8": "reserved_slot_55",
+      "field_DC": "reserved_slot_56",
+      "field_E0": "reserved_slot_57",
+      "field_E4": "reserved_slot_58",
+      "field_E8": "reserved_slot_59",
+      "field_EC": "reserved_slot_60",
+      "field_F0": "reserved_slot_61",
+      "field_F4": "reserved_slot_62",
+      "field_F8": "reserved_slot_63",
+      "field_FC": "reserved_slot_64",
+      "field_100": "reserved_slot_65",
+      "field_104": "reserved_slot_66",
+      "field_108": "reserved_slot_67",
+      "field_10C": "reserved_slot_68",
+      "field_110": "reserved_slot_69",
+      "field_114": "reserved_slot_70",
+      "field_118": "reserved_slot_71",
+      "field_11C": "reserved_slot_72",
+      "field_120": "reserved_slot_73",
+      "field_124": "reserved_slot_74",
+      "field_128": "reserved_slot_75",
+      "field_12C": "reserved_slot_76",
+      "field_130": "reserved_slot_77",
+      "field_134": "reserved_slot_78",
+      "field_138": "reserved_slot_79",
+      "field_13C": "reserved_slot_80",
+      "field_140": "reserved_slot_81",
+      "field_144": "reserved_slot_82",
+      "field_148": "reserved_slot_83",
+      "field_14C": "reserved_slot_84",
+      "field_150": "reserved_slot_85",
+      "field_154": "reserved_slot_86",
+      "field_158": "reserved_slot_87",
+      "field_15C": "reserved_slot_88",
+      "field_160": "reserved_slot_89",
+      "field_164": "reserved_slot_90",
+      "field_168": "reserved_slot_91",
+      "field_16C": "reserved_slot_92",
+      "field_170": "reserved_slot_93",
+      "field_174": "reserved_slot_94",
+      "field_178": "reserved_slot_95",
+      "field_17C": "reserved_slot_96",
+      "field_180": "reserved_slot_97",
+      "field_184": "reserved_slot_98",
+      "field_188": "reserved_slot_99",
+      "field_18C": "reserved_slot_100",
+      "field_190": "reserved_slot_101",
+      "field_194": "reserved_slot_102",
+      "field_198": "reserved_slot_103",
+      "field_19C": "reserved_slot_104",
+      "field_1A0": "reserved_slot_105",
+      "field_1A4": "reserved_slot_106",
+      "field_1AC": "reserved_slot_107"
+    },
+    "MultiplayerObjectLock": {
+      "field_3C": "reserved_slot_1"
+    },
+    "ObjDataDescriptor": {
+      "field_C": "reserved_slot_1"
+    },
+    "ScriptState": {
+      "field_14": "reserved_slot_1",
+      "field_3C4": "reserved_slot_2"
+    },
+    "SectorCacheEntry": {
+      "field_C": "reserved_slot_1"
+    },
+    "TargetListEntry": {
+      "field_10": "reserved_slot_1",
+      "field_14": "reserved_slot_2",
+      "field_18": "reserved_slot_3",
+      "field_1C": "reserved_slot_4",
+      "field_20": "reserved_slot_5",
+      "field_24": "reserved_slot_6",
+      "field_28": "reserved_slot_7",
+      "field_2C": "reserved_slot_8",
+      "field_30": "reserved_slot_9",
+      "field_34": "reserved_slot_10"
+    },
+    "TargetDescriptorEvaluation": {
+      "field_14": "reserved_slot_1"
+    },
+    "TimeEventNode": {
+      "field_D4": "reserved_slot_1"
+    },
+    "TownMapInfo": {
+      "field_4": "reserved_slot_1"
+    },
+    "FadedRoofReference": {
+      "field_C": "reserved_slot_1"
+    },
+    "WaypointDrawEntry": {
+      "field_C": "reserved_slot_1"
+    },
+    "CompactUiComponent": {
+      "field_C": "reserved_slot_1"
+    },
+    "DialogUiEntry": {
+      "field_185C": "reserved_slot_1",
+      "field_185D": "reserved_slot_2",
+      "field_185E": "reserved_slot_3",
+      "field_185F": "reserved_slot_4"
+    },
+    "MainMenuWindowInfo": {
+      "field_94": "reserved_slot_1"
+    },
+    "WmapInfo": {
+      "field_50": "reserved_slot_1",
+      "field_18C": "reserved_slot_2",
+      "field_19C": "reserved_slot_3",
+      "field_1A0": "reserved_slot_4"
+    },
+    "TigDatabase": {
+      "field_24": "reserved_slot_1"
+    },
+    "TigFont": {
+      "field_10": "reserved_slot_1",
+      "field_28": "reserved_slot_2"
+    },
+    "TigWindowBlitInfo": {
+      "field_18": "reserved_slot_1"
+    }
+  },
+  "member_token_renames": [
+    {
+      "file": "src/game/anim_private.h",
+      "token_index": 166,
+      "old": "field_8",
+      "new": "reserved_id",
+      "type": "AnimID"
+    },
+    {
+      "file": "src/game/anim_private.h",
+      "token_index": 181,
+      "old": "field_14",
+      "new": "reserved_movement_code",
+      "type": "AGModifyData"
+    },
+    {
+      "file": "src/game/anim_private.h",
+      "token_index": 335,
+      "old": "field_D18",
+      "new": "reserved_slot_1",
+      "type": "AnimRunInfo"
+    },
+    {
+      "file": "src/game/anim_private.h",
+      "token_index": 337,
+      "old": "field_D1C",
+      "new": "reserved_slot_2",
+      "type": "AnimRunInfo"
+    },
+    {
+      "file": "src/game/anim_private.h",
+      "token_index": 339,
+      "old": "field_D20",
+      "new": "reserved_slot_3",
+      "type": "AnimRunInfo"
+    },
+    {
+      "file": "src/game/anim_private.h",
+      "token_index": 341,
+      "old": "field_D24",
+      "new": "reserved_slot_4",
+      "type": "AnimRunInfo"
+    },
+    {
+      "file": "src/game/anim_private.h",
+      "token_index": 343,
+      "old": "field_D28",
+      "new": "reserved_slot_5",
+      "type": "AnimRunInfo"
+    },
+    {
+      "file": "src/game/anim_private.h",
+      "token_index": 345,
+      "old": "field_D2C",
+      "new": "reserved_slot_6",
+      "type": "AnimRunInfo"
+    },
+    {
+      "file": "src/game/anim_private.h",
+      "token_index": 347,
+      "old": "field_D30",
+      "new": "reserved_slot_7",
+      "type": "AnimRunInfo"
+    },
+    {
+      "file": "src/game/anim_private.h",
+      "token_index": 349,
+      "old": "field_D34",
+      "new": "reserved_slot_8",
+      "type": "AnimRunInfo"
+    },
+    {
+      "file": "src/game/gamelib.h",
+      "token_index": 220,
+      "old": "field_20C",
+      "new": "reserved_slot_1",
+      "type": "GameSaveInfo"
+    },
+    {
+      "file": "src/game/gamelib.h",
+      "token_index": 228,
+      "old": "field_31C",
+      "new": "reserved_slot_2",
+      "type": "GameSaveInfo"
+    },
+    {
+      "file": "src/game/gamelib.h",
+      "token_index": 236,
+      "old": "field_344",
+      "new": "reserved_slot_3",
+      "type": "GameSaveInfo"
+    },
+    {
+      "file": "src/game/gamelib.h",
+      "token_index": 238,
+      "old": "field_348",
+      "new": "reserved_slot_4",
+      "type": "GameSaveInfo"
+    },
+    {
+      "file": "src/game/gamelib.h",
+      "token_index": 240,
+      "old": "field_34C",
+      "new": "reserved_slot_5",
+      "type": "GameSaveInfo"
+    },
+    {
+      "file": "src/game/gamelib.h",
+      "token_index": 242,
+      "old": "field_350",
+      "new": "reserved_slot_6",
+      "type": "GameSaveInfo"
+    },
+    {
+      "file": "src/game/gamelib.h",
+      "token_index": 244,
+      "old": "field_354",
+      "new": "reserved_slot_7",
+      "type": "GameSaveInfo"
+    },
+    {
+      "file": "src/game/gamelib.h",
+      "token_index": 246,
+      "old": "field_358",
+      "new": "reserved_slot_8",
+      "type": "GameSaveInfo"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 80,
+      "old": "field_4",
+      "new": "reserved_slot_1",
+      "type": "MagicTechComponentTrait"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 82,
+      "old": "field_8",
+      "new": "reserved_slot_2",
+      "type": "MagicTechComponentTrait"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 84,
+      "old": "field_C",
+      "new": "reserved_slot_3",
+      "type": "MagicTechComponentTrait"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 103,
+      "old": "field_3C",
+      "new": "reserved_slot_1",
+      "type": "MagicTechComponentInfo"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 235,
+      "old": "field_48",
+      "new": "indexed_trait_mode",
+      "type": "MagicTechComponentInfo"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 372,
+      "old": "field_6C",
+      "new": "reserved_slot_1",
+      "type": "MagicTechInfo"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 435,
+      "old": "field_C",
+      "new": "reserved_slot_1",
+      "type": "MagicTechRunInfo"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 462,
+      "old": "field_154",
+      "new": "reserved_slot_2",
+      "type": "MagicTechRunInfo"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 508,
+      "old": "field_0",
+      "new": "summoner",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 510,
+      "old": "field_30",
+      "new": "target",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 512,
+      "old": "field_60",
+      "new": "prototype_id",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 518,
+      "old": "field_84",
+      "new": "reserved_slot_1",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 520,
+      "old": "field_88",
+      "new": "summoned_object_id",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 522,
+      "old": "field_A0",
+      "new": "source_swap_obj",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 524,
+      "old": "field_A8",
+      "new": "source_swap_id",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 528,
+      "old": "field_C4",
+      "new": "reserved_slot_2",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 530,
+      "old": "field_C8",
+      "new": "prototype_list",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.h",
+      "token_index": 532,
+      "old": "field_CC",
+      "new": "reserved_slot_3",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 65,
+      "old": "field_8",
+      "new": "reserved_slot_1",
+      "type": "Packet5"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 67,
+      "old": "field_10",
+      "new": "reserved_slot_2",
+      "type": "Packet5"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 75,
+      "old": "field_198",
+      "new": "reserved_slot_3",
+      "type": "Packet5"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 77,
+      "old": "field_1A4",
+      "new": "reserved_slot_4",
+      "type": "Packet5"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 136,
+      "old": "field_4",
+      "new": "reserved_slot_1",
+      "type": "Packet8"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 144,
+      "old": "field_40",
+      "new": "extra_target_location",
+      "type": "Packet8"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 146,
+      "old": "field_48",
+      "new": "reserved_slot_2",
+      "type": "Packet8"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 148,
+      "old": "field_4C",
+      "new": "reserved_slot_3",
+      "type": "Packet8"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 159,
+      "old": "field_4",
+      "new": "reserved_mode",
+      "type": "Packet9"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 163,
+      "old": "field_C",
+      "new": "reserved_slot_1",
+      "type": "Packet9"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 165,
+      "old": "field_10",
+      "new": "reserved_slot_2",
+      "type": "Packet9"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 167,
+      "old": "field_14",
+      "new": "reserved_slot_3",
+      "type": "Packet9"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 169,
+      "old": "field_18",
+      "new": "object_reference",
+      "type": "Packet9"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 171,
+      "old": "field_48",
+      "new": "use_lowest_priority",
+      "type": "Packet9"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 173,
+      "old": "field_4C",
+      "new": "reserved_slot_4",
+      "type": "Packet9"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 183,
+      "old": "field_64",
+      "new": "reserved_slot_5",
+      "type": "Packet9"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 238,
+      "old": "field_20",
+      "new": "distance",
+      "type": "Packet26"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 300,
+      "old": "field_8",
+      "new": "reserved_slot_1",
+      "type": "Packet46"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 302,
+      "old": "field_C",
+      "new": "reserved_slot_2",
+      "type": "Packet46"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 304,
+      "old": "field_10",
+      "new": "reserved_slot_3",
+      "type": "Packet46"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 306,
+      "old": "field_14",
+      "new": "reserved_slot_4",
+      "type": "Packet46"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 308,
+      "old": "field_18",
+      "new": "reserved_slot_5",
+      "type": "Packet46"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 310,
+      "old": "field_1C",
+      "new": "reserved_slot_6",
+      "type": "Packet46"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 391,
+      "old": "field_110",
+      "new": "reserved_slot_1",
+      "type": "Packet64"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 393,
+      "old": "field_114",
+      "new": "reserved_slot_2",
+      "type": "Packet64"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 395,
+      "old": "field_118",
+      "new": "reserved_slot_3",
+      "type": "Packet64"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 397,
+      "old": "field_11C",
+      "new": "reserved_slot_4",
+      "type": "Packet64"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 408,
+      "old": "field_4",
+      "new": "value",
+      "type": "Packet67"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 421,
+      "old": "field_8",
+      "new": "object_reference",
+      "type": "PacketNotifyPlayerLagging"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 434,
+      "old": "field_8",
+      "new": "object_reference",
+      "type": "PacketNotifyPlayerRecovered"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 451,
+      "old": "field_C",
+      "new": "reserved_slot_1",
+      "type": "Packet70"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 457,
+      "old": "field_30",
+      "new": "reserved_creation_flags",
+      "type": "Packet70"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 459,
+      "old": "field_34",
+      "new": "reserved_slot_2",
+      "type": "Packet70"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 461,
+      "old": "field_38",
+      "new": "reserved_slot_3",
+      "type": "Packet70"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 463,
+      "old": "field_50",
+      "new": "reserved_slot_4",
+      "type": "Packet70"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 465,
+      "old": "field_54",
+      "new": "reserved_slot_5",
+      "type": "Packet70"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 467,
+      "old": "field_58",
+      "new": "reserved_slot_6",
+      "type": "Packet70"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 469,
+      "old": "field_5C",
+      "new": "reserved_slot_7",
+      "type": "Packet70"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 471,
+      "old": "field_60",
+      "new": "reserved_slot_8",
+      "type": "Packet70"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 473,
+      "old": "field_64",
+      "new": "reserved_slot_9",
+      "type": "Packet70"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 561,
+      "old": "field_8",
+      "new": "target_id",
+      "type": "PacketMagicTechObjFlag"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 592,
+      "old": "field_24",
+      "new": "consume_cost",
+      "type": "Packet76"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 630,
+      "old": "field_3C",
+      "new": "request_mode",
+      "type": "Packet80"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 638,
+      "old": "field_4",
+      "new": "reserved_slot_1",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 640,
+      "old": "field_8",
+      "new": "transaction_flags",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 642,
+      "old": "field_C",
+      "new": "reserved_slot_2",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 644,
+      "old": "field_10",
+      "new": "item_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 646,
+      "old": "field_28",
+      "new": "source_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 648,
+      "old": "field_40",
+      "new": "destination_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 650,
+      "old": "field_58",
+      "new": "destination_slot",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 652,
+      "old": "field_5C",
+      "new": "price",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 654,
+      "old": "field_60",
+      "new": "quantity",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 656,
+      "old": "field_64",
+      "new": "reserved_slot_3",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 658,
+      "old": "field_68",
+      "new": "client_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 660,
+      "old": "field_6C",
+      "new": "reserved_slot_4",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 662,
+      "old": "field_70",
+      "new": "merchant_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 664,
+      "old": "field_88",
+      "new": "target_inventory_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 666,
+      "old": "field_A0",
+      "new": "pc_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 677,
+      "old": "field_4",
+      "new": "reserved_slot_1",
+      "type": "Packet82"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 679,
+      "old": "field_8",
+      "new": "reserved_slot_2",
+      "type": "Packet82"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 681,
+      "old": "field_20",
+      "new": "reserved_slot_3",
+      "type": "Packet82"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 683,
+      "old": "field_38",
+      "new": "reserved_slot_4",
+      "type": "Packet82"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 685,
+      "old": "field_3C",
+      "new": "reserved_slot_5",
+      "type": "Packet82"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 687,
+      "old": "field_40",
+      "new": "reserved_slot_6",
+      "type": "Packet82"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 698,
+      "old": "field_4",
+      "new": "reserved_slot_1",
+      "type": "Packet83"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 700,
+      "old": "field_8",
+      "new": "reserved_slot_2",
+      "type": "Packet83"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 702,
+      "old": "field_C",
+      "new": "reserved_slot_3",
+      "type": "Packet83"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 715,
+      "old": "field_8",
+      "new": "message_flags",
+      "type": "Packet84"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 751,
+      "old": "field_4",
+      "new": "client_id",
+      "type": "Packet93"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 755,
+      "old": "field_20",
+      "new": "active",
+      "type": "Packet93"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 783,
+      "old": "field_8",
+      "new": "viewer_id",
+      "type": "Packet97"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 785,
+      "old": "field_20",
+      "new": "inventory_owner_id",
+      "type": "Packet97"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 820,
+      "old": "field_30",
+      "new": "center_local_player_view",
+      "type": "ObjectMovePacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 925,
+      "old": "field_8",
+      "new": "source_id",
+      "type": "ObjectPullPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 927,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "ObjectPullPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 938,
+      "old": "field_4",
+      "new": "reserved_slot_1",
+      "type": "InventoryDestroyPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 942,
+      "old": "field_20",
+      "new": "preserve_persistent",
+      "type": "InventoryDestroyPacket"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 955,
+      "old": "field_4",
+      "new": "reserved_slot_1",
+      "type": "InventorySpawnPacket"
+    },
+    {
+      "file": "src/game/mt_ai.h",
+      "token_index": 52,
+      "old": "field_24",
+      "new": "reserved_slot_1",
+      "type": "MagicTechAi"
+    },
+    {
+      "file": "src/game/mt_ai.h",
+      "token_index": 56,
+      "old": "field_2C",
+      "new": "reserved_slot_2",
+      "type": "MagicTechAi"
+    },
+    {
+      "file": "src/game/mt_obj_node.h",
+      "token_index": 14,
+      "old": "field_30",
+      "new": "reserved_serialized_state",
+      "type": "MagicTechObjectNode"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 55,
+      "old": "field_4",
+      "new": "reserved_slot_1",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 59,
+      "old": "field_20",
+      "new": "reserved_slot_2",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 61,
+      "old": "field_24",
+      "new": "reserved_slot_3",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 63,
+      "old": "field_28",
+      "new": "reserved_slot_4",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 65,
+      "old": "field_2C",
+      "new": "reserved_slot_5",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 67,
+      "old": "field_30",
+      "new": "reserved_slot_6",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 69,
+      "old": "field_34",
+      "new": "reserved_slot_7",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 71,
+      "old": "field_38",
+      "new": "reserved_slot_8",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 80,
+      "old": "field_0",
+      "new": "reserved_slot_1",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 82,
+      "old": "field_4",
+      "new": "reserved_slot_2",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 84,
+      "old": "field_8",
+      "new": "reserved_slot_3",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 86,
+      "old": "field_C",
+      "new": "reserved_slot_4",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 88,
+      "old": "field_10",
+      "new": "reserved_slot_5",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 90,
+      "old": "field_14",
+      "new": "reserved_slot_6",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 92,
+      "old": "field_18",
+      "new": "reserved_slot_7",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 94,
+      "old": "field_1C",
+      "new": "reserved_slot_8",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 96,
+      "old": "field_20",
+      "new": "reserved_slot_9",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 98,
+      "old": "field_24",
+      "new": "reserved_slot_10",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 100,
+      "old": "field_28",
+      "new": "reserved_slot_11",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 102,
+      "old": "field_2C",
+      "new": "reserved_slot_12",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 104,
+      "old": "field_30",
+      "new": "reserved_slot_13",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 106,
+      "old": "field_34",
+      "new": "reserved_slot_14",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 108,
+      "old": "field_38",
+      "new": "reserved_slot_15",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 110,
+      "old": "field_3C",
+      "new": "reserved_slot_16",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 112,
+      "old": "field_40",
+      "new": "reserved_slot_17",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 114,
+      "old": "field_44",
+      "new": "reserved_slot_18",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 116,
+      "old": "field_48",
+      "new": "reserved_slot_19",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 118,
+      "old": "field_4C",
+      "new": "reserved_slot_20",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 120,
+      "old": "field_50",
+      "new": "reserved_slot_21",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 122,
+      "old": "field_54",
+      "new": "reserved_slot_22",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 124,
+      "old": "field_58",
+      "new": "reserved_slot_23",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 126,
+      "old": "field_5C",
+      "new": "reserved_slot_24",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 128,
+      "old": "field_60",
+      "new": "reserved_slot_25",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 130,
+      "old": "field_64",
+      "new": "reserved_slot_26",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 132,
+      "old": "field_68",
+      "new": "reserved_slot_27",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 134,
+      "old": "field_6C",
+      "new": "reserved_slot_28",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 136,
+      "old": "field_70",
+      "new": "reserved_slot_29",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 138,
+      "old": "field_74",
+      "new": "reserved_slot_30",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 140,
+      "old": "field_78",
+      "new": "reserved_slot_31",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 142,
+      "old": "field_7C",
+      "new": "reserved_slot_32",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 144,
+      "old": "field_80",
+      "new": "reserved_slot_33",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 146,
+      "old": "field_84",
+      "new": "reserved_slot_34",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 148,
+      "old": "field_88",
+      "new": "reserved_slot_35",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 150,
+      "old": "field_8C",
+      "new": "reserved_slot_36",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 152,
+      "old": "field_90",
+      "new": "reserved_slot_37",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 154,
+      "old": "field_94",
+      "new": "reserved_slot_38",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 156,
+      "old": "field_98",
+      "new": "reserved_slot_39",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 158,
+      "old": "field_9C",
+      "new": "reserved_slot_40",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 160,
+      "old": "field_A0",
+      "new": "reserved_slot_41",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 162,
+      "old": "field_A4",
+      "new": "reserved_slot_42",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 164,
+      "old": "field_A8",
+      "new": "reserved_slot_43",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 166,
+      "old": "field_AC",
+      "new": "reserved_slot_44",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 168,
+      "old": "field_B0",
+      "new": "reserved_slot_45",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 170,
+      "old": "field_B4",
+      "new": "reserved_slot_46",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 172,
+      "old": "field_B8",
+      "new": "reserved_slot_47",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 174,
+      "old": "field_BC",
+      "new": "reserved_slot_48",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 176,
+      "old": "field_C0",
+      "new": "reserved_slot_49",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 178,
+      "old": "field_C4",
+      "new": "reserved_slot_50",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 180,
+      "old": "field_C8",
+      "new": "reserved_slot_51",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 182,
+      "old": "field_CC",
+      "new": "reserved_slot_52",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 184,
+      "old": "field_D0",
+      "new": "reserved_slot_53",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 186,
+      "old": "field_D4",
+      "new": "reserved_slot_54",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 188,
+      "old": "field_D8",
+      "new": "reserved_slot_55",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 190,
+      "old": "field_DC",
+      "new": "reserved_slot_56",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 192,
+      "old": "field_E0",
+      "new": "reserved_slot_57",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 194,
+      "old": "field_E4",
+      "new": "reserved_slot_58",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 196,
+      "old": "field_E8",
+      "new": "reserved_slot_59",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 198,
+      "old": "field_EC",
+      "new": "reserved_slot_60",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 200,
+      "old": "field_F0",
+      "new": "reserved_slot_61",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 202,
+      "old": "field_F4",
+      "new": "reserved_slot_62",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 204,
+      "old": "field_F8",
+      "new": "reserved_slot_63",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 206,
+      "old": "field_FC",
+      "new": "reserved_slot_64",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 208,
+      "old": "field_100",
+      "new": "reserved_slot_65",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 210,
+      "old": "field_104",
+      "new": "reserved_slot_66",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 212,
+      "old": "field_108",
+      "new": "reserved_slot_67",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 214,
+      "old": "field_10C",
+      "new": "reserved_slot_68",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 216,
+      "old": "field_110",
+      "new": "reserved_slot_69",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 218,
+      "old": "field_114",
+      "new": "reserved_slot_70",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 220,
+      "old": "field_118",
+      "new": "reserved_slot_71",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 222,
+      "old": "field_11C",
+      "new": "reserved_slot_72",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 224,
+      "old": "field_120",
+      "new": "reserved_slot_73",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 226,
+      "old": "field_124",
+      "new": "reserved_slot_74",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 228,
+      "old": "field_128",
+      "new": "reserved_slot_75",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 230,
+      "old": "field_12C",
+      "new": "reserved_slot_76",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 232,
+      "old": "field_130",
+      "new": "reserved_slot_77",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 234,
+      "old": "field_134",
+      "new": "reserved_slot_78",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 236,
+      "old": "field_138",
+      "new": "reserved_slot_79",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 238,
+      "old": "field_13C",
+      "new": "reserved_slot_80",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 240,
+      "old": "field_140",
+      "new": "reserved_slot_81",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 242,
+      "old": "field_144",
+      "new": "reserved_slot_82",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 244,
+      "old": "field_148",
+      "new": "reserved_slot_83",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 246,
+      "old": "field_14C",
+      "new": "reserved_slot_84",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 248,
+      "old": "field_150",
+      "new": "reserved_slot_85",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 250,
+      "old": "field_154",
+      "new": "reserved_slot_86",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 252,
+      "old": "field_158",
+      "new": "reserved_slot_87",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 254,
+      "old": "field_15C",
+      "new": "reserved_slot_88",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 256,
+      "old": "field_160",
+      "new": "reserved_slot_89",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 258,
+      "old": "field_164",
+      "new": "reserved_slot_90",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 260,
+      "old": "field_168",
+      "new": "reserved_slot_91",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 262,
+      "old": "field_16C",
+      "new": "reserved_slot_92",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 264,
+      "old": "field_170",
+      "new": "reserved_slot_93",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 266,
+      "old": "field_174",
+      "new": "reserved_slot_94",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 268,
+      "old": "field_178",
+      "new": "reserved_slot_95",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 270,
+      "old": "field_17C",
+      "new": "reserved_slot_96",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 272,
+      "old": "field_180",
+      "new": "reserved_slot_97",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 274,
+      "old": "field_184",
+      "new": "reserved_slot_98",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 276,
+      "old": "field_188",
+      "new": "reserved_slot_99",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 278,
+      "old": "field_18C",
+      "new": "reserved_slot_100",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 280,
+      "old": "field_190",
+      "new": "reserved_slot_101",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 282,
+      "old": "field_194",
+      "new": "reserved_slot_102",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 284,
+      "old": "field_198",
+      "new": "reserved_slot_103",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 286,
+      "old": "field_19C",
+      "new": "reserved_slot_104",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 288,
+      "old": "field_1A0",
+      "new": "reserved_slot_105",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 290,
+      "old": "field_1A4",
+      "new": "reserved_slot_106",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 295,
+      "old": "field_1AC",
+      "new": "reserved_slot_107",
+      "type": "MultiplayerDeferredEntry"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 312,
+      "old": "field_3C",
+      "new": "reserved_slot_1",
+      "type": "MultiplayerObjectLock"
+    },
+    {
+      "file": "src/game/obj.c",
+      "token_index": 27,
+      "old": "field_40",
+      "new": "reserved_runtime_state",
+      "type": "Object"
+    },
+    {
+      "file": "src/game/obj_private.h",
+      "token_index": 54,
+      "old": "field_C",
+      "new": "reserved_slot_1",
+      "type": "ObjDataDescriptor"
+    },
+    {
+      "file": "src/game/script.c",
+      "token_index": 79,
+      "old": "field_14",
+      "new": "reserved_slot_1",
+      "type": "ScriptState"
+    },
+    {
+      "file": "src/game/script.c",
+      "token_index": 91,
+      "old": "field_3C4",
+      "new": "reserved_slot_2",
+      "type": "ScriptState"
+    },
+    {
+      "file": "src/game/sector.c",
+      "token_index": 115,
+      "old": "field_C",
+      "new": "reserved_slot_1",
+      "type": "SectorCacheEntry"
+    },
+    {
+      "file": "src/game/target.h",
+      "token_index": 46,
+      "old": "field_10",
+      "new": "reserved_slot_1",
+      "type": "TargetListEntry"
+    },
+    {
+      "file": "src/game/target.h",
+      "token_index": 48,
+      "old": "field_14",
+      "new": "reserved_slot_2",
+      "type": "TargetListEntry"
+    },
+    {
+      "file": "src/game/target.h",
+      "token_index": 50,
+      "old": "field_18",
+      "new": "reserved_slot_3",
+      "type": "TargetListEntry"
+    },
+    {
+      "file": "src/game/target.h",
+      "token_index": 52,
+      "old": "field_1C",
+      "new": "reserved_slot_4",
+      "type": "TargetListEntry"
+    },
+    {
+      "file": "src/game/target.h",
+      "token_index": 54,
+      "old": "field_20",
+      "new": "reserved_slot_5",
+      "type": "TargetListEntry"
+    },
+    {
+      "file": "src/game/target.h",
+      "token_index": 56,
+      "old": "field_24",
+      "new": "reserved_slot_6",
+      "type": "TargetListEntry"
+    },
+    {
+      "file": "src/game/target.h",
+      "token_index": 58,
+      "old": "field_28",
+      "new": "reserved_slot_7",
+      "type": "TargetListEntry"
+    },
+    {
+      "file": "src/game/target.h",
+      "token_index": 60,
+      "old": "field_2C",
+      "new": "reserved_slot_8",
+      "type": "TargetListEntry"
+    },
+    {
+      "file": "src/game/target.h",
+      "token_index": 62,
+      "old": "field_30",
+      "new": "reserved_slot_9",
+      "type": "TargetListEntry"
+    },
+    {
+      "file": "src/game/target.h",
+      "token_index": 64,
+      "old": "field_34",
+      "new": "reserved_slot_10",
+      "type": "TargetListEntry"
+    },
+    {
+      "file": "src/game/target.h",
+      "token_index": 124,
+      "old": "field_14",
+      "new": "reserved_slot_1",
+      "type": "TargetDescriptorEvaluation"
+    },
+    {
+      "file": "src/game/timeevent_node.h",
+      "token_index": 18,
+      "old": "field_D4",
+      "new": "reserved_slot_1",
+      "type": "TimeEventNode"
+    },
+    {
+      "file": "src/game/townmap.h",
+      "token_index": 13,
+      "old": "field_4",
+      "new": "reserved_slot_1",
+      "type": "TownMapInfo"
+    },
+    {
+      "file": "src/game/wallcheck.c",
+      "token_index": 24,
+      "old": "field_C",
+      "new": "reserved_slot_1",
+      "type": "FadedRoofReference"
+    },
+    {
+      "file": "src/game/wp.c",
+      "token_index": 12,
+      "old": "field_C",
+      "new": "reserved_slot_1",
+      "type": "WaypointDrawEntry"
+    },
+    {
+      "file": "src/ui/compact_ui.c",
+      "token_index": 40,
+      "old": "field_C",
+      "new": "reserved_slot_1",
+      "type": "CompactUiComponent"
+    },
+    {
+      "file": "src/ui/dialog_ui.c",
+      "token_index": 43,
+      "old": "field_185C",
+      "new": "reserved_slot_1",
+      "type": "DialogUiEntry"
+    },
+    {
+      "file": "src/ui/dialog_ui.c",
+      "token_index": 45,
+      "old": "field_185D",
+      "new": "reserved_slot_2",
+      "type": "DialogUiEntry"
+    },
+    {
+      "file": "src/ui/dialog_ui.c",
+      "token_index": 47,
+      "old": "field_185E",
+      "new": "reserved_slot_3",
+      "type": "DialogUiEntry"
+    },
+    {
+      "file": "src/ui/dialog_ui.c",
+      "token_index": 49,
+      "old": "field_185F",
+      "new": "reserved_slot_4",
+      "type": "DialogUiEntry"
+    },
+    {
+      "file": "src/ui/types.h",
+      "token_index": 137,
+      "old": "field_94",
+      "new": "reserved_slot_1",
+      "type": "MainMenuWindowInfo"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 138,
+      "old": "field_18",
+      "new": "reserved_data",
+      "type": "WmapTile"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 140,
+      "old": "field_1C",
+      "new": "reserved_data_size",
+      "type": "WmapTile"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 176,
+      "old": "field_50",
+      "new": "reserved_slot_1",
+      "type": "WmapInfo"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 212,
+      "old": "field_18C",
+      "new": "reserved_slot_2",
+      "type": "WmapInfo"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 220,
+      "old": "field_19C",
+      "new": "reserved_slot_3",
+      "type": "WmapInfo"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 222,
+      "old": "field_1A0",
+      "new": "reserved_slot_4",
+      "type": "WmapInfo"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 242,
+      "old": "field_0",
+      "new": "reserved_flags",
+      "type": "WmapRouteWaypoint"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 244,
+      "old": "field_4",
+      "new": "travel_value",
+      "type": "WmapRouteWaypoint"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 263,
+      "old": "field_3C4",
+      "new": "default_travel_value",
+      "type": "WmapRoute"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 267,
+      "old": "field_3CC",
+      "new": "reserved_slot_1",
+      "type": "WmapRoute"
+    },
+    {
+      "file": "first_party/tig/include/tig/art.h",
+      "token_index": 436,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/include/tig/art.h",
+      "token_index": 438,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/include/tig/database.h",
+      "token_index": 43,
+      "old": "field_24",
+      "new": "reserved_slot_1",
+      "type": "TigDatabase"
+    },
+    {
+      "file": "first_party/tig/include/tig/font.h",
+      "token_index": 49,
+      "old": "field_10",
+      "new": "reserved_slot_1",
+      "type": "TigFont"
+    },
+    {
+      "file": "first_party/tig/include/tig/font.h",
+      "token_index": 62,
+      "old": "field_28",
+      "new": "reserved_slot_2",
+      "type": "TigFont"
+    },
+    {
+      "file": "first_party/tig/include/tig/video.h",
+      "token_index": 149,
+      "old": "field_4",
+      "new": "legacy_mode",
+      "type": "TigVideoScreenshotSettings"
+    },
+    {
+      "file": "first_party/tig/include/tig/window.h",
+      "token_index": 81,
+      "old": "field_18",
+      "new": "reserved_slot_1",
+      "type": "TigWindowBlitInfo"
+    },
+    {
+      "file": "src/main.c",
+      "token_index": 362,
+      "old": "field_4",
+      "new": "legacy_mode",
+      "type": "TigVideoScreenshotSettings"
+    },
+    {
+      "file": "first_party/tig/src/video.c",
+      "token_index": 1117,
+      "old": "field_4",
+      "new": "legacy_mode",
+      "type": "TigVideoScreenshotSettings"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 3484,
+      "old": "field_8",
+      "new": "reserved_id",
+      "type": "AnimID"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 3505,
+      "old": "field_8",
+      "new": "reserved_id",
+      "type": "AnimID"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 3738,
+      "old": "field_8",
+      "new": "reserved_id",
+      "type": "AnimID"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 4217,
+      "old": "field_8",
+      "new": "reserved_id",
+      "type": "AnimID"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 24181,
+      "old": "field_8",
+      "new": "reserved_id",
+      "type": "AnimID"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 24659,
+      "old": "field_8",
+      "new": "reserved_id",
+      "type": "AnimID"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 24907,
+      "old": "field_8",
+      "new": "reserved_id",
+      "type": "AnimID"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 25088,
+      "old": "field_8",
+      "new": "reserved_id",
+      "type": "AnimID"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 27421,
+      "old": "field_8",
+      "new": "reserved_id",
+      "type": "AnimID"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 27574,
+      "old": "field_8",
+      "new": "reserved_id",
+      "type": "AnimID"
+    },
+    {
+      "file": "src/game/anim_private.c",
+      "token_index": 423,
+      "old": "field_8",
+      "new": "reserved_id",
+      "type": "AnimID"
+    },
+    {
+      "file": "src/game/anim_private.c",
+      "token_index": 534,
+      "old": "field_8",
+      "new": "reserved_id",
+      "type": "AnimID"
+    },
+    {
+      "file": "src/game/anim_private.c",
+      "token_index": 562,
+      "old": "field_8",
+      "new": "reserved_id",
+      "type": "AnimID"
+    },
+    {
+      "file": "src/game/anim_private.c",
+      "token_index": 1133,
+      "old": "field_8",
+      "new": "reserved_id",
+      "type": "AnimID"
+    },
+    {
+      "file": "src/game/anim_private.c",
+      "token_index": 1135,
+      "old": "field_8",
+      "new": "reserved_id",
+      "type": "AnimID"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 5859,
+      "old": "field_4",
+      "new": "reserved_mode",
+      "type": "Packet9"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 5865,
+      "old": "field_18",
+      "new": "object_reference",
+      "type": "Packet9"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 5900,
+      "old": "field_18",
+      "new": "object_reference",
+      "type": "Packet9"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 5870,
+      "old": "field_48",
+      "new": "use_lowest_priority",
+      "type": "Packet9"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 5905,
+      "old": "field_48",
+      "new": "use_lowest_priority",
+      "type": "Packet9"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 24866,
+      "old": "field_14",
+      "new": "reserved_movement_code",
+      "type": "AGModifyData"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 25047,
+      "old": "field_14",
+      "new": "reserved_movement_code",
+      "type": "AGModifyData"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 27384,
+      "old": "field_14",
+      "new": "reserved_movement_code",
+      "type": "AGModifyData"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 27537,
+      "old": "field_14",
+      "new": "reserved_movement_code",
+      "type": "AGModifyData"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 27744,
+      "old": "field_14",
+      "new": "reserved_movement_code",
+      "type": "AGModifyData"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 24872,
+      "old": "field_40",
+      "new": "extra_target_location",
+      "type": "Packet8"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 25053,
+      "old": "field_40",
+      "new": "extra_target_location",
+      "type": "Packet8"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 27414,
+      "old": "field_40",
+      "new": "extra_target_location",
+      "type": "Packet8"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 27567,
+      "old": "field_40",
+      "new": "extra_target_location",
+      "type": "Packet8"
+    },
+    {
+      "file": "src/game/item.c",
+      "token_index": 1009,
+      "old": "field_20",
+      "new": "distance",
+      "type": "Packet26"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 2458,
+      "old": "field_24",
+      "new": "consume_cost",
+      "type": "Packet76"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 2950,
+      "old": "field_60",
+      "new": "prototype_id",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 4885,
+      "old": "field_60",
+      "new": "prototype_id",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 4893,
+      "old": "field_60",
+      "new": "prototype_id",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 2973,
+      "old": "field_88",
+      "new": "summoned_object_id",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 3027,
+      "old": "field_88",
+      "new": "summoned_object_id",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 2979,
+      "old": "field_0",
+      "new": "summoner",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 2983,
+      "old": "field_0",
+      "new": "summoner",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 3076,
+      "old": "field_0",
+      "new": "summoner",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 3143,
+      "old": "field_0",
+      "new": "summoner",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 3148,
+      "old": "field_0",
+      "new": "summoner",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 3157,
+      "old": "field_0",
+      "new": "summoner",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 3164,
+      "old": "field_0",
+      "new": "summoner",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 4847,
+      "old": "field_0",
+      "new": "summoner",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 2988,
+      "old": "field_30",
+      "new": "target",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 2992,
+      "old": "field_30",
+      "new": "target",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 4853,
+      "old": "field_30",
+      "new": "target",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 2995,
+      "old": "field_A0",
+      "new": "source_swap_obj",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 3001,
+      "old": "field_A8",
+      "new": "source_swap_id",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 3121,
+      "old": "field_C8",
+      "new": "prototype_list",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 4872,
+      "old": "field_C8",
+      "new": "prototype_list",
+      "type": "MagicTechSummonInfo"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 4602,
+      "old": "field_8",
+      "new": "target_id",
+      "type": "PacketMagicTechObjFlag"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 132,
+      "old": "field_8",
+      "new": "message_flags",
+      "type": "Packet84"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 263,
+      "old": "field_30",
+      "new": "center_local_player_view",
+      "type": "ObjectMovePacket"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 291,
+      "old": "field_30",
+      "new": "center_local_player_view",
+      "type": "ObjectMovePacket"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 1004,
+      "old": "field_8",
+      "new": "source_id",
+      "type": "ObjectPullPacket"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 1025,
+      "old": "field_8",
+      "new": "source_id",
+      "type": "ObjectPullPacket"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 1008,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "ObjectPullPacket"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 1029,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "ObjectPullPacket"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 1060,
+      "old": "field_20",
+      "new": "preserve_persistent",
+      "type": "InventoryDestroyPacket"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 1080,
+      "old": "field_20",
+      "new": "preserve_persistent",
+      "type": "InventoryDestroyPacket"
+    },
+    {
+      "file": "src/game/mt_ai.c",
+      "token_index": 439,
+      "old": "field_2C",
+      "new": "reserved_slot_2",
+      "type": "MagicTechAi"
+    },
+    {
+      "file": "src/game/mt_ai.c",
+      "token_index": 492,
+      "old": "field_2C",
+      "new": "reserved_slot_2",
+      "type": "MagicTechAi"
+    },
+    {
+      "file": "src/game/mt_ai.c",
+      "token_index": 516,
+      "old": "field_2C",
+      "new": "reserved_slot_2",
+      "type": "MagicTechAi"
+    },
+    {
+      "file": "src/game/mt_obj_node.c",
+      "token_index": 66,
+      "old": "field_30",
+      "new": "reserved_serialized_state",
+      "type": "MagicTechObjectNode"
+    },
+    {
+      "file": "src/game/mt_obj_node.c",
+      "token_index": 199,
+      "old": "field_30",
+      "new": "reserved_serialized_state",
+      "type": "MagicTechObjectNode"
+    },
+    {
+      "file": "src/game/mt_obj_node.c",
+      "token_index": 202,
+      "old": "field_30",
+      "new": "reserved_serialized_state",
+      "type": "MagicTechObjectNode"
+    },
+    {
+      "file": "src/game/mt_obj_node.c",
+      "token_index": 319,
+      "old": "field_30",
+      "new": "reserved_serialized_state",
+      "type": "MagicTechObjectNode"
+    },
+    {
+      "file": "src/game/mt_obj_node.c",
+      "token_index": 322,
+      "old": "field_30",
+      "new": "reserved_serialized_state",
+      "type": "MagicTechObjectNode"
+    },
+    {
+      "file": "src/game/mt_obj_node.c",
+      "token_index": 374,
+      "old": "field_30",
+      "new": "reserved_serialized_state",
+      "type": "MagicTechObjectNode"
+    },
+    {
+      "file": "src/game/mt_obj_node.c",
+      "token_index": 377,
+      "old": "field_30",
+      "new": "reserved_serialized_state",
+      "type": "MagicTechObjectNode"
+    },
+    {
+      "file": "src/game/mt_obj_node.c",
+      "token_index": 426,
+      "old": "field_30",
+      "new": "reserved_serialized_state",
+      "type": "MagicTechObjectNode"
+    },
+    {
+      "file": "src/game/mt_obj_node.c",
+      "token_index": 429,
+      "old": "field_30",
+      "new": "reserved_serialized_state",
+      "type": "MagicTechObjectNode"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 1149,
+      "old": "field_20",
+      "new": "reserved_slot_2",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 1151,
+      "old": "field_24",
+      "new": "reserved_slot_3",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 1153,
+      "old": "field_28",
+      "new": "reserved_slot_4",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 1155,
+      "old": "field_2C",
+      "new": "reserved_slot_5",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 1157,
+      "old": "field_30",
+      "new": "reserved_slot_6",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 1159,
+      "old": "field_34",
+      "new": "reserved_slot_7",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 1168,
+      "old": "field_38",
+      "new": "reserved_slot_8",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 1171,
+      "old": "field_38",
+      "new": "reserved_slot_8",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 1173,
+      "old": "field_38",
+      "new": "reserved_slot_8",
+      "type": "MultiplayerPlayerState"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 1694,
+      "old": "field_118",
+      "new": "reserved_slot_3",
+      "type": "Packet64"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 1934,
+      "old": "field_4",
+      "new": "value",
+      "type": "Packet67"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 1978,
+      "old": "field_8",
+      "new": "object_reference",
+      "type": "PacketNotifyPlayerLagging"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 2002,
+      "old": "field_8",
+      "new": "object_reference",
+      "type": "PacketNotifyPlayerRecovered"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 2464,
+      "old": "field_3C",
+      "new": "request_mode",
+      "type": "Packet80"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 4096,
+      "old": "field_4",
+      "new": "client_id",
+      "type": "Packet93"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 4165,
+      "old": "field_4",
+      "new": "client_id",
+      "type": "Packet93"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 4099,
+      "old": "field_20",
+      "new": "active",
+      "type": "Packet93"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 4168,
+      "old": "field_20",
+      "new": "active",
+      "type": "Packet93"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 4290,
+      "old": "field_8",
+      "new": "viewer_id",
+      "type": "Packet97"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 4297,
+      "old": "field_20",
+      "new": "inventory_owner_id",
+      "type": "Packet97"
+    },
+    {
+      "file": "src/game/multiplayer.c",
+      "token_index": 4302,
+      "old": "field_20",
+      "new": "inventory_owner_id",
+      "type": "Packet97"
+    },
+    {
+      "file": "src/game/obj.c",
+      "token_index": 1207,
+      "old": "field_40",
+      "new": "reserved_runtime_state",
+      "type": "Object"
+    },
+    {
+      "file": "src/game/obj.c",
+      "token_index": 1277,
+      "old": "field_40",
+      "new": "reserved_runtime_state",
+      "type": "Object"
+    },
+    {
+      "file": "src/game/obj.c",
+      "token_index": 1561,
+      "old": "field_40",
+      "new": "reserved_runtime_state",
+      "type": "Object"
+    },
+    {
+      "file": "src/game/obj.c",
+      "token_index": 1563,
+      "old": "field_40",
+      "new": "reserved_runtime_state",
+      "type": "Object"
+    },
+    {
+      "file": "src/game/obj.c",
+      "token_index": 1703,
+      "old": "field_40",
+      "new": "reserved_runtime_state",
+      "type": "Object"
+    },
+    {
+      "file": "src/game/obj.c",
+      "token_index": 5512,
+      "old": "field_40",
+      "new": "reserved_runtime_state",
+      "type": "Object"
+    },
+    {
+      "file": "src/game/obj.c",
+      "token_index": 5720,
+      "old": "field_40",
+      "new": "reserved_runtime_state",
+      "type": "Object"
+    },
+    {
+      "file": "src/game/obj.c",
+      "token_index": 5923,
+      "old": "field_40",
+      "new": "reserved_runtime_state",
+      "type": "Object"
+    },
+    {
+      "file": "src/game/obj.c",
+      "token_index": 6152,
+      "old": "field_40",
+      "new": "reserved_runtime_state",
+      "type": "Object"
+    },
+    {
+      "file": "src/game/object.c",
+      "token_index": 9666,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "src/game/tile.c",
+      "token_index": 1445,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 1158,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 1162,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 1166,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 1170,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 1183,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 1187,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 1191,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 1195,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 7136,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 7201,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 7263,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 7328,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 7395,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 7462,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 7655,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 7728,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 7795,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 7858,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9186,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9235,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9281,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9330,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9381,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9432,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9609,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9666,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9717,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9764,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9800,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9805,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9810,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9815,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9820,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9825,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9830,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9835,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9840,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9845,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9850,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9855,
+      "old": "field_14",
+      "new": "blend_colors",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "src/game/tile.c",
+      "token_index": 1489,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 1174,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9862,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9870,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9879,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9887,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9896,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9904,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9913,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9921,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9930,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9938,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9947,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9955,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9972,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9979,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9986,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 9995,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 10004,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "first_party/tig/src/art.c",
+      "token_index": 10013,
+      "old": "field_18",
+      "new": "blend_rect",
+      "type": "TigArtBlitInfo"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7490,
+      "old": "field_5C",
+      "new": "price",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7684,
+      "old": "field_5C",
+      "new": "price",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7493,
+      "old": "field_8",
+      "new": "transaction_flags",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7681,
+      "old": "field_8",
+      "new": "transaction_flags",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7499,
+      "old": "field_28",
+      "new": "source_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7504,
+      "old": "field_28",
+      "new": "source_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7608,
+      "old": "field_28",
+      "new": "source_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7614,
+      "old": "field_28",
+      "new": "source_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7617,
+      "old": "field_28",
+      "new": "source_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7691,
+      "old": "field_28",
+      "new": "source_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7508,
+      "old": "field_58",
+      "new": "destination_slot",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7687,
+      "old": "field_58",
+      "new": "destination_slot",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7514,
+      "old": "field_10",
+      "new": "item_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7519,
+      "old": "field_10",
+      "new": "item_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7581,
+      "old": "field_10",
+      "new": "item_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7584,
+      "old": "field_10",
+      "new": "item_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7589,
+      "old": "field_10",
+      "new": "item_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7695,
+      "old": "field_10",
+      "new": "item_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7526,
+      "old": "field_40",
+      "new": "destination_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7531,
+      "old": "field_40",
+      "new": "destination_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7592,
+      "old": "field_40",
+      "new": "destination_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7598,
+      "old": "field_40",
+      "new": "destination_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7601,
+      "old": "field_40",
+      "new": "destination_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7699,
+      "old": "field_40",
+      "new": "destination_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7538,
+      "old": "field_70",
+      "new": "merchant_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7543,
+      "old": "field_70",
+      "new": "merchant_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7703,
+      "old": "field_70",
+      "new": "merchant_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7550,
+      "old": "field_88",
+      "new": "target_inventory_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7555,
+      "old": "field_88",
+      "new": "target_inventory_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7707,
+      "old": "field_88",
+      "new": "target_inventory_owner_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7562,
+      "old": "field_A0",
+      "new": "pc_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7567,
+      "old": "field_A0",
+      "new": "pc_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7711,
+      "old": "field_A0",
+      "new": "pc_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7571,
+      "old": "field_60",
+      "new": "quantity",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7624,
+      "old": "field_60",
+      "new": "quantity",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7627,
+      "old": "field_60",
+      "new": "quantity",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7678,
+      "old": "field_60",
+      "new": "quantity",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 7574,
+      "old": "field_68",
+      "new": "client_id",
+      "type": "InventoryTransactionPacket"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 1546,
+      "old": "field_3C4",
+      "new": "default_travel_value",
+      "type": "WmapRoute"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 1820,
+      "old": "field_3C4",
+      "new": "default_travel_value",
+      "type": "WmapRoute"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 7245,
+      "old": "field_3C4",
+      "new": "default_travel_value",
+      "type": "WmapRoute"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 1606,
+      "old": "field_18",
+      "new": "reserved_data",
+      "type": "WmapTile"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 1613,
+      "old": "field_18",
+      "new": "reserved_data",
+      "type": "WmapTile"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 2643,
+      "old": "field_18",
+      "new": "reserved_data",
+      "type": "WmapTile"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 5498,
+      "old": "field_18",
+      "new": "reserved_data",
+      "type": "WmapTile"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 2646,
+      "old": "field_1C",
+      "new": "reserved_data_size",
+      "type": "WmapTile"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 5501,
+      "old": "field_1C",
+      "new": "reserved_data_size",
+      "type": "WmapTile"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 3645,
+      "old": "field_4",
+      "new": "travel_value",
+      "type": "WmapRouteWaypoint"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 3748,
+      "old": "field_4",
+      "new": "travel_value",
+      "type": "WmapRouteWaypoint"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 7238,
+      "old": "field_4",
+      "new": "travel_value",
+      "type": "WmapRouteWaypoint"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 7411,
+      "old": "field_4",
+      "new": "travel_value",
+      "type": "WmapRouteWaypoint"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 7418,
+      "old": "field_4",
+      "new": "travel_value",
+      "type": "WmapRouteWaypoint"
+    },
+    {
+      "file": "src/ui/wmap_ui.c",
+      "token_index": 7230,
+      "old": "field_0",
+      "new": "reserved_flags",
+      "type": "WmapRouteWaypoint"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 24144,
+      "old": "field_14",
+      "new": "reserved_movement_code",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 24618,
+      "old": "field_14",
+      "new": "reserved_movement_code",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/anim.c",
+      "token_index": 24630,
+      "old": "field_40",
+      "new": "extra_target_location",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 5335,
+      "old": "field_48",
+      "new": "indexed_trait_mode",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 11860,
+      "old": "field_4",
+      "new": "reserved_slot_1",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 11872,
+      "old": "field_C",
+      "new": "reserved_slot_3",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 11876,
+      "old": "field_8",
+      "new": "reserved_slot_2",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/magictech.c",
+      "token_index": 11911,
+      "old": "field_48",
+      "new": "indexed_trait_mode",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 86,
+      "old": "field_30",
+      "new": "reserved_creation_flags",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 324,
+      "old": "field_8",
+      "new": "source_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 330,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 361,
+      "old": "field_8",
+      "new": "primary_value",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 366,
+      "old": "field_C",
+      "new": "secondary_value",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 400,
+      "old": "field_8",
+      "new": "source_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 406,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 442,
+      "old": "field_8",
+      "new": "source_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 448,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 476,
+      "old": "field_8",
+      "new": "source_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 482,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 518,
+      "old": "field_8",
+      "new": "source_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 524,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 551,
+      "old": "field_8",
+      "new": "object_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 558,
+      "old": "field_8",
+      "new": "primary_value",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 562,
+      "old": "field_C",
+      "new": "secondary_value",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 569,
+      "old": "field_8",
+      "new": "primary_value",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 573,
+      "old": "field_C",
+      "new": "secondary_value",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 580,
+      "old": "field_8",
+      "new": "success",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 585,
+      "old": "field_10",
+      "new": "primary_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 590,
+      "old": "field_28",
+      "new": "secondary_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 597,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 603,
+      "old": "field_8",
+      "new": "source_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 617,
+      "old": "field_8",
+      "new": "source_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 623,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 637,
+      "old": "field_8",
+      "new": "source_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 643,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 657,
+      "old": "field_8",
+      "new": "source_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 663,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 677,
+      "old": "field_8",
+      "new": "source_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 683,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 697,
+      "old": "field_8",
+      "new": "source_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 703,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 717,
+      "old": "field_8",
+      "new": "pc_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 727,
+      "old": "field_20",
+      "new": "error_code",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 733,
+      "old": "field_8",
+      "new": "pc_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 739,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 745,
+      "old": "field_3C",
+      "new": "stage",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 756,
+      "old": "field_38",
+      "new": "inventory_mode",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 762,
+      "old": "field_3C",
+      "new": "stage",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 779,
+      "old": "field_38",
+      "new": "inventory_mode",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 785,
+      "old": "field_3C",
+      "new": "stage",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 800,
+      "old": "field_38",
+      "new": "inventory_mode",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 806,
+      "old": "field_3C",
+      "new": "stage",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.c",
+      "token_index": 822,
+      "old": "field_38",
+      "new": "inventory_mode",
+      "type": "manual"
+    },
+    {
+      "file": "src/ui/charedit_ui.c",
+      "token_index": 338,
+      "old": "field_8",
+      "new": "reserved_layout_value",
+      "type": "manual"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 640,
+      "old": "field_8",
+      "new": "pc_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 646,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "manual"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 650,
+      "old": "field_38",
+      "new": "inventory_mode",
+      "type": "manual"
+    },
+    {
+      "file": "src/ui/inven_ui.c",
+      "token_index": 655,
+      "old": "field_3C",
+      "new": "stage",
+      "type": "manual"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 837,
+      "old": "field_8",
+      "new": "primary_value",
+      "type": "UiRequestPacket.a"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 839,
+      "old": "field_C",
+      "new": "secondary_value",
+      "type": "UiRequestPacket.a"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 843,
+      "old": "field_8",
+      "new": "object_id",
+      "type": "UiRequestPacket.b"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 847,
+      "old": "field_8",
+      "new": "success",
+      "type": "UiRequestPacket.c"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 849,
+      "old": "field_10",
+      "new": "primary_id",
+      "type": "UiRequestPacket.c"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 851,
+      "old": "field_28",
+      "new": "secondary_id",
+      "type": "UiRequestPacket.c"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 855,
+      "old": "field_8",
+      "new": "source_id",
+      "type": "UiRequestPacket.s"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 857,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "UiRequestPacket.s"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 861,
+      "old": "field_8",
+      "new": "pc_id",
+      "type": "UiRequestPacket.x"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 863,
+      "old": "field_20",
+      "new": "error_code",
+      "type": "UiRequestPacket.x"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 867,
+      "old": "field_8",
+      "new": "pc_id",
+      "type": "UiRequestPacket.z"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 869,
+      "old": "field_20",
+      "new": "target_id",
+      "type": "UiRequestPacket.z"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 871,
+      "old": "field_38",
+      "new": "inventory_mode",
+      "type": "UiRequestPacket.z"
+    },
+    {
+      "file": "src/game/mp_utils.h",
+      "token_index": 873,
+      "old": "field_3C",
+      "new": "stage",
+      "type": "UiRequestPacket.z"
+    }
+  ],
+  "note": "Reserved names mark unused or opaque legacy storage. They do not establish a previously unknown gameplay meaning."
+}

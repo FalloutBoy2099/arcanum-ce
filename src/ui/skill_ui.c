@@ -1,5 +1,6 @@
 #include "ui/skill_ui.h"
 #include "game/activity_time.h"
+#include "game/progression_rules.h"
 
 #include "game/anim.h"
 #include "game/critter.h"
@@ -23,7 +24,7 @@
 static bool skill_ui_pickpocket_is_forbidden(int64_t obj);
 static void skill_ui_best_follower_select(SkillInvocation* skill_invocation);
 static void skill_ui_invocation_execute(SkillInvocation* skill_invocation);
-static bool skill_ui_open_steal_or_loot(int64_t a1, int64_t a2);
+static bool skill_ui_open_steal_or_loot(int64_t pc_obj, int64_t target_obj);
 static bool skill_ui_result_feedback_primary(int64_t source_obj, int64_t target_obj, bool success);
 static bool skill_ui_steal_item(int64_t source_obj, int64_t target_obj, int64_t item_obj, bool success);
 static bool skill_ui_plant_item(int64_t source_obj, int64_t target_obj, int64_t item_obj, bool success);
@@ -235,7 +236,7 @@ void skill_ui_apply(TargetDescriptor* td)
 }
 
 // 0x57A320
-void skill_ui_activate(TargetDescriptor* td, int64_t obj, int a3)
+void skill_ui_activate(TargetDescriptor* td, int64_t obj, int requested_skill)
 {
     bool is_pc;
     int skill;
@@ -248,7 +249,7 @@ void skill_ui_activate(TargetDescriptor* td, int64_t obj, int a3)
     }
 
     is_pc = player_is_local_pc_obj(obj);
-    skill = skill_ui_target_skill_resolve(a3, td);
+    skill = skill_ui_target_skill_resolve(requested_skill, td);
 
     switch (skill) {
     case SKILL_PICK_POCKET:
@@ -347,18 +348,18 @@ void skill_ui_invocation_execute(SkillInvocation* skill_invocation)
 // 0x57A6C0
 int skill_ui_target_skill_resolve(int skill, TargetDescriptor* td)
 {
-    int v1;
+    int resolved_skill;
     int complexity;
 
-    v1 = skill_ui_action_skills[skill];
-    if (v1 == -1) {
+    resolved_skill = skill_ui_action_skills[skill];
+    if (resolved_skill == -1) {
         complexity = obj_field_int32_get(td->obj, OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY);
         if (skill == 3 && complexity >= 20) {
-            v1 = SKILL_REPAIR;
+            resolved_skill = SKILL_REPAIR;
         }
     }
 
-    return v1;
+    return resolved_skill;
 }
 
 // 0x57A700
@@ -653,13 +654,13 @@ void skill_ui_set_training(int64_t obj, int skill, int training)
 // 0x57ACD0
 void skill_ui_inc_skill(int64_t obj, int skill)
 {
-    bool is_pc;
+    bool is_edited;
     int base;
     int level;
     int cost;
     int points;
 
-    is_pc = player_is_local_pc_obj(obj);
+    is_edited = charedit_is_editing(obj);
     if (IS_TECH_SKILL(skill)) {
         skill = GET_TECH_SKILL(skill);
         base = tech_skill_points_get(obj, skill);
@@ -667,7 +668,7 @@ void skill_ui_inc_skill(int64_t obj, int skill)
         cost = tech_skill_cost_inc(obj, skill);
         points = stat_level_get(obj, STAT_UNSPENT_POINTS);
         if (cost > points) {
-            if (is_pc && charedit_is_created()) {
+            if (is_edited) {
                 charedit_error_not_enough_character_points();
             }
             return;
@@ -675,11 +676,11 @@ void skill_ui_inc_skill(int64_t obj, int skill)
 
         if (tech_skill_points_set(obj, skill, base + cost) != base + cost) {
             if (level == 20) {
-                if (is_pc && charedit_is_created()) {
+                if (is_edited) {
                     charedit_error_skill_at_max();
                 }
             } else {
-                if (is_pc && charedit_is_created()) {
+                if (is_edited) {
                     charedit_error_not_enough_stat(tech_skill_stat(skill));
                 }
             }
@@ -688,7 +689,7 @@ void skill_ui_inc_skill(int64_t obj, int skill)
 
         stat_base_set(obj, STAT_UNSPENT_POINTS, points - cost);
         activity_time_record(obj, ACTIVITY_TIME_SKILL_POINTS, cost);
-        if (charedit_is_created()) {
+        if (is_edited) {
             charedit_refresh();
             intgame_message_window_clear();
         }
@@ -699,7 +700,7 @@ void skill_ui_inc_skill(int64_t obj, int skill)
         cost = basic_skill_cost_inc(obj, skill);
         points = stat_level_get(obj, STAT_UNSPENT_POINTS);
         if (cost > points) {
-            if (is_pc && charedit_is_created()) {
+            if (is_edited) {
                 charedit_error_not_enough_character_points();
             }
             return;
@@ -707,11 +708,11 @@ void skill_ui_inc_skill(int64_t obj, int skill)
 
         if (basic_skill_points_set(obj, skill, base + cost) != base + cost) {
             if (level == 20) {
-                if (is_pc && charedit_is_created()) {
+                if (is_edited) {
                     charedit_error_skill_at_max();
                 }
             } else {
-                if (is_pc && charedit_is_created()) {
+                if (is_edited) {
                     charedit_error_not_enough_stat(basic_skill_stat(skill));
                 }
             }
@@ -720,7 +721,7 @@ void skill_ui_inc_skill(int64_t obj, int skill)
 
         stat_base_set(obj, STAT_UNSPENT_POINTS, points - cost);
         activity_time_record(obj, ACTIVITY_TIME_SKILL_POINTS, cost);
-        if (charedit_is_created()) {
+        if (is_edited) {
             charedit_refresh();
             intgame_message_window_clear();
         }
@@ -730,13 +731,13 @@ void skill_ui_inc_skill(int64_t obj, int skill)
 // 0x57AEB0
 void skill_ui_dec_skill(int64_t obj, int skill)
 {
-    bool is_pc;
+    bool is_edited;
     int base;
     int level;
     int cost;
     int points;
 
-    is_pc = player_is_local_pc_obj(obj);
+    is_edited = charedit_is_editing(obj);
     if (IS_TECH_SKILL(skill)) {
         skill = GET_TECH_SKILL(skill);
         base = tech_skill_points_get(obj, skill);
@@ -746,20 +747,20 @@ void skill_ui_dec_skill(int64_t obj, int skill)
 
         if (tech_skill_points_set(obj, skill, base - cost) != base - cost) {
             if (tech_skill_points_get(obj, skill) != 0) {
-                if (is_pc && charedit_is_created()) {
+                if (is_edited) {
                     charedit_error_skill_at_min();
                 }
             } else {
-                if (is_pc && charedit_is_created()) {
+                if (is_edited) {
                     charedit_error_skill_is_zero();
                 }
             }
             return;
         }
 
-        stat_base_set(obj, STAT_UNSPENT_POINTS, points + cost);
+        stat_base_set(obj, STAT_UNSPENT_POINTS, progression_points_add(points, cost));
         activity_time_record(obj, ACTIVITY_TIME_SKILL_POINTS, -cost);
-        if (charedit_is_created()) {
+        if (is_edited) {
             charedit_refresh();
             intgame_message_window_clear();
         }
@@ -783,9 +784,9 @@ void skill_ui_dec_skill(int64_t obj, int skill)
                 return;
             }
 
-            points = stat_base_set(obj, STAT_UNSPENT_POINTS, points + cost);
+            points = stat_base_set(obj, STAT_UNSPENT_POINTS, progression_points_add(points, cost));
             activity_time_record(obj, ACTIVITY_TIME_SKILL_POINTS, -cost);
-            if (charedit_is_created()) {
+            if (is_edited) {
                 charedit_refresh();
                 intgame_message_window_clear();
             }

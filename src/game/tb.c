@@ -6,6 +6,7 @@
 
 #include "game/dialog_camera.h"
 #include "game/gamelib.h"
+#include "game/floating_background.h"
 #include "game/highres_config.h"
 #include "game/modern_font.h"
 #include "game/tc.h"
@@ -151,6 +152,7 @@ static uint8_t tb_colors[TB_TYPE_COUNT][3] = {
  * 0x5B8EB0
  */
 static TigRect tb_content_rect;
+static TigRect tb_text_content_rect;
 static float tb_font_scale = 1.0f;
 static bool tb_update_buffer_size(void);
 
@@ -207,7 +209,7 @@ static tig_window_handle_t tb_iso_window_handle;
 /**
  * 0x602AC0
  */
-static int dword_602AC0;
+static int tb_unused_black_color;
 
 /**
  * Background color for text bubbles.
@@ -286,7 +288,7 @@ bool tb_init(GameInitInfo* init_info)
     tb_enabled = true;
     tb_background_color = tig_color_make(0, 0, 255);
 
-    dword_602AC0 = tig_color_make(0, 0, 0);
+    tb_unused_black_color = tig_color_make(0, 0, 0);
 
     // Set up font creation parameters.
     tig_art_interface_id_create(229, 0, 0, 0, &(font.art_id));
@@ -425,7 +427,12 @@ static bool tb_update_buffer_size(void)
     TigVideoBufferCreateInfo info = { 0 };
     text_bubble_dimensions(tb_font_scale, tb_iso_content_rect.width,
         tb_iso_content_rect.height, &width, &height);
-    if (tb_content_rect.width == width && tb_content_rect.height == height) {
+    int horizontal = floating_margin_horizontal();
+    int vertical = floating_margin_vertical();
+    width += horizontal * 2;
+    height += vertical * 2;
+    if (tb_content_rect.width == width && tb_content_rect.height == height
+        && tb_text_content_rect.x == horizontal && tb_text_content_rect.y == vertical) {
         return true;
     }
     info.flags = TIG_VIDEO_BUFFER_CREATE_SYSTEM_MEMORY | TIG_VIDEO_BUFFER_CREATE_COLOR_KEY;
@@ -441,13 +448,15 @@ static bool tb_update_buffer_size(void)
     }
     tb_content_rect.width = width;
     tb_content_rect.height = height;
+    tb_text_content_rect = (TigRect){ horizontal, vertical, width - horizontal * 2, height - vertical * 2 };
     for (int i = 0; i < MAX_TEXT_BUBBLES; i++) {
         TextBubble* bubble = &tb_text_bubbles[i];
         if (bubble->video_buffer != NULL) tig_video_buffer_destroy(bubble->video_buffer);
         bubble->video_buffer = buffers[i];
         if ((bubble->flags & TEXT_BUBBLE_IN_USE) != 0) {
             tig_font_push(tb_fonts[bubble->type]);
-            tig_font_write(bubble->video_buffer, bubble->str, &tb_content_rect, &bubble->rect);
+            tig_font_write(bubble->video_buffer, bubble->str, &tb_text_content_rect, &bubble->rect);
+            bubble->rect = floating_background_pad(bubble->rect, tb_content_rect);
             tig_font_pop();
             bubble->rendered_align = TB_ALIGN_INVALID;
         }
@@ -598,6 +607,7 @@ void tb_draw(GameDrawInfo* draw_info)
 
                 // Copy the affected portion of text bubble's video buffer
                 // onto the window.
+                floating_background_draw(tb_iso_window_handle, &dst_rect, 255);
                 tig_window_copy_from_vbuffer(tb_iso_window_handle,
                     &dst_rect,
                     tb_text_bubbles[idx].video_buffer,
@@ -629,7 +639,8 @@ void tb_add(int64_t obj, int type, const char* str)
 
     // Render text to the video buffer.
     tig_font_push(tb_fonts[type]);
-    tig_font_write(tb->video_buffer, str, &tb_content_rect, &dirty_rect);
+    tig_font_write(tb->video_buffer, str, &tb_text_content_rect, &dirty_rect);
+    dirty_rect = floating_background_pad(dirty_rect, tb_content_rect);
     tig_font_pop();
 
     // Set up the text bubble properties.
@@ -1057,7 +1068,8 @@ void tb_calc_rect_ex(TextBubble* tb, int64_t loc, int offset_x, int offset_y, Ti
                                                                                tb_fonts;
             tig_video_buffer_fill(tb->video_buffer, &tb_content_rect, tb_background_color);
             tig_font_push(font_set[tb->type]);
-            tig_font_write(tb->video_buffer, tb->str, &tb_content_rect, &dirty_rect);
+            tig_font_write(tb->video_buffer, tb->str, &tb_text_content_rect, &dirty_rect);
+            dirty_rect = floating_background_pad(dirty_rect, tb_content_rect);
             tig_font_pop();
             tb->rect    = dirty_rect;
             rect->width  = tb->rect.width;

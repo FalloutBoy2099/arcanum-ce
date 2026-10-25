@@ -2,6 +2,7 @@
 #define ARCANUM_GAME_LEVEL_H_
 
 #include "game/context.h"
+#include "game/level_progression.h"
 
 bool level_init(GameInitInfo* init_info);
 void level_exit(void);

@@ -1,6 +1,7 @@
 #include "game/tf.h"
 
 #include "game/gamelib.h"
+#include "game/floating_background.h"
 #include "game/iso_zoom.h"
 #include "game/modern_font.h"
 #include "game/object.h"
@@ -103,7 +104,7 @@ static TigRect tf_iso_content_rect;
 /**
  * 0x6028C0
  */
-static tig_color_t dword_6028C0;
+static tig_color_t tf_unused_black_color;
 
 /**
  * Function pointer to invalidate a rectangle in the parent window.
@@ -125,6 +126,7 @@ static tig_color_t tf_background_color;
  * 0x6028D0
  */
 static TigRect tf_entry_content_rect;
+static TigRect tf_text_content_rect;
 
 /**
  * Head of the active text floaters.
@@ -200,7 +202,7 @@ bool tf_init(GameInitInfo* init_info)
     text_floater_view_options.type = VIEW_TYPE_ISOMETRIC;
 
     tf_background_color = tig_color_make(0, 0, 255);
-    dword_6028C0 = tig_color_make(0, 0, 0);
+    tf_unused_black_color = tig_color_make(0, 0, 0);
 
     // Set up font creation parameters.
     font_desc.flags = TIG_FONT_NO_ALPHA_BLEND | TIG_FONT_SHADOW;
@@ -249,15 +251,19 @@ bool tf_init(GameInitInfo* init_info)
     }
 
     // Set up content rect for a text floater list.
+    int horizontal = floating_margin_horizontal();
+    int vertical = floating_margin_vertical();
+    tf_text_content_rect = (TigRect){ horizontal, vertical, TEXT_FLOATER_WIDTH, tf_line_height };
+    tf_line_height += vertical * 2;
     tf_list_content_rect.x = 0;
     tf_list_content_rect.y = 0;
-    tf_list_content_rect.width = TEXT_FLOATER_WIDTH;
+    tf_list_content_rect.width = TEXT_FLOATER_WIDTH + horizontal * 2;
     tf_list_content_rect.height = NUMBER_OF_LINES * tf_line_height;
 
     // Set up content rect for a text floater entry.
     tf_entry_content_rect.x = 0;
     tf_entry_content_rect.y = 0;
-    tf_entry_content_rect.width = TEXT_FLOATER_WIDTH;
+    tf_entry_content_rect.width = TEXT_FLOATER_WIDTH + horizontal * 2;
     tf_entry_content_rect.height = tf_line_height;
 
     // Register `text floaters` setting and initialize it.
@@ -532,8 +538,8 @@ void tf_draw(GameDrawInfo* draw_info)
                 }
 
                 // Calculate source rectangle for blitting.
-                src_rect.x = dst_rect.x - entry_rect.x;
-                src_rect.y = dst_rect.y - entry_rect.y;
+                src_rect.x = dst_rect.x - entry_rect.x + entry->rect.x;
+                src_rect.y = dst_rect.y - entry_rect.y + entry->rect.y;
                 src_rect.width = dst_rect.width;
                 src_rect.height = dst_rect.height;
 
@@ -541,6 +547,7 @@ void tf_draw(GameDrawInfo* draw_info)
                 window_blit_info.alpha[0] = entry->opacity;
 
                 // Blit the affected entry rect to the window.
+                floating_background_draw(tf_iso_window_handle, &dst_rect, entry->opacity);
                 tig_window_blit(&window_blit_info);
             }
         }
@@ -608,7 +615,8 @@ void tf_add(int64_t obj, int type, const char* str)
 
     // Render text to the video buffer.
     tig_font_push(tf_fonts[type]);
-    tig_font_write(entry->video_buffer, str, &tf_entry_content_rect, &(entry->rect));
+    tig_font_write(entry->video_buffer, str, &tf_text_content_rect, &(entry->rect));
+    entry->rect = floating_background_pad(entry->rect, tf_entry_content_rect);
     tig_font_pop();
 
     // Mark the object as having a text floater.
@@ -958,7 +966,7 @@ TextFloaterEntry* tf_entry_create(void)
 
     // Create a video buffer.
     vb_create_info.flags = TIG_VIDEO_BUFFER_CREATE_COLOR_KEY | TIG_VIDEO_BUFFER_CREATE_VIDEO_MEMORY;
-    vb_create_info.width = TEXT_FLOATER_WIDTH;
+    vb_create_info.width = tf_entry_content_rect.width;
     vb_create_info.height = tf_line_height;
     vb_create_info.background_color = tf_background_color;
     vb_create_info.color_key = tf_background_color;

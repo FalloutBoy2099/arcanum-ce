@@ -40,16 +40,16 @@ typedef struct TargetParams {
 typedef struct TargetListEntry {
     /* 0000 */ int64_t obj;
     /* 0008 */ int64_t loc;
-    /* 0010 */ int field_10;
-    /* 0014 */ int field_14;
-    /* 0018 */ int field_18;
-    /* 001C */ int field_1C;
-    /* 0020 */ int field_20;
-    /* 0024 */ int field_24;
-    /* 0028 */ int field_28;
-    /* 002C */ int field_2C;
-    /* 0030 */ int field_30;
-    /* 0034 */ int field_34;
+    /* 0010 */ int reserved_slot_1;
+    /* 0014 */ int reserved_slot_2;
+    /* 0018 */ int reserved_slot_3;
+    /* 001C */ int reserved_slot_4;
+    /* 0020 */ int reserved_slot_5;
+    /* 0024 */ int reserved_slot_6;
+    /* 0028 */ int reserved_slot_7;
+    /* 002C */ int reserved_slot_8;
+    /* 0030 */ int reserved_slot_9;
+    /* 0034 */ int reserved_slot_10;
 } TargetListEntry;
 
 /**
@@ -107,7 +107,7 @@ typedef struct TargetDescriptorEvaluation {
     /* 0000 */ int64_t source_obj;
     /* 0008 */ int64_t self_obj;
     /* 0010 */ TargetDescriptor* descriptor;
-    /* 0014 */ int field_14;
+    /* 0014 */ int reserved_slot_1;
 } TargetDescriptorEvaluation;
 
 // clang-format off

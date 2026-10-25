@@ -88,7 +88,7 @@ static ObjectRenderColors* render_color_array_alloc(void);
 static void render_color_array_free(ObjectRenderColors* colors);
 static void render_color_array_reserve(void);
 static void render_color_array_clear(void);
-static void object_toggle_flat(int64_t obj, bool a2);
+static void object_toggle_flat(int64_t obj, bool flat);
 static void object_setup_blit(int64_t obj, TigArtBlitInfo* blit_info);
 static void object_enqueue_blit(TigArtBlitInfo* blit_info, int order);
 static void object_flush_pending_blits(void);
@@ -97,7 +97,7 @@ static void object_art_screen_rect_build(unsigned int flags, int scale, int x, i
 static void object_shadow_clear(int64_t obj);
 static bool object_hover_marker_rect_get(TigRect* rect, tig_art_id_t art_id);
 static bool load_reaction_colors(void);
-static void object_location_environment_refresh(int64_t obj, int a2);
+static void object_location_environment_refresh(int64_t obj, int refresh_mode);
 static void object_lighting_changed(void);
 static void object_get_effective_iso_content_rect_ex(TigRect* rect);
 
@@ -377,16 +377,16 @@ void object_ping(tig_timestamp_t timestamp)
     TigRect bounds;
     TigRectListNode* next;
     LocRect loc_rect;
-    SectorRect v1;
+    SectorRect sector_rect;
     int col;
     int row;
-    SectorRectRow* v2;
+    SectorRectRow* sector_row;
     int indexes[3];
     int widths[3];
     bool locks[3];
     Sector* sectors[3];
-    int v4;
-    int v3;
+    int tile_column;
+    int tile_row;
     ObjectNode* obj_node;
     unsigned int render_flags;
     TigRect obj_rect;
@@ -426,24 +426,24 @@ void object_ping(tig_timestamp_t timestamp)
         next = object_dirty_rects_head->next;
         if (tig_rect_intersection(&(object_dirty_rects_head->rect), &bounds, &rect) == TIG_OK
             && location_screen_rect_to_loc_rect(&rect, &loc_rect)
-            && sector_rect_from_loc_rect(&loc_rect, &v1)) {
-            for (col = 0; col < v1.num_rows; col++) {
-                v2 = &(v1.rows[col]);
+            && sector_rect_from_loc_rect(&loc_rect, &sector_rect)) {
+            for (col = 0; col < sector_rect.num_rows; col++) {
+                sector_row = &(sector_rect.rows[col]);
 
-                for (row = 0; row < v2->num_cols; row++) {
-                    indexes[row] = v2->tile_ids[row];
-                    widths[row] = 64 - v2->num_hor_tiles[row];
-                    if (sector_loaded(v2->sector_ids[row])) {
-                        locks[row] = sector_lock(v2->sector_ids[row], &(sectors[row]));
+                for (row = 0; row < sector_row->num_cols; row++) {
+                    indexes[row] = sector_row->tile_ids[row];
+                    widths[row] = 64 - sector_row->num_hor_tiles[row];
+                    if (sector_loaded(sector_row->sector_ids[row])) {
+                        locks[row] = sector_lock(sector_row->sector_ids[row], &(sectors[row]));
                     } else {
                         locks[row] = false;
                     }
                 }
 
-                for (v3 = 0; v3 < v2->num_vert_tiles; v3++) {
-                    for (row = 0; row < v2->num_cols; row++) {
+                for (tile_row = 0; tile_row < sector_row->num_vert_tiles; tile_row++) {
+                    for (row = 0; row < sector_row->num_cols; row++) {
                         if (locks[row]) {
-                            for (v4 = 0; v4 < v2->num_hor_tiles[row]; v4++) {
+                            for (tile_column = 0; tile_column < sector_row->num_hor_tiles[row]; tile_column++) {
                                 obj_node = sectors[row]->objects.heads[indexes[row]];
                                 while (obj_node != NULL) {
                                     render_flags = obj_field_int32_get(obj_node->obj, OBJ_F_RENDER_FLAGS);
@@ -460,9 +460,9 @@ void object_ping(tig_timestamp_t timestamp)
                     }
                 }
 
-                for (row = 0; row < v2->num_cols; row++) {
+                for (row = 0; row < sector_row->num_cols; row++) {
                     if (locks[row]) {
-                        sector_unlock(v2->sector_ids[row]);
+                        sector_unlock(sector_row->sector_ids[row]);
                     }
                 }
             }
@@ -531,8 +531,8 @@ static inline bool object_render_check_rotation(int64_t obj)
 // 0x43B390
 void object_draw(GameDrawInfo* draw_info)
 {
-    SectorRect* v1;
-    SectorRectRow* v2;
+    SectorRect* sector_rect;
+    SectorRectRow* sector_row;
     bool is_detecting_invisible;
     int col;
     int row;
@@ -541,9 +541,9 @@ void object_draw(GameDrawInfo* draw_info)
     int widths[3];
     bool locks[3];
     Sector* sectors[3];
-    int v5[3];
-    int v3;
-    int v4;
+    int location_row_rewind[3];
+    int tile_row;
+    int tile_column;
     ObjectNode* obj_node;
     int obj_type;
     int obj_flags;
@@ -566,30 +566,30 @@ void object_draw(GameDrawInfo* draw_info)
     int overlay_order = 700000000;
     int order;
     bool art_blit_info_initialized;
-    bool v71;
+    bool skip_wading_overlay;
 
     if (object_view_options.type != VIEW_TYPE_ISOMETRIC) {
         return;
     }
 
-    v1 = draw_info->sector_rect;
+    sector_rect = draw_info->sector_rect;
     is_detecting_invisible = magictech_check_env_sf(OSF_DETECTING_INVISIBLE);
 
-    for (col = 0; col < v1->num_rows; col++) {
-        v2 = &(v1->rows[col]);
+    for (col = 0; col < sector_rect->num_rows; col++) {
+        sector_row = &(sector_rect->rows[col]);
 
-        for (row = 0; row < v2->num_cols; row++) {
-            locations[row] = v2->origin_locs[row];
-            indexes[row] = v2->tile_ids[row];
-            widths[row] = 64 - v2->num_hor_tiles[row];
-            v5[row] = -v2->num_hor_tiles[row]; // TODO: Unclear.
-            locks[row] = sector_lock(v2->sector_ids[row], &(sectors[row]));
+        for (row = 0; row < sector_row->num_cols; row++) {
+            locations[row] = sector_row->origin_locs[row];
+            indexes[row] = sector_row->tile_ids[row];
+            widths[row] = 64 - sector_row->num_hor_tiles[row];
+            location_row_rewind[row] = -sector_row->num_hor_tiles[row]; // TODO: Unclear.
+            locks[row] = sector_lock(sector_row->sector_ids[row], &(sectors[row]));
         }
 
-        for (v3 = 0; v3 < v2->num_vert_tiles; v3++) {
-            for (row = 0; row < v2->num_cols; row++) {
+        for (tile_row = 0; tile_row < sector_row->num_vert_tiles; tile_row++) {
+            for (row = 0; row < sector_row->num_cols; row++) {
                 if (locks[row]) {
-                    for (v4 = 0; v4 < v2->num_hor_tiles[row]; v4++) {
+                    for (tile_column = 0; tile_column < sector_row->num_hor_tiles[row]; tile_column++) {
                         obj_node = sectors[row]->objects.heads[indexes[row]];
                         if (obj_node != NULL) {
                             loc = locations[row];
@@ -800,14 +800,14 @@ void object_draw(GameDrawInfo* draw_info)
 
                                                     object_get_rect(obj_node->obj, 0, &eye_candy_rect);
 
-                                                    v71 = false;
+                                                    skip_wading_overlay = false;
                                                     if ((obj_flags & OF_WADING) != 0 && (obj_flags & OF_WATER_WALKING) == 0) {
                                                         tmp_rect = eye_candy_rect;
                                                         if ((obj_flags & OF_FLAT) == 0) {
                                                             tmp_rect.height = 15;
                                                             tmp_rect.y = eye_candy_rect.height + eye_candy_rect.y - 15;
                                                         } else {
-                                                            v71 = true;
+                                                            skip_wading_overlay = true;
                                                         }
 
                                                         art_blit_info_initialized = false;
@@ -862,7 +862,7 @@ void object_draw(GameDrawInfo* draw_info)
                                                     }
 
                                                     // 0x43BF8F
-                                                    if (!v71) {
+                                                    if (!skip_wading_overlay) {
                                                         TigArtBlitInfo highlight_art_blit_info;
                                                         bool highlight = object_highlight_mode
                                                             && obj_type != OBJ_TYPE_WALL
@@ -979,14 +979,14 @@ void object_draw(GameDrawInfo* draw_info)
                     }
 
                     indexes[row] += widths[row];
-                    locations[row] = LOCATION_MAKE(LOCATION_GET_X(locations[row]) + v5[row], LOCATION_GET_Y(locations[row]) + 1); // TODO: Unclear.
+                    locations[row] = LOCATION_MAKE(LOCATION_GET_X(locations[row]) + location_row_rewind[row], LOCATION_GET_Y(locations[row]) + 1); // TODO: Unclear.
                 }
             }
         }
 
-        for (row = 0; row < v2->num_cols; row++) {
+        for (row = 0; row < sector_row->num_cols; row++) {
             if (locks[row]) {
-                sector_unlock(v2->sector_ids[row]);
+                sector_unlock(sector_row->sector_ids[row]);
             }
         }
     }
@@ -1714,7 +1714,7 @@ int object_hit_points_from_allocated_points(int64_t obj)
 }
 
 // 0x43D6D0
-int object_get_resistance(int64_t obj, int resistance_type, bool a2)
+int object_get_resistance(int64_t obj, int resistance_type, bool require_identification)
 {
     int value;
     int obj_type;
@@ -1733,7 +1733,7 @@ int object_get_resistance(int64_t obj, int resistance_type, bool a2)
                 adj = obj_arrayfield_int32_get(item_obj, OBJ_F_ARMOR_RESISTANCE_ADJ_IDX, resistance_type);
                 value += adj;
 
-                if (!a2
+                if (!require_identification
                     || obj_field_int32_get(item_obj, OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY) <= 0
                     || item_is_identified(item_obj)) {
                     adj = obj_arrayfield_int32_get(item_obj, OBJ_F_ARMOR_MAGIC_RESISTANCE_ADJ_IDX, resistance_type);
@@ -1767,7 +1767,7 @@ int object_get_resistance(int64_t obj, int resistance_type, bool a2)
 }
 
 // 0x43D880
-int object_get_ac(int64_t obj, bool a2)
+int object_get_ac(int64_t obj, bool require_identification)
 {
     int ac;
     int obj_type;
@@ -1780,14 +1780,14 @@ int object_get_ac(int64_t obj, bool a2)
         for (index = FIRST_WEAR_INV_LOC; index <= LAST_WEAR_INV_LOC; index++) {
             item_obj = item_wield_get(obj, index);
             if (item_obj != OBJ_HANDLE_NULL) {
-                ac += item_armor_ac_adj(item_obj, obj, a2);
+                ac += item_armor_ac_adj(item_obj, obj, require_identification);
             }
         }
 
         ac = effect_adjust_stat_level(obj, STAT_AC_ADJUSTMENT, ac);
         ac += stat_level_get(obj, STAT_AC_ADJUSTMENT);
     } else if (obj_type == OBJ_TYPE_ARMOR) {
-        ac += item_armor_ac_adj(obj, OBJ_HANDLE_NULL, a2);
+        ac += item_armor_ac_adj(obj, OBJ_HANDLE_NULL, require_identification);
     }
 
     if (ac < 0) {
@@ -1830,19 +1830,19 @@ bool object_pick_at_screen_xy(int x, int y, int64_t* obj_ptr, unsigned int flags
 {
     TigRect rect;
     LocRect loc_rect;
-    SectorRect v1;
-    SectorRectRow* v3;
+    SectorRect sector_rect;
+    SectorRectRow* sector_row;
     int row;
     int col;
     int indexes[3];
     int widths[3];
     bool locks[3];
     Sector* sectors[3];
-    int64_t v65;
-    int64_t v67;
-    int64_t v69;
-    int v62;
-    int v60;
+    int64_t bounds_hit_obj;
+    int64_t pixel_hit_obj;
+    int64_t nearby_pixel_hit_obj;
+    int tile_row;
+    int tile_column;
     ObjectNode* obj_node;
     ObjectType obj_type;
     ObjectFlags obj_flags;
@@ -1871,26 +1871,26 @@ bool object_pick_at_screen_xy(int x, int y, int64_t* obj_ptr, unsigned int flags
         return false;
     }
 
-    if (!sector_rect_from_loc_rect(&loc_rect, &v1)) {
+    if (!sector_rect_from_loc_rect(&loc_rect, &sector_rect)) {
         return false;
     }
 
-    v65 = OBJ_HANDLE_NULL;
-    v67 = OBJ_HANDLE_NULL;
-    v69 = OBJ_HANDLE_NULL;
+    bounds_hit_obj = OBJ_HANDLE_NULL;
+    pixel_hit_obj = OBJ_HANDLE_NULL;
+    nearby_pixel_hit_obj = OBJ_HANDLE_NULL;
 
-    for (row = v1.num_rows - 1; row >= 0; row--) {
-        v3 = &(v1.rows[row]);
-        for (col = v3->num_cols - 1; col >= 0; col--) {
-            indexes[col] = v3->num_vert_tiles * 64 + v3->tile_ids[col] + v3->num_hor_tiles[col] - 64 - 1;
-            widths[col] = 64 - v3->num_hor_tiles[col];
-            locks[col] = sector_lock(v3->sector_ids[col], &(sectors[col]));
+    for (row = sector_rect.num_rows - 1; row >= 0; row--) {
+        sector_row = &(sector_rect.rows[row]);
+        for (col = sector_row->num_cols - 1; col >= 0; col--) {
+            indexes[col] = sector_row->num_vert_tiles * 64 + sector_row->tile_ids[col] + sector_row->num_hor_tiles[col] - 64 - 1;
+            widths[col] = 64 - sector_row->num_hor_tiles[col];
+            locks[col] = sector_lock(sector_row->sector_ids[col], &(sectors[col]));
         }
 
-        for (v62 = v3->num_vert_tiles - 1; v62 >= 0; v62--) {
-            for (col = v3->num_cols - 1; col >= 0; col--) {
+        for (tile_row = sector_row->num_vert_tiles - 1; tile_row >= 0; tile_row--) {
+            for (col = sector_row->num_cols - 1; col >= 0; col--) {
                 if (locks[col]) {
-                    for (v60 = v3->num_hor_tiles[col] - 1; v60 >= 0; v60--) {
+                    for (tile_column = sector_row->num_hor_tiles[col] - 1; tile_column >= 0; tile_column--) {
                         for (obj_node = sectors[col]->objects.heads[indexes[col]]; obj_node != NULL; obj_node = obj_node->next) {
                             obj_type = obj_field_int32_get(obj_node->obj, OBJ_F_TYPE);
                             if (!object_type_visibility[obj_type]) {
@@ -1923,8 +1923,8 @@ bool object_pick_at_screen_xy(int x, int y, int64_t* obj_ptr, unsigned int flags
                                 && y >= obj_rect.y
                                 && x < obj_rect.x + obj_rect.width
                                 && y < obj_rect.y + obj_rect.height) {
-                                if ((flags & 0x02) != 0 && v65 != OBJ_HANDLE_NULL) {
-                                    v65 = obj_node->obj;
+                                if ((flags & 0x02) != 0 && bounds_hit_obj != OBJ_HANDLE_NULL) {
+                                    bounds_hit_obj = obj_node->obj;
                                 }
 
                                 test_x = x - obj_rect.x;
@@ -1936,18 +1936,18 @@ bool object_pick_at_screen_xy(int x, int y, int64_t* obj_ptr, unsigned int flags
                                 }
 
                                 if (!tig_art_pixel_hit_test(aid, test_x, test_y)) {
-                                    v67 = obj_node->obj;
+                                    pixel_hit_obj = obj_node->obj;
 
                                     if (obj_type == OBJ_TYPE_WALL
                                         && (obj_field_int32_get(obj_node->obj, OBJ_F_WALL_FLAGS) & (OWAF_TRANS_LEFT | OWAF_TRANS_RIGHT)) != 0) {
-                                        v67 = OBJ_HANDLE_NULL;
+                                        pixel_hit_obj = OBJ_HANDLE_NULL;
                                     }
                                 }
                             }
 
                             if ((flags & 0x01) != 0
-                                && v69 == OBJ_HANDLE_NULL
-                                && v67 == OBJ_HANDLE_NULL) {
+                                && nearby_pixel_hit_obj == OBJ_HANDLE_NULL
+                                && pixel_hit_obj == OBJ_HANDLE_NULL) {
                                 for (ext_y = y - 2; ext_y < y + 3; ext_y++) {
                                     for (ext_x = x - 2; ext_x < x + 3; ext_x++) {
                                         if (ext_x >= obj_rect.x
@@ -1964,10 +1964,10 @@ bool object_pick_at_screen_xy(int x, int y, int64_t* obj_ptr, unsigned int flags
                                             }
 
                                             if (!tig_art_pixel_hit_test(aid, test_x, test_y)) {
-                                                v69 = obj_node->obj;
+                                                nearby_pixel_hit_obj = obj_node->obj;
                                                 if (obj_type == OBJ_TYPE_WALL
                                                     && (obj_field_int32_get(obj_node->obj, OBJ_F_WALL_FLAGS) & (OWAF_TRANS_LEFT | OWAF_TRANS_RIGHT)) != 0) {
-                                                    v69 = OBJ_HANDLE_NULL;
+                                                    nearby_pixel_hit_obj = OBJ_HANDLE_NULL;
                                                 }
                                             }
                                         }
@@ -1976,12 +1976,12 @@ bool object_pick_at_screen_xy(int x, int y, int64_t* obj_ptr, unsigned int flags
                             }
                         }
 
-                        if (v67 != OBJ_HANDLE_NULL) {
-                            *obj_ptr = v67;
+                        if (pixel_hit_obj != OBJ_HANDLE_NULL) {
+                            *obj_ptr = pixel_hit_obj;
 
-                            for (col = 0; col < v3->num_cols; col++) {
+                            for (col = 0; col < sector_row->num_cols; col++) {
                                 if (locks[col]) {
-                                    sector_unlock(v3->sector_ids[col]);
+                                    sector_unlock(sector_row->sector_ids[col]);
                                 }
                             }
 
@@ -1996,21 +1996,21 @@ bool object_pick_at_screen_xy(int x, int y, int64_t* obj_ptr, unsigned int flags
             }
         }
 
-        for (col = 0; col < v3->num_cols; col++) {
+        for (col = 0; col < sector_row->num_cols; col++) {
             if (locks[col]) {
-                sector_unlock(v3->sector_ids[col]);
+                sector_unlock(sector_row->sector_ids[col]);
             }
         }
     }
 
     if (flags != 0) {
-        if ((flags & 0x01) != 0 && v69 != OBJ_HANDLE_NULL) {
-            *obj_ptr = v69;
+        if ((flags & 0x01) != 0 && nearby_pixel_hit_obj != OBJ_HANDLE_NULL) {
+            *obj_ptr = nearby_pixel_hit_obj;
             return true;
         }
 
-        if ((flags & 0x02) != 0 && v65 != OBJ_HANDLE_NULL) {
-            *obj_ptr = v65;
+        if ((flags & 0x02) != 0 && bounds_hit_obj != OBJ_HANDLE_NULL) {
+            *obj_ptr = bounds_hit_obj;
             return true;
         }
     }
@@ -3445,8 +3445,8 @@ void object_list_location(int64_t loc, unsigned int flags, ObjectList* objects)
 void object_list_rect(LocRect* loc_rect, unsigned int flags, ObjectList* objects)
 {
     bool types[18];
-    SectorRect v1;
-    SectorRectRow* v2;
+    SectorRect sector_rect;
+    SectorRectRow* sector_row;
     int col;
     int row;
     int64_t obj;
@@ -3459,8 +3459,8 @@ void object_list_rect(LocRect* loc_rect, unsigned int flags, ObjectList* objects
     int widths[3];
     bool locks[3];
     Sector* sectors[3];
-    int v3;
-    int v4;
+    int tile_row;
+    int tile_column;
 
     memset(types, 0, sizeof(types));
     if ((flags & OBJ_TM_WALL) != 0) types[OBJ_TYPE_WALL] = true;
@@ -3487,16 +3487,16 @@ void object_list_rect(LocRect* loc_rect, unsigned int flags, ObjectList* objects
 
     prev_ptr = &(objects->head);
 
-    if (!sector_rect_from_loc_rect(loc_rect, &v1)) {
+    if (!sector_rect_from_loc_rect(loc_rect, &sector_rect)) {
         return;
     }
 
     if ((flags & (OBJ_TM_TRAP | OBJ_TM_SCENERY | OBJ_TM_PORTAL | OBJ_TM_WALL)) == 0) {
-        for (col = 0; col < v1.num_rows; col++) {
-            v2 = &(v1.rows[col]);
+        for (col = 0; col < sector_rect.num_rows; col++) {
+            sector_row = &(sector_rect.rows[col]);
 
-            for (row = 0; row < v2->num_cols; row++) {
-                if (obj_find_walk_first(v2->sector_ids[row], &obj, &iter)) {
+            for (row = 0; row < sector_row->num_cols; row++) {
+                if (obj_find_walk_first(sector_row->sector_ids[row], &obj, &iter)) {
                     do {
                         if (!object_type_is_sector_static(obj)
                             && (obj_field_int32_get(obj, OBJ_F_FLAGS) & OF_INVENTORY) == 0
@@ -3519,23 +3519,23 @@ void object_list_rect(LocRect* loc_rect, unsigned int flags, ObjectList* objects
             }
         }
     } else {
-        for (col = 0; col < v1.num_rows; col++) {
-            v2 = &(v1.rows[col]);
+        for (col = 0; col < sector_rect.num_rows; col++) {
+            sector_row = &(sector_rect.rows[col]);
 
-            for (row = 0; row < v2->num_cols; row++) {
-                indexes[row] = v2->tile_ids[row];
-                widths[row] = 64 - v2->num_hor_tiles[row];
-                locks[row] = sector_lock(v2->sector_ids[row], &(sectors[row]));
+            for (row = 0; row < sector_row->num_cols; row++) {
+                indexes[row] = sector_row->tile_ids[row];
+                widths[row] = 64 - sector_row->num_hor_tiles[row];
+                locks[row] = sector_lock(sector_row->sector_ids[row], &(sectors[row]));
 
                 if (locks[row]) {
-                    objects->sectors[objects->num_sectors++] = v2->sector_ids[row];
+                    objects->sectors[objects->num_sectors++] = sector_row->sector_ids[row];
                 }
             }
 
-            for (v3 = 0; v3 < v2->num_vert_tiles; v3++) {
-                for (row = 0; row < v2->num_cols; row++) {
+            for (tile_row = 0; tile_row < sector_row->num_vert_tiles; tile_row++) {
+                for (row = 0; row < sector_row->num_cols; row++) {
                     if (locks[row]) {
-                        for (v4 = 0; v4 < v2->num_hor_tiles[row]; v4++) {
+                        for (tile_column = 0; tile_column < sector_row->num_hor_tiles[row]; tile_column++) {
                             obj_node = sectors[row]->objects.heads[indexes[row]];
                             while (obj_node != NULL) {
                                 if ((object_hidden_state_mask & obj_field_int32_get(obj_node->obj, OBJ_F_FLAGS)) == 0
@@ -4196,12 +4196,12 @@ bool object_jammed_set(int64_t obj, bool jammed)
 }
 
 // 0x441FC0
-void object_npc_ai_schedule_immediate(int64_t obj, int a2)
+void object_npc_ai_schedule_immediate(int64_t obj, int event_processing_flags)
 {
     if (!object_editor) {
         if (obj_field_int32_get(obj, OBJ_F_TYPE) == OBJ_TYPE_NPC
             && (obj_field_int32_get(obj, OBJ_F_FLAGS) & OF_DESTROYED) == 0) {
-            ai_schedule_immediate(obj, a2);
+            ai_schedule_immediate(obj, event_processing_flags);
         }
     }
 }
@@ -4231,9 +4231,9 @@ void object_serialize_to_memory(uint8_t** data_ptr, int* size_ptr, int64_t obj)
 }
 
 // 0x4420D0
-bool object_deserialize_at_location(uint8_t* data, int64_t* obj_ptr, int64_t loc)
+bool object_deserialize_at_location(const uint8_t* data, size_t size, int64_t* obj_ptr, int64_t loc)
 {
-    if (!obj_read_mem(data, obj_ptr)) {
+    if (!obj_read_mem(data, size, obj_ptr)) {
         return false;
     }
 
@@ -4759,7 +4759,7 @@ void object_setup_blit(int64_t obj, TigArtBlitInfo* blit_info)
     }
 
     if ((blit_info->flags & TIG_ART_BLT_BLEND_COLOR_ARRAY) != 0) {
-        blit_info->field_14 = (uint32_t*)obj_field_ptr_get(obj, OBJ_F_RENDER_COLORS);
+        blit_info->blend_colors = (uint32_t*)obj_field_ptr_get(obj, OBJ_F_RENDER_COLORS);
     }
 
     if ((blit_info->flags & TIG_ART_BLT_BLEND_COLOR_CONST) != 0) {
@@ -5246,19 +5246,19 @@ bool load_reaction_colors(void)
 }
 
 // 0x444270
-void object_location_environment_refresh(int64_t obj, int a2)
+void object_location_environment_refresh(int64_t obj, int refresh_mode)
 {
     unsigned int flags;
     unsigned int render_flags;
     int64_t loc;
     TigRect rect;
-    int64_t v1;
+    int64_t hovered_obj;
 
     flags = obj_field_int32_get(obj, OBJ_F_FLAGS);
     render_flags = obj_field_int32_get(obj, OBJ_F_RENDER_FLAGS);
     render_flags &= ~(ORF_04000000 | ORF_02000000);
 
-    if (a2 == 0) {
+    if (refresh_mode == 0) {
         if (!object_lighting) {
             obj_field_int32_set(obj, OBJ_F_RENDER_FLAGS, render_flags);
         }
@@ -5305,14 +5305,14 @@ void object_location_environment_refresh(int64_t obj, int a2)
         tile_script_exec(loc, obj);
     }
 
-    v1 = object_hover_obj_get();
-    if (v1 != OBJ_HANDLE_NULL) {
-        if (v1 == obj || player_is_local_pc_obj(obj)) {
-            ui_object_examine_and_select(player_get_local_pc_obj(), v1);
+    hovered_obj = object_hover_obj_get();
+    if (hovered_obj != OBJ_HANDLE_NULL) {
+        if (hovered_obj == obj || player_is_local_pc_obj(obj)) {
+            ui_object_examine_and_select(player_get_local_pc_obj(), hovered_obj);
         }
     }
 
-    if (a2 != 1) {
+    if (refresh_mode != 1) {
         if (player_is_pc_obj(obj) && player_is_local_pc_obj(obj)) {
             objlist_notify_sector_changed(sector_id_from_loc(loc), obj);
         }

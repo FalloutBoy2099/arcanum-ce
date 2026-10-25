@@ -30,7 +30,7 @@ int location_rot(int64_t a, int64_t b);
 bool location_in_dir(int64_t loc, int dir, int64_t* new_loc_ptr);
 bool location_in_range(int64_t loc, int dir, int range, int64_t* new_loc_ptr);
 bool location_screen_rect_to_loc_rect(TigRect* rect, LocRect* loc_rect);
-void location_offsets_to_sort_axes(int a1, int a2, int* a3, int* a4);
+void location_offsets_to_sort_axes(int offset_x, int offset_y, int* sort_x_ptr, int* sort_y_ptr);
 bool location_normalize(int64_t* loc, int* offset_x, int* offset_y);
 int64_t location_dist(int64_t a, int64_t b);
 bool location_limits_set(int64_t x, int64_t y);

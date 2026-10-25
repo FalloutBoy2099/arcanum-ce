@@ -57,7 +57,7 @@ void portal_bust(int64_t portal_obj, int64_t triggerer_obj)
  *
  * 0x4F0790
  */
-void portal_delete(int64_t portal_obj, bool a2)
+void portal_delete(int64_t portal_obj, bool delete_original)
 {
     int64_t loc;
     ObjectList objects;
@@ -69,7 +69,7 @@ void portal_delete(int64_t portal_obj, bool a2)
     object_list_location(loc, OBJ_TM_WALL, &objects);
     node = objects.head;
     while (node != NULL) {
-        wall_delete(node->obj, a2);
+        wall_delete(node->obj, delete_original);
         node = node->next;
     }
     object_list_destroy(&objects);

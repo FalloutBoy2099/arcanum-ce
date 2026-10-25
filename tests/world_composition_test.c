@@ -1,6 +1,7 @@
 #include "game/world_composition.h"
 #include <tig/scale_region.h>
 #include <stdio.h>
+#include <limits.h>
 
 struct TigVideoBuffer {
     SDL_Surface* surface;
@@ -81,6 +82,10 @@ static void test_world_and_overlay(void)
     CHECK(world_composition_present(&world, viewport, &output, viewport, &damage, false) == TIG_OK);
     CHECK(before == full_blits);
     CHECK(world_composition_present(&world, viewport, &world, viewport, &damage, false) == TIG_ERR_INVALID_PARAM);
+    damage.count = INT_MAX;
+    CHECK(world_composition_present(&world, viewport, &output, viewport, &damage, false) == TIG_ERR_INVALID_PARAM);
+    damage.count = -1;
+    CHECK(world_composition_present(&world, viewport, &output, viewport, &damage, false) == TIG_ERR_INVALID_PARAM);
     SDL_DestroySurface(output.surface);
     SDL_DestroySurface(world.surface);
 }
@@ -108,6 +113,9 @@ static void test_scroll(void)
         }
     }
     CHECK(world_composition_scroll(&world, (TigRect){ 0, 0, 32, 24 }, 32, 0) == TIG_ERR_INVALID_PARAM);
+    CHECK(world_composition_scroll(&world, (TigRect){ INT_MAX, 0, 32, 24 }, 1, 0) == TIG_ERR_INVALID_PARAM);
+    CHECK(world_composition_scroll(&world, (TigRect){ 0, INT_MAX, 32, 24 }, 0, -1) == TIG_ERR_INVALID_PARAM);
+    CHECK(world_composition_scroll(&world, (TigRect){ 0, 0, 32, 24 }, INT_MIN, INT_MAX) == TIG_ERR_INVALID_PARAM);
     SDL_DestroySurface(world.surface);
 }
 

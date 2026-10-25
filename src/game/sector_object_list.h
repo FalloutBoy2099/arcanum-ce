@@ -22,7 +22,7 @@ bool objlist_is_modified(SectorObjectList* list);
 bool objlist_save_with_dif(SectorObjectList* list, TigFile* stream);
 bool objlist_tile_of_object(SectorObjectList* list, int64_t obj, int* tile_ptr);
 void objlist_precache_art(SectorObjectList* list);
-void objlist_fold(SectorObjectList* list, int64_t location, int a4);
+void objlist_fold(SectorObjectList* list, int64_t location, int event_processing_flags);
 void sector_object_sort_offsets_get(int64_t obj, int* sort_x_ptr, int* sort_y_ptr);
 void objlist_notify_sector_changed(int64_t sec, int64_t pc_obj);
 

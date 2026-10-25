@@ -20,9 +20,9 @@
 static bool intgame_save_hotkey(Hotkey* hotkey, TigFile* stream);
 static bool intgame_load_hotkey(Hotkey* hotkey, TigFile* stream);
 static int hotkey_ui_mouse_slot_get(void);
-static void intgame_hotkey_mouse_load(tig_art_id_t art_id, bool a2);
-static void hotkey_ui_drag_source_restore(Hotkey* hotkey, int a2);
-static void hotkey_ui_item_slot_replace(int64_t a1, int inventory_location);
+static void intgame_hotkey_mouse_load(tig_art_id_t art_id, bool use_centered_hotkey_cursor);
+static void hotkey_ui_drag_source_restore(Hotkey* hotkey, int hotkey_slot);
+static void hotkey_ui_item_slot_replace(int64_t obj, int inventory_location);
 static bool button_create_no_art(UiButtonInfo* button_info, int width, int height);
 
 // 0x5CB494
@@ -656,7 +656,7 @@ int hotkey_ui_mouse_slot_get(void)
 }
 
 // 0x57E500
-void intgame_hotkey_mouse_load(tig_art_id_t art_id, bool a2)
+void intgame_hotkey_mouse_load(tig_art_id_t art_id, bool use_centered_hotkey_cursor)
 {
     int dx = 0;
     int dy = 0;
@@ -665,7 +665,7 @@ void intgame_hotkey_mouse_load(tig_art_id_t art_id, bool a2)
 
     intgame_refresh_cursor();
     if (art_id != TIG_ART_ID_INVALID) {
-        if (!a2) {
+        if (!use_centered_hotkey_cursor) {
             dx = 2;
             dy = 2;
         }
@@ -675,7 +675,7 @@ void intgame_hotkey_mouse_load(tig_art_id_t art_id, bool a2)
         tig_mouse_cursor_set_art_id(art_id);
         tig_mouse_cursor_overlay(cursor_art_id, dx, dy);
 
-        if (a2) {
+        if (use_centered_hotkey_cursor) {
             tig_mouse_cursor_set_art_id(art_id);
             if (tig_art_frame_data(art_id, &art_frame_data) != TIG_OK) {
                 tig_debug_printf("intgame_hotkey_mouse_load: ERROR: tig_art_frame_data failed!\n");
@@ -709,7 +709,7 @@ bool hotkey_ui_begin_drag(void)
     tig_art_id_t art_id;
     UiButtonInfo button_info;
     int spl;
-    bool v1 = true;
+    bool use_centered_hotkey_cursor = true;
 
     if (hotkey_ui_dragging) {
         return false;
@@ -733,7 +733,7 @@ bool hotkey_ui_begin_drag(void)
                 hotkey_ui_dragged_entry.item_obj = hotkey->item_obj;
                 inven_ui_item_drag_begin(hotkey_ui_dragged_entry.item_obj.obj);
                 art_id = TIG_ART_ID_INVALID;
-                v1 = false;
+                use_centered_hotkey_cursor = false;
                 break;
             case HOTKEY_SKILL:
                 hotkey_ui_dragged_entry.type = hotkey->type;
@@ -759,7 +759,7 @@ bool hotkey_ui_begin_drag(void)
             hotkey_ui_dragged_entry.slot = index;
             hotkey->flags |= HOTKEY_DRAGGED;
             intgame_hotkey_refresh(index);
-            intgame_hotkey_mouse_load(art_id, v1);
+            intgame_hotkey_mouse_load(art_id, use_centered_hotkey_cursor);
             hotkey_ui_dragging = true;
             return true;
         }
@@ -823,8 +823,8 @@ bool hotkey_ui_drag_drop_process(TigMessageMouseEvent mouse_event)
     int index;
     Hotkey* hotkey;
     int sound_id;
-    int64_t v2;
-    int64_t v3;
+    int64_t dragged_item_obj;
+    int64_t original_parent;
     unsigned int flags;
 
     if (!hotkey_ui_dragging) {
@@ -898,13 +898,13 @@ bool hotkey_ui_drag_drop_process(TigMessageMouseEvent mouse_event)
             hotkey_ui_entry_clear(&(hotkey_ui_slots[hotkey_ui_dragging_index]));
         }
 
-        v2 = hotkey->item_obj.obj;
-        v3 = OBJ_HANDLE_NULL; // NOTE: To silence compiler warnings.
-        if (v2 != OBJ_HANDLE_NULL) {
-            if (item_parent(v2, &v3)) {
-                item_drop(v2);
+        dragged_item_obj = hotkey->item_obj.obj;
+        original_parent = OBJ_HANDLE_NULL; // NOTE: To silence compiler warnings.
+        if (dragged_item_obj != OBJ_HANDLE_NULL) {
+            if (item_parent(dragged_item_obj, &original_parent)) {
+                item_drop(dragged_item_obj);
             } else {
-                v2 = OBJ_HANDLE_NULL;
+                dragged_item_obj = OBJ_HANDLE_NULL;
             }
         }
 
@@ -957,8 +957,8 @@ bool hotkey_ui_drag_drop_process(TigMessageMouseEvent mouse_event)
             break;
         }
 
-        if (v2 != OBJ_HANDLE_NULL && v3 != OBJ_HANDLE_NULL) {
-            item_transfer(v2, v3);
+        if (dragged_item_obj != OBJ_HANDLE_NULL && original_parent != OBJ_HANDLE_NULL) {
+            item_transfer(dragged_item_obj, original_parent);
         }
 
         hotkey->type = hotkey_ui_dragged_entry.type;
@@ -1007,12 +1007,12 @@ bool hotkey_ui_drag_drop_process(TigMessageMouseEvent mouse_event)
 }
 
 // 0x57ED60
-void hotkey_ui_drag_source_restore(Hotkey* hotkey, int a2)
+void hotkey_ui_drag_source_restore(Hotkey* hotkey, int hotkey_slot)
 {
     hotkey_ui_slots[hotkey_ui_dragging_index].flags = 0;
     hotkey_ui_slots[hotkey_ui_dragging_index].type = hotkey->type;
     hotkey_ui_slots[hotkey_ui_dragging_index].data = hotkey->data;
-    intgame_hotkey_refresh(a2);
+    intgame_hotkey_refresh(hotkey_slot);
 }
 
 // 0x57EDA0
@@ -1029,29 +1029,29 @@ bool hotkey_ui_inventory_drop_process(TigMessageMouseEvent mouse_event)
 }
 
 // 0x57EDF0
-void hotkey_ui_item_location_assign(int64_t obj, int64_t a2, int a3)
+void hotkey_ui_item_location_assign(int64_t obj, int64_t item_obj, int inventory_location)
 {
     if (player_is_local_pc_obj(obj)) {
-        hotkey_ui_item_slot_replace(a2, a3);
+        hotkey_ui_item_slot_replace(item_obj, inventory_location);
     } else {
-        item_location_set(a2, a3);
+        item_location_set(item_obj, inventory_location);
     }
 }
 
 // 0x57EE30
 void hotkey_ui_item_slot_replace(int64_t obj, int inventory_location)
 {
-    int64_t v1 = OBJ_HANDLE_NULL;
+    int64_t original_owner = OBJ_HANDLE_NULL;
     Hotkey* hotkey;
 
     hotkey = &(hotkey_ui_slots[inventory_location - 2000]);
 
     if (hotkey->type != HOTKEY_NONE) {
         if (hotkey->item_obj.obj != OBJ_HANDLE_NULL) {
-            item_parent(hotkey->item_obj.obj, &v1);
+            item_parent(hotkey->item_obj.obj, &original_owner);
             item_drop(hotkey->item_obj.obj);
-            if (v1 != OBJ_HANDLE_NULL) {
-                item_transfer(hotkey->item_obj.obj, v1);
+            if (original_owner != OBJ_HANDLE_NULL) {
+                item_transfer(hotkey->item_obj.obj, original_owner);
             }
         }
     }
@@ -1063,17 +1063,17 @@ void hotkey_ui_item_slot_replace(int64_t obj, int inventory_location)
 // 0x57EED0
 bool hotkey_ui_item_slot_bind(int64_t obj, int inventory_location)
 {
-    int64_t v1 = OBJ_HANDLE_NULL;
+    int64_t original_parent = OBJ_HANDLE_NULL;
     Hotkey* hotkey;
 
     hotkey = &(hotkey_ui_slots[inventory_location - 2000]);
 
     if (hotkey->type != HOTKEY_NONE) {
         if (hotkey->item_obj.obj != OBJ_HANDLE_NULL) {
-            item_parent(hotkey->item_obj.obj, &v1);
+            item_parent(hotkey->item_obj.obj, &original_parent);
             item_drop(hotkey->item_obj.obj);
-            if (v1 != OBJ_HANDLE_NULL) {
-                item_transfer(hotkey->item_obj.obj, v1);
+            if (original_parent != OBJ_HANDLE_NULL) {
+                item_transfer(hotkey->item_obj.obj, original_parent);
             }
         }
     }

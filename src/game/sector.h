@@ -41,6 +41,7 @@ typedef struct Sector {
 typedef bool (*SectorEnumerateFunc)(Sector* sector);
 typedef bool (*SectorLockFunc)(const char* path);
 
+void sector_neighbor_prefetch_tick(int64_t location);
 bool sector_init(GameInitInfo* init_info);
 void sector_reset(void);
 void sector_exit(void);

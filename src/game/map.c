@@ -1,3 +1,4 @@
+#include <tig/performance.h>
 #include "game/map.h"
 
 #include <stdio.h>
@@ -141,7 +142,7 @@ static int64_t map_starting_loc;
 static bool map_closed;
 
 // 0x5D11EC
-static bool dword_5D11EC;
+static bool map_start_state_flag;
 
 // 0x5D11D0
 static bool map_gender_check_enabled;
@@ -218,7 +219,7 @@ bool map_init(GameInitInfo* init_info)
     map_gender_check_enabled = 0;
     map_initialized = true;
     map_editor = init_info->editor;
-    dword_5D11EC = false;
+    map_start_state_flag = false;
 
     return true;
 }
@@ -258,7 +259,7 @@ void map_reset(void)
             }
         }
 
-        dword_5D11EC = false;
+        map_start_state_flag = false;
 
         tig_debug_printf("map_reset: Done.  Total time: %d ms.\n", tig_timer_elapsed(reset_start));
     }
@@ -339,7 +340,9 @@ void map_ping(unsigned int time)
 {
     for (int index = 0; index < MAP_MODULE_COUNT; index++) {
         if (map_modules[index].ping_func != NULL) {
+            Uint64 module_start = tig_performance_begin();
             map_modules[index].ping_func(time);
+            tig_performance_end_detail(TIG_PERF_SIMULATION_MODULE, module_start, map_modules[index].name);
         }
     }
 }
@@ -576,7 +579,7 @@ bool map_new(MapNewInfo* new_map_info)
 }
 
 // 0x40F4E0
-bool map_open(const char* base_path, const char* save_path, bool a3)
+bool map_open(const char* base_path, const char* save_path, bool preserve_saved_map)
 {
     tig_timestamp_t start_timestamp;
     tig_timestamp_t timestamp;
@@ -606,7 +609,7 @@ bool map_open(const char* base_path, const char* save_path, bool a3)
     }
 
     tig_file_mkdir(save_path);
-    if (!a3) {
+    if (!preserve_saved_map) {
         tig_file_empty_directory(save_path);
     }
 
@@ -692,7 +695,7 @@ bool map_open(const char* base_path, const char* save_path, bool a3)
     strcpy(map_save_path, save_path);
 
     tig_file_mkdir(map_save_path);
-    if (!a3) {
+    if (!preserve_saved_map) {
         tig_file_empty_directory(map_save_path);
     }
 
@@ -772,9 +775,9 @@ bool map_open(const char* base_path, const char* save_path, bool a3)
     tig_debug_printf("map_open: map_gender_check()...");
     tig_timer_now(&timestamp);
     map_gender_check();
-    dword_5D11EC = false;
+    map_start_state_flag = false;
     if (map_current_id != 0 && map_special_ids_by_type[MAP_TYPE_START_MAP] == map_current_id) {
-        dword_5D11EC = true;
+        map_start_state_flag = true;
     }
     duration = tig_timer_elapsed(timestamp);
     tig_debug_printf("done.  Time (ms): %d\n", duration);
@@ -789,7 +792,7 @@ bool map_open(const char* base_path, const char* save_path, bool a3)
 }
 
 // 0x40FC70
-bool map_open_in_game(int map, bool a2, bool a3)
+bool map_open_in_game(int map, bool precache_start_sectors, bool skip_current_map_flush)
 {
     MapListInfo* info;
     char base_path[TIG_MAX_PATH];
@@ -804,7 +807,7 @@ bool map_open_in_game(int map, bool a2, bool a3)
     }
 
     info = &(map_list_info[map - 1]);
-    if (map_valid && !a3) {
+    if (map_valid && !skip_current_map_flush) {
         map_flush(0);
     }
 
@@ -832,7 +835,7 @@ bool map_open_in_game(int map, bool a2, bool a3)
     map_starting_loc = info->x | (info->y << 32);
     location_origin_set(map_starting_loc);
 
-    if (a2) {
+    if (precache_start_sectors) {
         map_precache_sectors(map_starting_loc);
     }
 
@@ -1037,7 +1040,7 @@ void map_starting_loc_get(int64_t* loc_ptr)
 void map_starting_loc_set(int64_t loc)
 {
     map_starting_loc = loc;
-    dword_5D11EC = true;
+    map_start_state_flag = true;
 }
 
 // 0x4102C0

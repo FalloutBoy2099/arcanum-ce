@@ -90,7 +90,7 @@ typedef struct TigVideoBufferBlitInfo {
 
 typedef struct TigVideoScreenshotSettings {
     /* 0000 */ int key;
-    /* 0004 */ int field_4;
+    /* 0004 */ int legacy_mode;
 } TigVideoScreenshotSettings;
 
 typedef enum TigVideoBufferTintMode {
@@ -135,9 +135,15 @@ int tig_video_fade(tig_color_t color, int steps, float duration, TigFadeFlags fl
 int tig_video_set_gamma(float gamma);
 int tig_video_buffer_create(TigVideoBufferCreateInfo* vb_create_info, TigVideoBuffer** video_buffer);
 int tig_video_buffer_destroy(TigVideoBuffer* video_buffer);
+size_t tig_video_buffer_memory_size(const TigVideoBuffer* video_buffer);
 int tig_video_buffer_data(TigVideoBuffer* video_buffer, TigVideoBufferData* video_buffer_data);
 int tig_video_buffer_set_color_key(TigVideoBuffer* video_buffer, int color_key);
 int tig_video_buffer_lock(TigVideoBuffer* video_buffer);
+void tig_video_gpu_cursor_set(bool enabled);
+bool tig_video_gpu_cursor_is_enabled(void);
+void tig_video_gpu_cursor_clear(void);
+bool tig_video_gpu_cursor_prepare(TigVideoBuffer* buffer, Uint64 key, Uint64 revision,
+    const TigRect* source, const TigRect* destination);
 bool tig_video_buffer_water_shader(TigVideoBuffer* buffer, SDL_Surface* mask,
     const TigVideoUpload* damage, float time, float strength, float origin_x, float origin_y);
 int tig_video_buffer_unlock(TigVideoBuffer* video_buffer);

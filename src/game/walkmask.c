@@ -1,6 +1,7 @@
 #include "game/walkmask.h"
 
 #include <stdio.h>
+#include <limits.h>
 
 static void walkmask_build_path(int facade, char* buffer, size_t maxlen);
 static bool walkmask_read_hdr(TigFile* stream, int* cnt, int* width, int* height, int* tile, int* outdoor, int* flippable);
@@ -53,6 +54,10 @@ bool walkmask_load(int facade, tig_art_id_t** ids_ptr, int* width_ptr, int* heig
     }
 
     ids = walkmask_allocate(width, height);
+    if (ids == NULL) {
+        tig_file_fclose(stream);
+        return false;
+    }
 
     // Read facade entries.
     if (!walkmask_read_data(stream, ids, facade, cnt, width, height, tile, outdoor, flippable)) {
@@ -103,7 +108,8 @@ bool walkmask_read_hdr(TigFile* stream, int* cnt, int* width, int* height, int* 
     if (tig_file_fread(width, sizeof(*width), 1, stream) != 1) return false;
     if (tig_file_fread(height, sizeof(*height), 1, stream) != 1) return false;
     if (tig_file_fread(cnt, sizeof(*cnt), 1, stream) != 1) return false;
-    if (*cnt > 1024) return false;
+    if (*width <= 0 || *height <= 0 || *width > INT_MAX / (int)sizeof(tig_art_id_t) / *height
+        || !tig_file_count_fits(stream, *cnt, 1024, 3 * sizeof(int))) return false;
 
     return true;
 }
@@ -137,7 +143,8 @@ tig_art_id_t* walkmask_allocate(int width, int height)
     tig_art_id_t* ids;
     int index;
 
-    ids = (tig_art_id_t*)MALLOC(sizeof(*ids) * width * height);
+    ids = (tig_art_id_t*)MALLOC(sizeof(*ids) * (size_t)width * (size_t)height);
+    if (ids == NULL) return NULL;
 
     index = 0;
     for (y = 0; y < height; y++) {

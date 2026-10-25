@@ -77,7 +77,7 @@ static void proto_magic_complexity_worth_adjust(int64_t obj);
 static void proto_critter_text_defaults_apply(int64_t obj, int description);
 static int proto_critter_text_entry_read(TigFile* stream, int64_t obj, int type);
 static void proto_max_hit_points_set(int64_t obj, int max_hit_points);
-static bool proto_critter_text_field_parse(const char* str, int* fld_ptr, int* a3, int* a4, int* a5);
+static bool proto_critter_text_field_parse(const char* str, int* fld_ptr, int* primary_value_ptr, int* secondary_value_ptr, int* packed_counters_ptr);
 static int proto_flag_from_identifier(const char* str, const char** identifiers, int size);
 static void proto_critter_text_entry_write(int64_t obj, TigFile* stream, int type);
 static void proto_flags_write_text(TigFile* stream, const char* name, int value, const char** identifiers, int size);
@@ -16088,7 +16088,7 @@ void proto_critter_text_defaults_apply(int64_t obj, int description)
 {
     TigFile* stream;
     int type;
-    int v1;
+    int entry_description;
     int exp;
     tig_art_id_t art_id;
     unsigned int rgb;
@@ -16112,12 +16112,12 @@ void proto_critter_text_defaults_apply(int64_t obj, int description)
         return;
     }
 
-    v1 = proto_critter_text_entry_read(stream, 0, type);
-    while (v1 != description && v1 != -1) {
-        v1 = proto_critter_text_entry_read(stream, 0, type);
+    entry_description = proto_critter_text_entry_read(stream, 0, type);
+    while (entry_description != description && entry_description != -1) {
+        entry_description = proto_critter_text_entry_read(stream, 0, type);
     }
 
-    if (v1 != -1) {
+    if (entry_description != -1) {
         obj_field_int32_set(obj, OBJ_F_DESCRIPTION, description);
         obj_field_int32_set(obj, OBJ_F_CRITTER_DESCRIPTION_UNKNOWN, description);
         proto_critter_text_entry_read(stream, obj, type);
@@ -16162,9 +16162,9 @@ int proto_critter_text_entry_read(TigFile* stream, int64_t obj, int type)
     char str[1000];
     Script scr;
     int fld;
-    int v2;
-    int v3;
-    int v4;
+    int primary_value;
+    int secondary_value;
+    int packed_counters;
 
     if (obj != 0) {
         obj_field_int32_set(obj, OBJ_F_CRITTER_CRIT_HIT_CHART, CRIT_BODY_TYPE_BIPED);
@@ -16177,138 +16177,138 @@ int proto_critter_text_entry_read(TigFile* stream, int64_t obj, int type)
     }
 
     while (tig_file_fgets(str, sizeof(str), stream) != NULL) {
-        if (proto_critter_text_field_parse(str, &fld, &v2, &v3, &v4)) {
+        if (proto_critter_text_field_parse(str, &fld, &primary_value, &secondary_value, &packed_counters)) {
             if (fld == PROTO_F_DESCRIPTION) {
-                return v2;
+                return primary_value;
             }
 
             if (obj != 0) {
                 switch (fld) {
                 case PROTO_F_INTERNAL_NAME:
-                    obj_field_int32_set(obj, OBJ_F_NAME, v2);
+                    obj_field_int32_set(obj, OBJ_F_NAME, primary_value);
                     break;
                 case PROTO_F_LEVEL:
-                    stat_base_set(obj, STAT_LEVEL, v2);
+                    stat_base_set(obj, STAT_LEVEL, primary_value);
                     break;
                 case PROTO_F_ART_NUMBER_AND_PALETTE:
                     switch (type) {
                     case 1:
-                        tig_art_unique_npc_id_create(v2, 0, 0, 4, 0, 0, v3, &art_id);
+                        tig_art_unique_npc_id_create(primary_value, 0, 0, 4, 0, 0, secondary_value, &art_id);
                         obj_field_int32_set(obj, OBJ_F_AID, art_id);
                         obj_field_int32_set(obj, OBJ_F_CURRENT_AID, art_id);
                         break;
                     case 2:
-                        tig_art_monster_id_create(v2, 0, 0, 0, 4, 0, 0, v3, &art_id);
+                        tig_art_monster_id_create(primary_value, 0, 0, 0, 4, 0, 0, secondary_value, &art_id);
                         obj_field_int32_set(obj, OBJ_F_AID, art_id);
                         obj_field_int32_set(obj, OBJ_F_CURRENT_AID, art_id);
                         break;
                     }
                     break;
                 case PROTO_F_SCALE:
-                    obj_field_int32_set(obj, OBJ_F_BLIT_SCALE, v2);
+                    obj_field_int32_set(obj, OBJ_F_BLIT_SCALE, primary_value);
                     break;
                 case PROTO_F_ALIGNMENT:
-                    stat_base_set(obj, STAT_ALIGNMENT, v2);
+                    stat_base_set(obj, STAT_ALIGNMENT, primary_value);
                     break;
                 case PROTO_F_CRITTER_FLAG:
-                    obj_field_int32_set(obj, OBJ_F_CRITTER_FLAGS, obj_field_int32_get(obj, OBJ_F_CRITTER_FLAGS) | v2);
+                    obj_field_int32_set(obj, OBJ_F_CRITTER_FLAGS, obj_field_int32_get(obj, OBJ_F_CRITTER_FLAGS) | primary_value);
                     break;
                 case PROTO_F_CRITTER2_FLAG:
-                    obj_field_int32_set(obj, OBJ_F_CRITTER_FLAGS2, obj_field_int32_get(obj, OBJ_F_CRITTER_FLAGS2) | v2);
+                    obj_field_int32_set(obj, OBJ_F_CRITTER_FLAGS2, obj_field_int32_get(obj, OBJ_F_CRITTER_FLAGS2) | primary_value);
                     break;
                 case PROTO_F_NPC_FLAG:
-                    obj_field_int32_set(obj, OBJ_F_NPC_FLAGS, obj_field_int32_get(obj, OBJ_F_NPC_FLAGS) | v2);
+                    obj_field_int32_set(obj, OBJ_F_NPC_FLAGS, obj_field_int32_get(obj, OBJ_F_NPC_FLAGS) | primary_value);
                     break;
                 case PROTO_F_BLIT_FLAG:
-                    obj_field_int32_set(obj, OBJ_F_BLIT_FLAGS, obj_field_int32_get(obj, OBJ_F_BLIT_FLAGS) | v2);
+                    obj_field_int32_set(obj, OBJ_F_BLIT_FLAGS, obj_field_int32_get(obj, OBJ_F_BLIT_FLAGS) | primary_value);
                     break;
                 case PROTO_F_SPELL_FLAG:
-                    obj_field_int32_set(obj, OBJ_F_SPELL_FLAGS, obj_field_int32_get(obj, OBJ_F_SPELL_FLAGS) | v2);
+                    obj_field_int32_set(obj, OBJ_F_SPELL_FLAGS, obj_field_int32_get(obj, OBJ_F_SPELL_FLAGS) | primary_value);
                     break;
                 case PROTO_F_HIT_CHART:
-                    obj_field_int32_set(obj, OBJ_F_CRITTER_CRIT_HIT_CHART, v2);
+                    obj_field_int32_set(obj, OBJ_F_CRITTER_CRIT_HIT_CHART, primary_value);
                     break;
                 case PROTO_F_BASIC_STAT:
-                    stat_base_set(obj, v2, v3);
+                    stat_base_set(obj, primary_value, secondary_value);
                     break;
                 case PROTO_F_SPELL:
-                    spell_add(obj, v2, true);
+                    spell_add(obj, primary_value, true);
                     break;
                 case PROTO_F_FACTION:
-                    obj_field_int32_set(obj, OBJ_F_NPC_FACTION, v2);
+                    obj_field_int32_set(obj, OBJ_F_NPC_FACTION, primary_value);
                     break;
                 case PROTO_F_AI_PACKET:
-                    obj_field_int32_set(obj, OBJ_F_NPC_AI_DATA, v2);
+                    obj_field_int32_set(obj, OBJ_F_NPC_AI_DATA, primary_value);
                     break;
                 case PROTO_F_MATERIAL:
-                    obj_field_int32_set(obj, OBJ_F_MATERIAL, v2);
+                    obj_field_int32_set(obj, OBJ_F_MATERIAL, primary_value);
                     break;
                 case PROTO_F_HIT_POINTS:
-                    proto_max_hit_points_set(obj, v2);
+                    proto_max_hit_points_set(obj, primary_value);
                     break;
                 case PROTO_F_SCRIPT:
-                    scr.num = v3;
-                    scr.hdr.counters = v4;
-                    obj_arrayfield_script_set(obj, OBJ_F_SCRIPTS_IDX, v2, &scr);
+                    scr.num = secondary_value;
+                    scr.hdr.counters = packed_counters;
+                    obj_arrayfield_script_set(obj, OBJ_F_SCRIPTS_IDX, primary_value, &scr);
                     break;
                 case PROTO_F_DAMAGE_RESISTANCE:
-                    obj_arrayfield_int32_set(obj, OBJ_F_RESISTANCE_IDX, RESISTANCE_TYPE_NORMAL, v2);
+                    obj_arrayfield_int32_set(obj, OBJ_F_RESISTANCE_IDX, RESISTANCE_TYPE_NORMAL, primary_value);
                     break;
                 case PROTO_F_FIRE_RESISTANCE:
-                    obj_arrayfield_int32_set(obj, OBJ_F_RESISTANCE_IDX, RESISTANCE_TYPE_FIRE, v2);
+                    obj_arrayfield_int32_set(obj, OBJ_F_RESISTANCE_IDX, RESISTANCE_TYPE_FIRE, primary_value);
                     break;
                 case PROTO_F_ELECTRICAL_RESISTANCE:
-                    obj_arrayfield_int32_set(obj, OBJ_F_RESISTANCE_IDX, RESISTANCE_TYPE_ELECTRICAL, v2);
+                    obj_arrayfield_int32_set(obj, OBJ_F_RESISTANCE_IDX, RESISTANCE_TYPE_ELECTRICAL, primary_value);
                     break;
                 case PROTO_F_POISON_RESISTANCE:
-                    obj_arrayfield_int32_set(obj, OBJ_F_RESISTANCE_IDX, RESISTANCE_TYPE_POISON, v2);
+                    obj_arrayfield_int32_set(obj, OBJ_F_RESISTANCE_IDX, RESISTANCE_TYPE_POISON, primary_value);
                     break;
                 case PROTO_F_MAGIC_RESISTANCE:
-                    obj_arrayfield_int32_set(obj, OBJ_F_RESISTANCE_IDX, RESISTANCE_TYPE_MAGIC, v2);
+                    obj_arrayfield_int32_set(obj, OBJ_F_RESISTANCE_IDX, RESISTANCE_TYPE_MAGIC, primary_value);
                     break;
                 case PROTO_F_NORMAL_DAMAGE:
-                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_NORMAL * 2, v2);
-                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_NORMAL * 2 + 1, v3);
+                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_NORMAL * 2, primary_value);
+                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_NORMAL * 2 + 1, secondary_value);
                     break;
                 case PROTO_F_POISON_DAMAGE:
-                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_POISON * 2, v2);
-                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_POISON * 2 + 1, v3);
+                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_POISON * 2, primary_value);
+                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_POISON * 2 + 1, secondary_value);
                     break;
                 case PROTO_F_ELECTRICAL_DAMAGE:
-                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_ELECTRICAL * 2, v2);
-                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_ELECTRICAL * 2 + 1, v3);
+                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_ELECTRICAL * 2, primary_value);
+                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_ELECTRICAL * 2 + 1, secondary_value);
                     break;
                 case PROTO_F_FIRE_DAMAGE:
-                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_FIRE * 2, v2);
-                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_FIRE * 2 + 1, v3);
+                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_FIRE * 2, primary_value);
+                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_FIRE * 2 + 1, secondary_value);
                     break;
                 case PROTO_F_FATIGUE_DAMAGE:
-                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_FATIGUE * 2, v2);
-                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_FATIGUE * 2 + 1, v3);
+                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_FATIGUE * 2, primary_value);
+                    obj_arrayfield_uint32_set(obj, OBJ_F_NPC_DAMAGE_IDX, DAMAGE_TYPE_FATIGUE * 2 + 1, secondary_value);
                     break;
                 case PROTO_F_SOUND_BANK:
-                    obj_field_int32_set(obj, OBJ_F_SOUND_EFFECT, v2);
+                    obj_field_int32_set(obj, OBJ_F_SOUND_EFFECT, primary_value);
                     break;
                 case PROTO_F_INVENTORY_SOURCE:
-                    obj_field_int32_set(obj, OBJ_F_CRITTER_INVENTORY_SOURCE, v2);
+                    obj_field_int32_set(obj, OBJ_F_CRITTER_INVENTORY_SOURCE, primary_value);
                     break;
                 case PROTO_F_PORTRAIT:
-                    obj_field_int32_set(obj, OBJ_F_CRITTER_PORTRAIT, v2);
+                    obj_field_int32_set(obj, OBJ_F_CRITTER_PORTRAIT, primary_value);
                     break;
                 case PROTO_F_RETAIL_PRICE_MULTIPLIER:
-                    obj_field_int32_set(obj, OBJ_F_NPC_RETAIL_PRICE_MULTIPLIER, v2);
+                    obj_field_int32_set(obj, OBJ_F_NPC_RETAIL_PRICE_MULTIPLIER, primary_value);
                     break;
                 case PROTO_F_SOCIAL_CLASS:
-                    critter_social_class_set(obj, v2);
+                    critter_social_class_set(obj, primary_value);
                     break;
                 case PROTO_F_OBJECT_FLAG:
-                    obj_field_int32_set(obj, OBJ_F_FLAGS, obj_field_int32_get(obj, OBJ_F_FLAGS) | v2);
+                    obj_field_int32_set(obj, OBJ_F_FLAGS, obj_field_int32_get(obj, OBJ_F_FLAGS) | primary_value);
                     break;
                 case PROTO_F_AUTO_LEVEL_SCHEME:
-                    obj_field_int32_set(obj, OBJ_F_CRITTER_AUTO_LEVEL_SCHEME, v2);
+                    obj_field_int32_set(obj, OBJ_F_CRITTER_AUTO_LEVEL_SCHEME, primary_value);
                     break;
                 case PROTO_F_CATEGORY:
-                    obj_field_int32_set(obj, OBJ_F_CATEGORY, v2);
+                    obj_field_int32_set(obj, OBJ_F_CATEGORY, primary_value);
                     break;
                 }
             }
@@ -16325,17 +16325,17 @@ void proto_max_hit_points_set(int64_t obj, int max_hit_points)
 }
 
 // 0x49BB70
-bool proto_critter_text_field_parse(const char* str, int* fld_ptr, int* a3, int* a4, int* a5)
+bool proto_critter_text_field_parse(const char* str, int* fld_ptr, int* primary_value_ptr, int* secondary_value_ptr, int* packed_counters_ptr)
 {
     int fld;
     size_t pos;
     int stat;
     int spl;
     const char* name;
-    int v1;
-    int v2;
-    int v3;
-    int v4;
+    int counter_low_byte;
+    int counter_second_byte;
+    int counter_third_byte;
+    int counter_high_byte;
 
     for (fld = 0; fld < PROTO_F_COUNT; fld++) {
         pos = strlen(proto_field_names[fld]) + 1;
@@ -16367,27 +16367,27 @@ bool proto_critter_text_field_parse(const char* str, int* fld_ptr, int* a3, int*
     case PROTO_F_ELECTRICAL_DAMAGE:
     case PROTO_F_FIRE_DAMAGE:
     case PROTO_F_FATIGUE_DAMAGE:
-        sscanf(str, "%d %d", a3, a4);
+        sscanf(str, "%d %d", primary_value_ptr, secondary_value_ptr);
         return true;
     case PROTO_F_CRITTER_FLAG:
-        *a3 = proto_flag_from_identifier(str, obj_flags_ocf, OCF_COUNT);
+        *primary_value_ptr = proto_flag_from_identifier(str, obj_flags_ocf, OCF_COUNT);
         return true;
     case PROTO_F_CRITTER2_FLAG:
-        *a3 = proto_flag_from_identifier(str, obj_flags_ocf2, OCF2_COUNT);
+        *primary_value_ptr = proto_flag_from_identifier(str, obj_flags_ocf2, OCF2_COUNT);
         return true;
     case PROTO_F_NPC_FLAG:
-        *a3 = proto_flag_from_identifier(str, obj_flags_onf, ONF_COUNT);
+        *primary_value_ptr = proto_flag_from_identifier(str, obj_flags_onf, ONF_COUNT);
         return true;
     case PROTO_F_BLIT_FLAG:
-        *a3 = proto_flag_from_identifier(str, proto_art_blit_flag_names, sizeof(proto_art_blit_flag_names) / sizeof(proto_art_blit_flag_names[0]));
+        *primary_value_ptr = proto_flag_from_identifier(str, proto_art_blit_flag_names, sizeof(proto_art_blit_flag_names) / sizeof(proto_art_blit_flag_names[0]));
         return true;
     case PROTO_F_BASIC_STAT:
         for (stat = STAT_STRENGTH; stat <= STAT_CHARISMA; stat++) {
             name = stat_name(stat);
             pos = strlen(name);
             if (SDL_strncasecmp(str, name, pos) == 0) {
-                *a3 = stat;
-                *a4 = atoi(str + pos);
+                *primary_value_ptr = stat;
+                *secondary_value_ptr = atoi(str + pos);
                 return true;
             }
         }
@@ -16395,8 +16395,8 @@ bool proto_critter_text_field_parse(const char* str, int* fld_ptr, int* a3, int*
             name = stat_name(stat);
             pos = strlen(name);
             if (SDL_strncasecmp(str, name, pos) == 0) {
-                *a3 = stat;
-                *a4 = atoi(str + pos);
+                *primary_value_ptr = stat;
+                *secondary_value_ptr = atoi(str + pos);
                 return true;
             }
         }
@@ -16407,22 +16407,22 @@ bool proto_critter_text_field_parse(const char* str, int* fld_ptr, int* a3, int*
             name = spell_name(spl);
             pos = strlen(name);
             if (SDL_strncasecmp(str, name, pos) == 0) {
-                *a3 = spl;
-                *a4 = atoi(str + pos);
+                *primary_value_ptr = spl;
+                *secondary_value_ptr = atoi(str + pos);
                 return true;
             }
         }
         tig_debug_printf("Proto read: unknown spell %s\n", str);
         return true;
     case PROTO_F_SCRIPT:
-        sscanf(str, "%d %d %d %d %d %d", a3, a4, &v1, &v2, &v3, &v4);
-        *a5 = v1 | (v2 << 8) | (v3 << 16) | (v4 << 24);
+        sscanf(str, "%d %d %d %d %d %d", primary_value_ptr, secondary_value_ptr, &counter_low_byte, &counter_second_byte, &counter_third_byte, &counter_high_byte);
+        *packed_counters_ptr = counter_low_byte | (counter_second_byte << 8) | (counter_third_byte << 16) | (counter_high_byte << 24);
         return true;
     case PROTO_F_OBJECT_FLAG:
-        *a3 = proto_flag_from_identifier(str, obj_flags_of, OF_COUNT);
+        *primary_value_ptr = proto_flag_from_identifier(str, obj_flags_of, OF_COUNT);
         return true;
     default:
-        *a3 = atoi(str);
+        *primary_value_ptr = atoi(str);
         return true;
     }
 }

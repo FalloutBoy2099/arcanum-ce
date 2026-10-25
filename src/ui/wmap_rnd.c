@@ -125,7 +125,7 @@ static int wmap_rnd_encounter_total_frequency(WmapRndEncounterTable* table);
 static int wmap_rnd_encounter_entry_total_monsters(WmapRndEncounterTableEntry* entry);
 static void wmap_rnd_encounter_spawn(WmapRndEncounterTableEntry* entry);
 static bool wmap_rnd_encounter_is_trivial(WmapRndEncounterTableEntry* entry);
-static void wmap_rnd_spawn_position_offset(int a1, int64_t* dx_ptr, int64_t* dy_ptr);
+static void wmap_rnd_spawn_position_offset(int index, int64_t* dx_ptr, int64_t* dy_ptr);
 static void wmap_rnd_encounter_build_object(int name, int64_t loc, int64_t* obj_ptr);
 
 /**
@@ -741,13 +741,13 @@ bool wmap_rnd_mes_count_entries(MesFileEntry* mes_file_entry, int cnt, int* valu
 {
     int end;
     int index = 0;
-    int v1 = -1;
+    int previous_entry_number = -1;
 
     end = mes_file_entry->num + cnt;
 
     mes_get_msg(wmap_rnd_mes_file, mes_file_entry);
 
-    while (mes_file_entry->num != v1) {
+    while (mes_file_entry->num != previous_entry_number) {
         if (mes_file_entry->num >= end) {
             *value_ptr = index;
             return true;
@@ -760,7 +760,7 @@ bool wmap_rnd_mes_count_entries(MesFileEntry* mes_file_entry, int cnt, int* valu
         }
     }
 
-    tig_debug_printf("Error:  Line %d is duplicated in random encounter tables.\n", v1);
+    tig_debug_printf("Error:  Line %d is duplicated in random encounter tables.\n", previous_entry_number);
     return false;
 }
 
@@ -1416,14 +1416,14 @@ void wmap_rnd_encounter_spawn(WmapRndEncounterTableEntry* entry)
  */
 void wmap_rnd_spawn_position_offset(int index, int64_t* dx_ptr, int64_t* dy_ptr)
 {
-    int v1;
+    int diagonal_offset;
 
     if (index != 0) {
-        v1 = (index - 1) / 3 + 1;
+        diagonal_offset = (index - 1) / 3 + 1;
         *dx_ptr = LOCATION_MAKE(LOCATION_GET_X(*dx_ptr) + 1, LOCATION_GET_Y(*dx_ptr) + 1);
 
-        v1 = index / 3;
-        *dy_ptr = LOCATION_MAKE(LOCATION_GET_X(*dy_ptr) + v1, LOCATION_GET_Y(*dy_ptr) + v1);
+        diagonal_offset = index / 3;
+        *dy_ptr = LOCATION_MAKE(LOCATION_GET_X(*dy_ptr) + diagonal_offset, LOCATION_GET_Y(*dy_ptr) + diagonal_offset);
     } else {
         *dy_ptr = LOCATION_MAKE(LOCATION_GET_X(*dy_ptr) + 1, LOCATION_GET_Y(*dy_ptr) + 1);
     }

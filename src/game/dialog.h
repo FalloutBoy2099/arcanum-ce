@@ -49,7 +49,7 @@ void dialog_copy_npc_normally_wont_buy_msg(int64_t npc_obj, int64_t pc_obj, char
 void dialog_copy_npc_buy_for_less_msg(int64_t npc_obj, int64_t pc_obj, char* buffer);
 void dialog_copy_npc_not_enough_money_msg(int64_t npc_obj, int64_t pc_obj, char* buffer);
 void dialog_copy_npc_let_me_handle_msg(int64_t npc_obj, int64_t pc_obj, char* buffer);
-void dialog_prepare_npc_reply(DialogState* state, bool a2);
+void dialog_prepare_npc_reply(DialogState* state, bool skip_speech_check);
 void dialog_copy_npc_wont_follow_msg(int64_t npc_obj, int64_t pc_obj, int reason, char* buffer, int* speech_id_ptr);
 void dialog_copy_npc_order_ok_msg(int64_t npc_obj, int64_t pc_obj, char* buffer, int* speech_id_ptr);
 void dialog_copy_npc_order_no_msg(int64_t npc_obj, int64_t pc_obj, char* buffer, int* speech_id_ptr);
@@ -70,6 +70,6 @@ void dialog_copy_npc_wont_repair_undamaged_msg(int64_t npc_obj, int64_t pc_obj, 
 void dialog_copy_npc_repair_msg(int64_t npc_obj, int64_t pc_obj, char* buffer);
 void dialog_check(void);
 void dialog_enable_numbers(void);
-void dialog_speech_id_decode(int a1, int* a2, int* a3);
+void dialog_speech_id_decode(int speech_id, int* script_number_ptr, int* speech_line_ptr);
 
 #endif /* ARCANUM_GAME_DIALOG_H_ */

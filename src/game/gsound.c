@@ -9,6 +9,7 @@
 #include "game/mes.h"
 #include "game/player.h"
 #include "game/random.h"
+#include "game/repetitive_sound.h"
 #include "game/snd.h"
 #include "game/timeevent.h"
 
@@ -113,6 +114,8 @@ typedef struct SoundScheme {
     /* 0008 */ int count;
     /* 000C */ Sound sounds[GSOUND_SCHEME_MAX_SOUNDS];
 } SoundScheme;
+
+static void gsound_repetitive_sounds_changed(void);
 
 static const char* gsound_build_sound_path(const char* name);
 static void gsound_scheme_reset(SoundScheme* scheme);
@@ -394,6 +397,12 @@ static int64_t gsound_origin_y;
  */
 static int64_t gsound_origin_x;
 
+static void gsound_repetitive_sounds_changed(void)
+{
+    tig_sound_set_effect_mute_filter(settings_get_value(&settings, MUTE_REPETITIVE_SOUNDS_KEY) != 0
+            ? repetitive_sound_matches : NULL);
+}
+
 /**
  * Resolves a numeric sound ID to its filesystem path.
  *
@@ -611,6 +620,8 @@ bool gsound_init(GameInitInfo* init_info)
     settings_register(&settings, VOICE_VOLUME_KEY, "5", gsound_voice_volume_changed);
     settings_register(&settings, MUSIC_VOLUME_KEY, "5", gsound_music_volume_changed);
     settings_register(&settings, NO_COMBAT_MUSIC_KEY, "0", NULL);
+    settings_register(&settings, MUTE_REPETITIVE_SOUNDS_KEY, "0", gsound_repetitive_sounds_changed);
+    gsound_repetitive_sounds_changed();
     gsound_effects_volume_changed();
     gsound_interface_volume_changed();
     gsound_walking_volume_changed();
@@ -667,6 +678,7 @@ void gsound_scheme_reset(SoundScheme* scheme)
  */
 void gsound_exit(void)
 {
+    tig_sound_set_effect_mute_filter(NULL);
     int index;
 
     gsound_initialized = false;

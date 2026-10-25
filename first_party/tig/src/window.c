@@ -434,6 +434,7 @@ static int tig_window_display_impl(void)
     }
 
     if (tig_window_dirty_rects != NULL) {
+        tig_video_gpu_cursor_clear();
         rc = tig_mouse_get_state(&mouse_state);
         if (rc != TIG_OK) {
             return rc;
@@ -474,11 +475,11 @@ void tig_window_region_composite(TigRect* src_rect, TigVideoBuffer* dst_video_bu
     TigWindow* wins[20];
     TigRect rects[20];
     int rc;
-    int v45;
-    int v47;
+    int destination_origin_x;
+    int destination_origin_y;
     int num_clips;
     int index;
-    int v38 = 0;
+    int overlay_count = 0;
 
     rc = tig_rect_intersection(src_rect, &tig_window_screen_rect, &dirty_rect);
     if (rc != TIG_OK) {
@@ -486,11 +487,11 @@ void tig_window_region_composite(TigRect* src_rect, TigVideoBuffer* dst_video_bu
     }
 
     if (dst_video_buffer != NULL) {
-        v45 = src_rect->x - dx;
-        v47 = src_rect->y - dy;
+        destination_origin_x = src_rect->x - dx;
+        destination_origin_y = src_rect->y - dy;
     } else {
-        v45 = 0;
-        v47 = 0;
+        destination_origin_x = 0;
+        destination_origin_y = 0;
     }
 
     head = tig_rect_node_create();
@@ -547,10 +548,10 @@ void tig_window_region_composite(TigRect* src_rect, TigVideoBuffer* dst_video_bu
                             window_index - 1);
                         src_video_buffer = win->secondary_video_buffer;
                         cont = true;
-                    } else if (v38 < 20) {
-                        wins[v38] = win;
-                        rects[v38] = dirty_rect;
-                        v38++;
+                    } else if (overlay_count < 20) {
+                        wins[overlay_count] = win;
+                        rects[overlay_count] = dirty_rect;
+                        overlay_count++;
                         cont = false;
                     } else {
                         cont = true;
@@ -572,8 +573,8 @@ void tig_window_region_composite(TigRect* src_rect, TigVideoBuffer* dst_video_bu
                             tig_video_buffer_blit(&vb_blit_info);
                         }
 
-                        blt_dst_rect.x = dirty_rect.x - v45;
-                        blt_dst_rect.y = dirty_rect.y - v47;
+                        blt_dst_rect.x = dirty_rect.x - destination_origin_x;
+                        blt_dst_rect.y = dirty_rect.y - destination_origin_y;
                         blt_dst_rect.width = blt_src_rect.width;
                         blt_dst_rect.height = blt_src_rect.height;
 
@@ -664,31 +665,31 @@ void tig_window_region_composite(TigRect* src_rect, TigVideoBuffer* dst_video_bu
         tig_rect_node_destroy(node);
     }
 
-    --v38;
-    while (v38 >= 0) {
-        blt_src_rect.x = rects[v38].x - wins[v38]->frame.x;
-        blt_src_rect.y = rects[v38].y - wins[v38]->frame.y;
-        blt_src_rect.width = rects[v38].width;
-        blt_src_rect.height = rects[v38].height;
+    --overlay_count;
+    while (overlay_count >= 0) {
+        blt_src_rect.x = rects[overlay_count].x - wins[overlay_count]->frame.x;
+        blt_src_rect.y = rects[overlay_count].y - wins[overlay_count]->frame.y;
+        blt_src_rect.width = rects[overlay_count].width;
+        blt_src_rect.height = rects[overlay_count].height;
 
-        blt_dst_rect.x = rects[v38].x - v45;
-        blt_dst_rect.y = rects[v38].y - v47;
-        blt_dst_rect.width = rects[v38].width;
-        blt_dst_rect.height = rects[v38].height;
+        blt_dst_rect.x = rects[overlay_count].x - destination_origin_x;
+        blt_dst_rect.y = rects[overlay_count].y - destination_origin_y;
+        blt_dst_rect.width = rects[overlay_count].width;
+        blt_dst_rect.height = rects[overlay_count].height;
 
         if (dst_video_buffer != NULL) {
             vb_blit_info.flags = 0;
-            vb_blit_info.src_video_buffer = wins[v38]->video_buffer;
+            vb_blit_info.src_video_buffer = wins[overlay_count]->video_buffer;
             vb_blit_info.dst_video_buffer = dst_video_buffer;
             vb_blit_info.src_rect = &blt_src_rect;
             vb_blit_info.dst_rect = &blt_dst_rect;
             tig_video_buffer_blit(&vb_blit_info);
-        } else if (wins[v38]->near_black_alpha_enabled) {
+        } else if (wins[overlay_count]->near_black_alpha_enabled) {
             TigVideoBuffer* under_vb2 = NULL;
             int under_off_x2 = 0;
             int under_off_y2 = 0;
-            if (wins[v38]->near_black_underlay != TIG_WINDOW_HANDLE_INVALID) {
-                int uidx = tig_window_handle_to_index(wins[v38]->near_black_underlay);
+            if (wins[overlay_count]->near_black_underlay != TIG_WINDOW_HANDLE_INVALID) {
+                int uidx = tig_window_handle_to_index(wins[overlay_count]->near_black_underlay);
                 if (uidx >= 0 && uidx < TIG_WINDOW_MAX) {
                     TigWindow* uw = &(windows[uidx]);
                     under_vb2 = uw->video_buffer;
@@ -696,19 +697,19 @@ void tig_window_region_composite(TigRect* src_rect, TigVideoBuffer* dst_video_bu
                     under_off_y2 = -uw->frame.y;
                 }
             }
-            tig_video_blit_near_black_alpha(wins[v38]->video_buffer,
+            tig_video_blit_near_black_alpha(wins[overlay_count]->video_buffer,
                 &blt_src_rect,
                 &blt_dst_rect,
                 under_vb2,
                 under_off_x2,
                 under_off_y2,
-                wins[v38]->near_black_threshold,
-                wins[v38]->near_black_opacity);
+                wins[overlay_count]->near_black_threshold,
+                wins[overlay_count]->near_black_opacity);
         } else {
-            tig_video_blit(wins[v38]->video_buffer, &blt_src_rect, &blt_dst_rect);
+            tig_video_blit(wins[overlay_count]->video_buffer, &blt_src_rect, &blt_dst_rect);
         }
 
-        v38--;
+        overlay_count--;
     }
 }
 
@@ -1178,7 +1179,7 @@ int tig_window_copy_to_vbuffer(tig_window_handle_t src_window_handle, TigRect* s
 }
 
 // 0x51E0A0
-int tig_window_tint(tig_window_handle_t window_handle, TigRect* rect, int a3, int a4)
+int tig_window_tint(tig_window_handle_t window_handle, TigRect* rect, int tint_mode, int color)
 {
     int window_index;
     TigWindow* win;
@@ -1202,7 +1203,7 @@ int tig_window_tint(tig_window_handle_t window_handle, TigRect* rect, int a3, in
         return TIG_OK;
     }
 
-    rc = tig_video_buffer_tint(win->video_buffer, &dirty_rect, a3, a4);
+    rc = tig_video_buffer_tint(win->video_buffer, &dirty_rect, tint_mode, color);
 
     dirty_rect.x += win->frame.x;
     dirty_rect.y += win->frame.y;

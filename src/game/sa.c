@@ -1,5 +1,7 @@
 #include "game/sa.h"
 
+#include <limits.h>
+
 #include "game/obj_private.h"
 
 // 0x603738
@@ -18,6 +20,9 @@ static void sa_insert_slot(SizeableArray** sa_ptr, int index);
 static void sa_remove_slot(SizeableArray** sa_ptr, int index);
 static void* sa_data(SizeableArray* sa);
 static int sa_byte_size(SizeableArray* sa);
+static bool sa_storage_sizes(const SizeableArray* sa, int* payload_size, int* allocation_size);
+
+#define SA_DATA_OFFSET ((sizeof(SizeableArray) + 7) & ~(size_t)7)
 static bool sa_enumerate_worker(int key);
 static bool sa_array_copy_to_flat_worker(void* entry, int key);
 
@@ -29,12 +34,10 @@ static bool sa_array_copy_to_flat_worker(void* entry, int key);
 void sa_allocate(SizeableArray** sa_ptr, int size)
 {
     if (*sa_ptr != NULL) {
-        // FIXME: Should call `sa_deallocate` here to also destroy the
-        // existing bitset.
-        FREE(*sa_ptr);
+        sa_deallocate(sa_ptr);
     }
 
-    *sa_ptr = (SizeableArray*)MALLOC(sizeof(SizeableArray));
+    *sa_ptr = (SizeableArray*)MALLOC(SA_DATA_OFFSET);
     (*sa_ptr)->size = size;
     (*sa_ptr)->count = 0;
     (*sa_ptr)->bitset_id = bitset_alloc();
@@ -79,8 +82,10 @@ void sa_copy(SizeableArray** dst, SizeableArray** src)
  */
 void sa_array_copy_to_flat(void* dst, SizeableArray** sa_ptr, int cnt, int size)
 {
+    if (dst == NULL || sa_ptr == NULL || cnt < 0 || size <= 0
+        || (size_t)cnt + 1 > SIZE_MAX / (size_t)size) return;
     if (*sa_ptr == NULL) {
-        memset(dst, 0, size * (cnt + 1));
+        memset(dst, 0, (size_t)size * ((size_t)cnt + 1));
         return;
     }
 
@@ -91,7 +96,7 @@ void sa_array_copy_to_flat(void* dst, SizeableArray** sa_ptr, int cnt, int size)
     }
 
     // Zero the entire destination range so absent keys become zero elements.
-    memset(dst, 0, size * (cnt + 1));
+    memset(dst, 0, (size_t)size * ((size_t)cnt + 1));
 
     // Store parameters as globals so that the `sa_array_copy_to_flat_worker`
     // callback can access them.
@@ -109,15 +114,13 @@ void sa_array_copy_to_flat(void* dst, SizeableArray** sa_ptr, int cnt, int size)
  */
 bool sa_write_file(SizeableArray** sa_ptr, TigFile* stream)
 {
-    int size;
-
-    // Write header and all element data as a flat blog.
-    size = sa_byte_size(*sa_ptr);
-    if (tig_file_fwrite(*sa_ptr, size, 1, stream) != 1) {
+    int payload_size;
+    int allocation_size;
+    if (!sa_storage_sizes(*sa_ptr, &payload_size, &allocation_size)) return false;
+    if (tig_file_fwrite(*sa_ptr, sizeof(SizeableArray), 1, stream) != 1
+        || (payload_size != 0 && tig_file_fwrite(sa_data(*sa_ptr), payload_size, 1, stream) != 1)) {
         return false;
     }
-
-    // Write associated bitset.
     return bitset_write_file((*sa_ptr)->bitset_id, stream);
 }
 
@@ -130,11 +133,11 @@ bool sa_write_file(SizeableArray** sa_ptr, TigFile* stream)
  */
 bool sa_read_file(SizeableArray** sa_ptr, TigFile* stream)
 {
-    if (*sa_ptr != NULL) {
-        sa_deallocate(sa_ptr);
-    }
-
-    return sa_read_no_dealloc(sa_ptr, stream);
+    SizeableArray* loaded = NULL;
+    if (!sa_read_no_dealloc(&loaded, stream)) return false;
+    if (*sa_ptr != NULL) sa_deallocate(sa_ptr);
+    *sa_ptr = loaded;
+    return true;
 }
 
 /**
@@ -171,6 +174,10 @@ void sa_set(SizeableArray** sa_ptr, int key, const void* value)
     index = bitset_rank((*sa_ptr)->bitset_id, key);
 
     if (!bitset_test((*sa_ptr)->bitset_id, key)) {
+        if ((*sa_ptr)->count >= (INT_MAX - (int)SA_DATA_OFFSET) / (*sa_ptr)->size) {
+            tig_debug_println("Sparse array capacity exceeded.");
+            return;
+        }
         bitset_set((*sa_ptr)->bitset_id, key, true);
         sa_insert_slot(sa_ptr, index);
     }
@@ -255,7 +262,9 @@ int sa_count(SizeableArray** sa_ptr)
  */
 int sa_total_byte_size(SizeableArray** sa_ptr)
 {
-    return bitset_serialized_size((*sa_ptr)->bitset_id) + sa_byte_size(*sa_ptr);
+    int64_t total = (int64_t)bitset_serialized_size((*sa_ptr)->bitset_id)
+        + sa_byte_size(*sa_ptr) - (int)SA_DATA_OFFSET + (int)sizeof(SizeableArray);
+    return total <= INT_MAX ? (int)total : -1;
 }
 
 /**
@@ -265,14 +274,12 @@ int sa_total_byte_size(SizeableArray** sa_ptr)
  */
 void sa_write_mem(SizeableArray** src, SizeableArray* dst)
 {
-    int size;
-
-    // Copy the header and element buffer.
-    size = sa_byte_size(*src);
-    memcpy(dst, *src, size);
-
-    // Copy associated bitset.
-    bitset_write_mem((*src)->bitset_id, (uint8_t*)dst + size);
+    int payload_size;
+    int allocation_size;
+    if (!sa_storage_sizes(*src, &payload_size, &allocation_size)) return;
+    memcpy(dst, *src, sizeof(SizeableArray));
+    memcpy((uint8_t*)dst + sizeof(SizeableArray), sa_data(*src), payload_size);
+    bitset_write_mem((*src)->bitset_id, (uint8_t*)dst + sizeof(SizeableArray) + payload_size);
 }
 
 /**
@@ -280,34 +287,32 @@ void sa_write_mem(SizeableArray** src, SizeableArray* dst)
  *
  * 0x4E7820
  */
-void sa_read_mem(SizeableArray** sa_ptr, uint8_t** data)
+bool sa_read_mem(SizeableArray** sa_ptr, ReadBuffer* data)
 {
-    SizeableArray sa;
-    int size;
-
-    if (*sa_ptr != NULL) {
-        sa_deallocate(sa_ptr);
+    SizeableArray header;
+    int payload_size;
+    int allocation_size;
+    if (!read_buffer_read(data, &header, sizeof(header))
+        || !sa_storage_sizes(&header, &payload_size, &allocation_size)) return false;
+    const uint8_t* payload = read_buffer_take(data, payload_size);
+    if (data->failed) return false;
+    int bitset;
+    if (!bitset_read_mem(&bitset, data)) return false;
+    if (!bitset_count_matches(bitset, header.count)) {
+        bitset_free(bitset);
+        return false;
     }
-
-    // Read the fixed-size header into a temporary array to we can compute
-    // allocation size.
-    mem_read_advance(&sa, sizeof(sa), data);
-
-    size = sa_byte_size(&sa);
-
-    // Allocate and populate the new array.
-    *sa_ptr = (SizeableArray*)MALLOC(size);
-    (*sa_ptr)->size = sa.size;
-    (*sa_ptr)->count = sa.count;
-    (*sa_ptr)->bitset_id = sa.bitset_id;
-
-    // Read element data (if present).
-    if (size - sizeof(SizeableArray) != 0) {
-        mem_read_advance(sa_data(*sa_ptr), size - sizeof(SizeableArray), data);
+    SizeableArray* loaded = MALLOC(allocation_size);
+    if (loaded == NULL) {
+        bitset_free(bitset);
+        return false;
     }
-
-    // Read the associated bitset.
-    bitset_read_mem(&((*sa_ptr)->bitset_id), data);
+    *loaded = header;
+    loaded->bitset_id = bitset;
+    if (payload_size != 0) memcpy(sa_data(loaded), payload, payload_size);
+    if (*sa_ptr != NULL) sa_deallocate(sa_ptr);
+    *sa_ptr = loaded;
+    return true;
 }
 
 /**
@@ -318,27 +323,27 @@ void sa_read_mem(SizeableArray** sa_ptr, uint8_t** data)
  */
 bool sa_read_no_dealloc(SizeableArray** sa_ptr, TigFile* stream)
 {
-    SizeableArray sa;
-    int size;
-
-    if (tig_file_fread(&sa, sizeof(sa), 1, stream) != 1) {
+    SizeableArray header;
+    SizeableArray* loaded;
+    int payload_size;
+    int allocation_size;
+    int position;
+    int file_size;
+    if (tig_file_fread(&header, sizeof(header), 1, stream) != 1
+        || !sa_storage_sizes(&header, &payload_size, &allocation_size)) return false;
+    position = tig_file_ftell(stream);
+    file_size = tig_file_filelength(stream);
+    if (position < 0 || file_size < position || payload_size > file_size - position) return false;
+    loaded = (SizeableArray*)MALLOC(allocation_size);
+    if (loaded == NULL) return false;
+    *loaded = header;
+    if ((payload_size != 0 && tig_file_fread(sa_data(loaded), payload_size, 1, stream) != 1)
+        || !bitset_read_file(&loaded->bitset_id, stream)) {
+        FREE(loaded);
         return false;
     }
-
-    size = sa_byte_size(&sa);
-
-    *sa_ptr = (SizeableArray*)MALLOC(size);
-    (*sa_ptr)->size = sa.size;
-    (*sa_ptr)->count = sa.count;
-    (*sa_ptr)->bitset_id = sa.bitset_id;
-
-    if (size - sizeof(SizeableArray) != 0) {
-        if (tig_file_fread(sa_data(*sa_ptr), size - sizeof(SizeableArray), 1, stream) != 1) {
-            return false;
-        }
-    }
-
-    return bitset_read_file(&((*sa_ptr)->bitset_id), stream);
+    *sa_ptr = loaded;
+    return true;
 }
 
 /**
@@ -401,7 +406,7 @@ void sa_remove_slot(SizeableArray** sa_ptr, int index)
  */
 void* sa_data(SizeableArray* sa)
 {
-    return sa + 1;
+    return (uint8_t*)sa + SA_DATA_OFFSET;
 }
 
 /**
@@ -414,7 +419,7 @@ void* sa_data(SizeableArray* sa)
  */
 int sa_byte_size(SizeableArray* sa)
 {
-    return sa->size * sa->count + sizeof(*sa);
+    return sa->size * sa->count + (int)SA_DATA_OFFSET;
 }
 
 /**
@@ -447,14 +452,23 @@ bool sa_array_copy_to_flat_worker(void* entry, int key)
 {
     // Keys are enumerated in ascending order. Once we exceed the max we are
     // done - no further keys can be in range.
-    if (key > sa_flat_copy_cnt) {
+    if (key < 0 || key > sa_flat_copy_cnt) {
         return false;
     }
 
     // Place the element at the corresponding position in the flat array.
-    memcpy((uint8_t*)sa_flat_copy_dst + sa_enumerate_arr->size * key,
+    memcpy((uint8_t*)sa_flat_copy_dst + (size_t)sa_enumerate_arr->size * (size_t)key,
         entry,
         sa_enumerate_arr->size);
 
+    return true;
+}
+
+static bool sa_storage_sizes(const SizeableArray* sa, int* payload_size, int* allocation_size)
+{
+    if (sa->size <= 0 || sa->count < 0
+        || sa->count > (INT_MAX - (int)SA_DATA_OFFSET) / sa->size) return false;
+    *payload_size = sa->size * sa->count;
+    *allocation_size = (int)SA_DATA_OFFSET + *payload_size;
     return true;
 }

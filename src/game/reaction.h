@@ -27,7 +27,7 @@ const char* reaction_get_name(int reaction);
 void reaction_begin_conversation(int64_t pc, int64_t npc);
 void reaction_end_conversation(int64_t pc, int64_t npc);
 int64_t reaction_conversation_pc_get(int64_t npc);
-int reaction_adjust_price(int64_t a1, int64_t a2, int a3);
-void reaction_adjust_for_trade_surplus(int64_t a1, int64_t a2, int a3);
+int reaction_adjust_price(int64_t npc_obj, int64_t pc_obj, int base_price);
+void reaction_adjust_for_trade_surplus(int64_t npc_obj, int64_t pc_obj, int trade_surplus);
 
 #endif /* ARCANUM_GAME_REACTION_H_ */

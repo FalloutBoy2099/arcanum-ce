@@ -45,7 +45,15 @@ typedef struct TigSound {
     /* 0138 */ int64_t positional_x;
     /* 0140 */ int64_t positional_y;
     /* 0148 */ TigSoundPositionalSize positional_size;
+    bool muted;
 } TigSound;
+
+static TigSoundMuteFilter tig_sound_effect_mute_filter;
+
+static int tig_sound_output_volume(const TigSound* sound, int volume)
+{
+    return sound->muted ? 0 : volume;
+}
 
 static void tig_sound_update(void);
 static void tig_sound_stop_from_destroy(tig_sound_handle_t sound_handle, int fade_duration);
@@ -171,10 +179,10 @@ void tig_sound_update(void)
                 }
 
                 if ((snd->flags & TIG_SOUND_STREAMED) != 0) {
-                    AIL_set_stream_volume(snd->audio_stream, new_volume);
+                    AIL_set_stream_volume(snd->audio_stream, tig_sound_output_volume(snd, new_volume));
                     snd->flags |= TIG_SOUND_DESTROY;
                 } else if ((snd->flags & TIG_SOUND_MEMORY) != 0) {
-                    AIL_quick_set_volume(snd->audio_handle, (new_volume * snd->volume / 128), snd->extra_volume);
+                    AIL_quick_set_volume(snd->audio_handle, tig_sound_output_volume(snd, new_volume * snd->volume / 128), snd->extra_volume);
                     snd->flags |= TIG_SOUND_DESTROY;
                 } else {
                     snd->flags |= TIG_SOUND_DESTROY;
@@ -194,9 +202,9 @@ void tig_sound_update(void)
                 }
 
                 if ((snd->flags & TIG_SOUND_STREAMED) != 0) {
-                    AIL_set_stream_volume(snd->audio_stream, new_volume);
+                    AIL_set_stream_volume(snd->audio_stream, tig_sound_output_volume(snd, new_volume));
                 } else if ((snd->flags & TIG_SOUND_MEMORY) != 0) {
-                    AIL_quick_set_volume(snd->audio_handle, new_volume, 64);
+                    AIL_quick_set_volume(snd->audio_handle, tig_sound_output_volume(snd, new_volume), 64);
                 }
             } else {
                 if ((snd->flags & TIG_SOUND_MEMORY) != 0) {
@@ -405,11 +413,13 @@ int tig_sound_play(tig_sound_handle_t sound_handle, const char* path, int id)
 
     snd = &(tig_sounds[sound_handle]);
     strcpy(snd->path, path);
+    snd->muted = (snd->flags & TIG_SOUND_EFFECT) != 0
+        && tig_sound_effect_mute_filter != NULL && tig_sound_effect_mute_filter(path);
     snd->file_cache_entry = tig_file_cache_acquire(tig_sound_cache, path);
 
     if (snd->file_cache_entry->data != NULL) {
         snd->audio_handle = AIL_quick_load_mem(snd->file_cache_entry->data, snd->file_cache_entry->size);
-        AIL_quick_set_volume(snd->audio_handle, snd->volume, snd->extra_volume);
+        AIL_quick_set_volume(snd->audio_handle, tig_sound_output_volume(snd, snd->volume), snd->extra_volume);
         AIL_quick_play(snd->audio_handle, snd->loops);
         snd->flags |= TIG_SOUND_MEMORY;
         snd->id = id;
@@ -468,6 +478,8 @@ int tig_sound_play_streamed(tig_sound_handle_t sound_handle, const char* name, i
     }
 
     strcpy(snd->path, name);
+    snd->muted = (snd->flags & TIG_SOUND_EFFECT) != 0
+        && tig_sound_effect_mute_filter != NULL && tig_sound_effect_mute_filter(name);
     snd->loops = loops;
 
     AIL_set_stream_loop_count(snd->audio_stream, loops);
@@ -579,9 +591,9 @@ void tig_sound_set_volume(tig_sound_handle_t sound_handle, int volume)
         snd->volume = volume;
 
         if ((snd->flags & TIG_SOUND_STREAMED) != 0) {
-            AIL_set_stream_volume(snd->audio_stream, volume);
+            AIL_set_stream_volume(snd->audio_stream, tig_sound_output_volume(snd, volume));
         } else if ((snd->flags & TIG_SOUND_MEMORY) != 0) {
-            AIL_quick_set_volume(snd->audio_handle, volume, snd->extra_volume);
+            AIL_quick_set_volume(snd->audio_handle, tig_sound_output_volume(snd, volume), snd->extra_volume);
         }
     }
 }
@@ -717,7 +729,7 @@ void tig_sound_set_extra_volume(tig_sound_handle_t sound_handle, int extra_volum
 
         if ((snd->flags & TIG_SOUND_STREAMED) == 0
             && (snd->flags & TIG_SOUND_MEMORY) != 0) {
-            AIL_quick_set_volume(snd->audio_handle, snd->volume, extra_volume);
+            AIL_quick_set_volume(snd->audio_handle, tig_sound_output_volume(snd, snd->volume), extra_volume);
         }
     }
 }
@@ -917,5 +929,25 @@ void tig_sound_set_active(bool is_active)
         AIL_digital_handle_reacquire(dig);
     } else {
         AIL_digital_handle_release(dig);
+    }
+}
+
+void tig_sound_set_effect_mute_filter(TigSoundMuteFilter filter)
+{
+    tig_sound_effect_mute_filter = filter;
+    if (!tig_sound_initialized) return;
+    for (int index = 0; index < SOUND_HANDLE_MAX; index++) {
+        TigSound* sound = &tig_sounds[index];
+        if (!sound->active) continue;
+        bool muted = (sound->flags & TIG_SOUND_EFFECT) != 0
+            && filter != NULL && filter(sound->path);
+        if (sound->muted == muted) continue;
+        sound->muted = muted;
+        int volume = tig_sound_output_volume(sound, sound->volume);
+        if ((sound->flags & TIG_SOUND_STREAMED) != 0) {
+            AIL_set_stream_volume(sound->audio_stream, volume);
+        } else if ((sound->flags & TIG_SOUND_MEMORY) != 0) {
+            AIL_quick_set_volume(sound->audio_handle, volume, sound->extra_volume);
+        }
     }
 }

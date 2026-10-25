@@ -1,4 +1,5 @@
 #include "game/timeevent.h"
+#include <limits.h>
 #include "game/timeevent_pool.h"
 #include <tig/performance.h>
 
@@ -20,6 +21,7 @@
 #include "game/obj_private.h"
 #include "game/object.h"
 #include "game/stat.h"
+#include "game/progression_rules.h"
 #include "game/teleport.h"
 #include "game/trap.h"
 #include "game/ui.h"
@@ -76,6 +78,8 @@ static int timeevent_node_teleport_classify(TimeEventNode* node);
 static void timeevent_load_nodes_from_map(const char* name);
 static void timeevent_break_nodes_to_map(const char* name);
 static bool debug_timeevent_process(TimeEvent* timeevent);
+static bool timeevent_aging_process(TimeEvent* timeevent);
+static void timeevent_aging_ensure_scheduled(void);
 static void timeevent_debug_node(TimeEventNode* timeevent, int node);
 
 // 0x5B2178
@@ -96,7 +100,7 @@ static TimeEventTypeInfo timeevent_type_info_table[TIMEEVENT_TYPE_COUNT] = {
     /*              TIMEEVENT_TYPE_POISON */ { "Poison", true, P2_INT | P1_OBJ | P0_INT, TIME_TYPE_GAME_TIME, stat_poison_timeevent_process, NULL, NULL },
     /*             TIMEEVENT_TYPE_RESTING */ { "Resting", true, 10, TIME_TYPE_GAME_TIME, critter_resting_timeevent_process, NULL, NULL },
     /*             TIMEEVENT_TYPE_FATIGUE */ { "Fatigue", true, P2_INT | P1_OBJ | P0_INT, TIME_TYPE_GAME_TIME, critter_fatigue_timeevent_process, NULL, NULL },
-    /*               TIMEEVENT_TYPE_AGING */ { "Aging", true, 0, TIME_TYPE_GAME_TIME, timeevent_do_nothing, NULL, NULL },
+    /*               TIMEEVENT_TYPE_AGING */ { "Aging", true, 0, TIME_TYPE_GAME_TIME, timeevent_aging_process, NULL, NULL },
     /*                  TIMEEVENT_TYPE_AI */ { "AI", false, P1_INT | P0_OBJ, TIME_TYPE_GAME_TIME, ai_timeevent_process, NULL, NULL },
     /*              TIMEEVENT_TYPE_COMBAT */ { "Combat", true, 0, TIME_TYPE_GAME_TIME, timeevent_do_nothing, NULL, NULL },
     /*           TIMEEVENT_TYPE_TB_COMBAT */ { "TB Combat", true, 0, TIME_TYPE_REAL_TIME, combat_tb_timeevent_process, NULL, NULL },
@@ -563,6 +567,7 @@ void timeevent_reset(void)
     datetime_init(&timeevent_game_time, datetime_start_time_in_milliseconds);
     datetime_init(&timeevent_anim_time, datetime_start_time_in_milliseconds);
     tig_timer_now(&timeevent_last_ping_time);
+    timeevent_aging_ensure_scheduled();
 }
 
 // 0x45AEC0
@@ -711,6 +716,7 @@ bool timeevent_load(GameLoadInfo* load_info)
             return false;
         }
 
+        if (!tig_file_count_fits(load_info->stream, count, INT_MAX, sizeof(DateTime) + sizeof(int))) return false;
         for (index = 0; index < count; index++) {
             if (!timeevent_load_node(&timeevent, load_info->stream)) {
                 return false;
@@ -722,6 +728,8 @@ bool timeevent_load(GameLoadInfo* load_info)
         }
     }
 
+    timeevent_clear_all_typed(TIMEEVENT_TYPE_AGING);
+    timeevent_aging_ensure_scheduled();
     return true;
 }
 
@@ -743,6 +751,7 @@ bool timeevent_load_node(TimeEvent* timeevent, TigFile* stream)
         return false;
     }
 
+    if (timeevent->type < 0 || timeevent->type >= (int)SDL_arraysize(timeevent_type_info_table)) return false;
     for (index = 0; index < TIMEEVENT_PARAM_COUNT; index++) {
         if ((timeevent_parameter_type_flags[index][TIMEEVENT_PARAM_TYPE_INTEGER] & timeevent_type_info_table[timeevent->type].flags) != 0) {
             if (tig_file_fread(&(timeevent->params[index].integer_value), sizeof(timeevent->params[index].integer_value), 1, stream) != 1) {
@@ -880,14 +889,36 @@ static void timeevent_ping_impl(tig_timestamp_t timestamp)
 
             info = &(timeevent_type_info_table[node->te.type]);
 
-            if (timeevent_recover_handles(node)) {
+            Uint64 recovery_start = tig_performance_begin();
+            bool recovered = timeevent_recover_handles(node);
+            tig_performance_end_detail(TIG_PERF_EVENT_RECOVERY, recovery_start, info->name);
+            if (recovered) {
                 // Save current node for debug purposes. In case infinite loop
                 // is detected (see below), this is the offending node which
                 // either creates too many timeevents or spams one timeevent for
                 // immediate processing.
                 offending_node_candidate = *node;
 
+                if (tig_performance_is_enabled()) {
+                    double lateness = ((double)datetime->days - node->te.datetime.days) * 86400000.0
+                        + (double)datetime->milliseconds - node->te.datetime.milliseconds;
+                    double real_lateness = time_type == TIME_TYPE_REAL_TIME ? lateness : lateness / 8.0;
+                    tig_performance_record(TIG_PERF_EVENT_LATENESS, real_lateness);
+                    if (real_lateness >= 5.0) {
+                        tig_performance_trace(TIG_PERF_EVENT_LATE_DISPATCH, node->te.type, time_type,
+                            (Sint64)lateness, iter);
+                    }
+                }
+                int callback_type = node->te.type;
+                Uint64 callback_start = tig_performance_begin();
                 info->process_func(&(node->te));
+                if (callback_start != 0) {
+                    double duration = (SDL_GetPerformanceCounter() - callback_start) * 1000.0 / SDL_GetPerformanceFrequency();
+                    tig_performance_record(TIG_PERF_EVENT_CALLBACK, duration);
+                    tig_performance_record_detail(TIG_PERF_EVENT_CALLBACK, duration, info->name);
+                    if (duration >= 5.0)
+                        tig_performance_trace(TIG_PERF_EVENT_SLOW_CALLBACK, callback_type, time_type, (Sint64)(duration * 1000.0), iter);
+                }
             }
 
             // Give user code a chance for cleanup.
@@ -1608,7 +1639,8 @@ void timeevent_save_nodes_to_map(const char* name)
             return;
         }
 
-        if (tig_file_fread(&count, sizeof(count), 1, stream) != 1) {
+        if (tig_file_fread(&count, sizeof(count), 1, stream) != 1
+            || count < 0 || count == INT_MAX) {
             tig_debug_printf("TimeEvent: timeevent_save_nodes_to_map: ERROR: Reading Header to data file for map!\n");
             tig_file_fclose(stream);
             return;
@@ -1756,6 +1788,10 @@ void timeevent_load_nodes_from_map(const char* name)
         return;
     }
 
+    if (!tig_file_count_fits(stream, count, INT_MAX, sizeof(DateTime) + sizeof(int))) {
+        tig_file_fclose(stream);
+        return;
+    }
     for (index = 0; index < count; index++) {
         if (!timeevent_load_node(&timeevent, stream)) {
             break;
@@ -1830,7 +1866,8 @@ void timeevent_break_nodes_to_map(const char* name)
             return;
         }
 
-        if (tig_file_fread(&count, sizeof(count), 1, stream) != 1) {
+        if (tig_file_fread(&count, sizeof(count), 1, stream) != 1
+            || count < 0 || count == INT_MAX) {
             tig_debug_printf("TimeEvent: timeevent_break_nodes_to_map: ERROR: Reading Header to data file for map!\n");
             tig_file_fclose(stream);
             return;
@@ -2029,4 +2066,38 @@ void timeevent_debug_node(TimeEventNode* node, int node_index)
     }
 
     tig_debug_printf("\n");
+}
+
+static void timeevent_aging_ensure_scheduled(void)
+{
+    if (timeevent_editor || timeevent_has_type(TIMEEVENT_TYPE_AGING)) return;
+    unsigned int next_day = progression_next_year_day(timeevent_game_time.days);
+    if (next_day == 0) return;
+    TimeEvent event = { 0 };
+    event.type = TIMEEVENT_TYPE_AGING;
+    DateTime next = { 0 };
+    next.days = next_day;
+    timeevent_add_base(&event, &next);
+}
+
+static bool timeevent_aging_process(TimeEvent* timeevent)
+{
+    unsigned int previous_day = timeevent->datetime.days > 0 ? timeevent->datetime.days - 1 : 0;
+    unsigned int years = progression_elapsed_years(previous_day, timeevent_game_time.days);
+    if (years != 0) {
+        int64_t obj;
+        int iterator;
+        if (obj_inst_first(&obj, &iterator)) {
+            do {
+                if (obj_type_is_critter(obj_field_int32_get(obj, OBJ_F_TYPE)) && !critter_is_dead(obj)) {
+                    int age = stat_base_get(obj, STAT_AGE);
+                    int maximum = stat_level_max(obj, STAT_AGE);
+                    int increase = years > (unsigned int)maximum ? maximum : (int)years;
+                    stat_base_set(obj, STAT_AGE, age > maximum - increase ? maximum : age + increase);
+                }
+            } while (obj_inst_next(&obj, &iterator));
+        }
+    }
+    timeevent_aging_ensure_scheduled();
+    return true;
 }

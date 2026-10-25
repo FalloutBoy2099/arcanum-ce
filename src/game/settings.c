@@ -3,6 +3,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 #include "game/obj_private.h"
 
@@ -19,6 +26,7 @@ static const char* const arcanum_ini_global_save_order[] = {
     "show_version",
     "show_fps",
     "performance_logging",
+    "asset_prefetch",
     "benchmark_autorun",
     NULL,
 };
@@ -30,10 +38,13 @@ static const char* const arcanum_ini_game_save_order[] = {
     "fast_turn_based",
     "auto_attack",
     "auto_exit_combat",
+    "utility_ai",
     "auto_switch",
     "always_run",
     "follower_skills",
     "followers_manually_level_up",
+    "master_educator",
+    "no_xp_per_hit",
     "autosave_travel",
     "autosave_sleep",
     "action_tooltips",
@@ -53,6 +64,7 @@ static const char* const arcanum_ini_video_save_order[] = {
     "camera_follows_player",
     "scroll_using_borders",
     "vsync_mode",
+    "gpu_cursor",
     "zoom_enabled",
     "zoom_min",
     "zoom_max",
@@ -83,6 +95,7 @@ static const char* const arcanum_ini_audio_save_order[] = {
     "voice_volume",
     "music_volume",
     "no_combat_music",
+    "mute_repetitive_sounds",
     NULL,
 };
 
@@ -90,6 +103,15 @@ static const char* const arcanum_ini_ui_save_order[] = {
     "schematic_toolbar",
     "logbook_toolbar",
     "worldmap_toolbar",
+    "floating_background_color",
+    "floating_background_opacity",
+    "floating_margin_horizontal",
+    "floating_margin_vertical",
+    "movement_preview",
+    "movement_preview_color",
+    "movement_preview_blocked_color",
+    "movement_preview_beyond_ap_color",
+    "movement_preview_opacity",
     "barter_color_better",
     "barter_color_worse",
     "barter_color_equal",
@@ -403,8 +425,11 @@ void settings_load_legacy(Settings* settings, const char* path)
  */
 void settings_save(Settings* settings)
 {
-    FILE* stream;
+    FILE* stream = NULL;
     SettingsEntry* curr;
+    char* temporary_path = NULL;
+    bool saved;
+    int attempt;
 
     // Ensure there is something worth saving.
     if (settings->entries == NULL) {
@@ -416,9 +441,20 @@ void settings_save(Settings* settings)
         return;
     }
 
-    stream = fopen(settings->path, "wt");
+    for (attempt = 0; attempt < 16; attempt++) {
+        SDL_free(temporary_path);
+        temporary_path = NULL;
+        if (SDL_asprintf(&temporary_path, "%s.tmp.%llu.%d", settings->path,
+                (unsigned long long)SDL_GetTicksNS(), attempt) < 0) {
+            SDL_free(temporary_path);
+            return;
+        }
+        stream = fopen(temporary_path, "wx");
+        if (stream != NULL || errno != EEXIST) break;
+    }
     if (stream == NULL) {
-        // Something's wrong, this should not normally happen.
+        tig_debug_printf("Settings: could not create a temporary file for %s.\n", settings->path);
+        SDL_free(temporary_path);
         return;
     }
 
@@ -436,10 +472,24 @@ void settings_save(Settings* settings)
         }
     }
 
-    fclose(stream);
-
-    // FIX: Settings synchronized to disk, unset `SETTINGS_CHANGED`.
-    settings->flags &= ~SETTINGS_CHANGED;
+    saved = ferror(stream) == 0;
+    if (fflush(stream) != 0) saved = false;
+    if (saved) {
+#ifdef _WIN32
+        saved = _commit(_fileno(stream)) == 0;
+#else
+        saved = fsync(fileno(stream)) == 0;
+#endif
+    }
+    if (fclose(stream) != 0) saved = false;
+    if (saved) saved = SDL_RenamePath(temporary_path, settings->path);
+    if (saved) {
+        settings->flags &= ~SETTINGS_CHANGED;
+    } else {
+        tig_debug_printf("Settings: could not save %s; the previous file was preserved.\n", settings->path);
+        SDL_RemovePath(temporary_path);
+    }
+    SDL_free(temporary_path);
 }
 
 /**

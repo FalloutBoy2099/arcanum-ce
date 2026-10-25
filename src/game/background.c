@@ -4,6 +4,8 @@
 #include <stdio.h>
 
 #include "game/effect.h"
+#include "game/gamelib.h"
+#include "game/progression_rules.h"
 #include "game/item.h"
 #include "game/mes.h"
 #include "game/object.h"
@@ -396,9 +398,9 @@ void background_educate_followers(int64_t obj)
     int follower_training;
     bool trained = false;
 
-    // Validate that the object is a PC with the "Educator" background.
+    bool master_educator = settings_get_value(&settings, MASTER_EDUCATOR_KEY) != 0;
     if (obj_field_int32_get(obj, OBJ_F_TYPE) != OBJ_TYPE_PC
-        || background_get(obj) != BACKGROUND_EDUCATOR) {
+        || (!master_educator && background_get(obj) != BACKGROUND_EDUCATOR)) {
         return;
     }
 
@@ -407,12 +409,13 @@ void background_educate_followers(int64_t obj)
     // Update basic skills for all followers.
     for (skill = 0; skill < BASIC_SKILL_COUNT; skill++) {
         educator_training = basic_skill_training_get(obj, skill);
-        if (educator_training > TRAINING_APPRENTICE) {
+        int target_training = progression_training_target(educator_training, master_educator);
+        if (target_training > TRAINING_NONE) {
             node = followers.head;
             while (node != NULL) {
                 // Increment follower training up to the educator's level.
                 follower_training = basic_skill_training_get(node->obj, skill) + 1;
-                while (follower_training < educator_training) {
+                while (follower_training <= target_training) {
                     if (basic_skill_training_set(node->obj, skill, follower_training) == follower_training) trained = true;
                     follower_training++;
                 }
@@ -424,12 +427,13 @@ void background_educate_followers(int64_t obj)
     // Update tech skills for all followers.
     for (skill = 0; skill < TECH_SKILL_COUNT; skill++) {
         educator_training = tech_skill_training_get(obj, skill);
-        if (educator_training > TRAINING_APPRENTICE) {
+        int target_training = progression_training_target(educator_training, master_educator);
+        if (target_training > TRAINING_NONE) {
             node = followers.head;
             while (node != NULL) {
                 // Increment follower training up to the educator's level.
                 follower_training = tech_skill_training_get(node->obj, skill) + 1;
-                while (follower_training < educator_training) {
+                while (follower_training <= target_training) {
                     if (tech_skill_training_set(node->obj, skill, follower_training) == follower_training) trained = true;
                     follower_training++;
                 }

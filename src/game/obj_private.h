@@ -30,15 +30,16 @@ typedef enum ObjDataType {
 typedef struct WriteBuffer {
     uint8_t* base;
     uint8_t* curr;
-    int size;
-    int remaining;
+    size_t size;
+    size_t remaining;
+    bool failed;
 } WriteBuffer;
 
 typedef struct ObjDataDescriptor {
     /* 0000 */ int type;
     /* 0004 */ void* ptr;
     /* 0008 */ int idx;
-    /* 000C */ int field_C;
+    /* 000C */ int reserved_slot_1;
     /* 0010 */ union {
         int value;
         int64_t value64;
@@ -58,14 +59,14 @@ void obj_data_fetch(ObjDataDescriptor* descr);
 void obj_data_copy(ObjDataDescriptor* descr, void* value);
 bool obj_data_read_file_slow(ObjDataDescriptor* descr, TigFile* stream);
 bool obj_data_read_file_fast(ObjDataDescriptor* descr, TigFile* stream);
-void obj_data_read_mem(ObjDataDescriptor* descr, uint8_t** data);
+bool obj_data_read_mem(ObjDataDescriptor* descr, ReadBuffer* data);
 bool obj_data_write_file(ObjDataDescriptor* descr, TigFile* stream);
 void obj_data_write_mem(ObjDataDescriptor* descr, WriteBuffer* wb);
 void obj_data_remove_idx(ObjDataDescriptor* descr);
 int obj_data_count_idx(ObjDataDescriptor* descr);
 void write_buffer_init(WriteBuffer* wb);
-void write_buffer_append(const void* data, int size, WriteBuffer* wb);
-void mem_read_advance(void* buffer, int size, uint8_t** data);
+bool write_buffer_append(const void* data, size_t size, WriteBuffer* wb);
+bool write_buffer_reserve(WriteBuffer* wb, size_t size);
 void bitset_pool_init(void);
 void bitset_pool_exit(void);
 int bitset_alloc(void);
@@ -79,7 +80,8 @@ bool bitset_write_file(int id, TigFile* stream);
 bool bitset_read_file(int* id, TigFile* stream);
 int bitset_serialized_size(int id);
 void bitset_write_mem(int id, uint8_t* data);
-void bitset_read_mem(int* id, uint8_t** data);
+bool bitset_read_mem(int* id, ReadBuffer* data);
 int bitset_count_bits(int value, int n);
+bool bitset_count_matches(int id, int expected);
 
 #endif /* ARCANUM_GAME_OBJ_PRIVATE_H_ */

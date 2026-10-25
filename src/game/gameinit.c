@@ -17,19 +17,19 @@ static const char* gameinit_adventure_name;
 static int gameinit_adventure_id;
 
 // 0x5FC308
-static int dword_5FC308;
+static int gameinit_unused_state_1;
 
 // 0x5FC310
-static int dword_5FC310;
+static int gameinit_unused_state_2;
 
 // 0x5FC314
-static int dword_5FC314;
+static int gameinit_unused_state_3;
 
 // 0x5FC318
-static int dword_5FC318;
+static int gameinit_unused_state_4;
 
 // 0x5FC31C
-static int dword_5FC31C;
+static int gameinit_unused_state_5;
 
 // 0x5FC320
 static mes_file_handle_t gameinit_mes_file;
@@ -45,11 +45,11 @@ bool gameinit_init(GameInitInfo* init_info)
 {
     gameinit_adventure_id = -1;
     gameinit_adventure_name = NULL;
-    dword_5FC308 = 0;
-    dword_5FC310 = 0;
-    dword_5FC314 = 0;
-    dword_5FC318 = 0;
-    dword_5FC31C = 0;
+    gameinit_unused_state_1 = 0;
+    gameinit_unused_state_2 = 0;
+    gameinit_unused_state_3 = 0;
+    gameinit_unused_state_4 = 0;
+    gameinit_unused_state_5 = 0;
     gameinit_editor = init_info->editor;
     gameinit_initialized = true;
 
@@ -127,11 +127,11 @@ void gameinit_mod_unload(void)
 {
     if (!gameinit_editor) {
         gameinit_adventure_name = NULL;
-        dword_5FC308 = 0;
-        dword_5FC310 = 0;
-        dword_5FC314 = 0;
-        dword_5FC318 = 0;
-        dword_5FC31C = 0;
+        gameinit_unused_state_1 = 0;
+        gameinit_unused_state_2 = 0;
+        gameinit_unused_state_3 = 0;
+        gameinit_unused_state_4 = 0;
+        gameinit_unused_state_5 = 0;
         gameinit_adventure_id = -1;
         mes_unload(gameinit_mes_file);
         gameinit_mes_file = MES_FILE_HANDLE_INVALID;

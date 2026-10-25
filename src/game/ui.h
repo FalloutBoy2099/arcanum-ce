@@ -8,6 +8,15 @@
 #define SCHEMATIC_TOOLBAR_KEY "schematic_toolbar"
 #define LOGBOOK_TOOLBAR_KEY "logbook_toolbar"
 #define WORLDMAP_TOOLBAR_KEY "worldmap_toolbar"
+#define FLOATING_MARGIN_HORIZONTAL_KEY "floating_margin_horizontal"
+#define FLOATING_MARGIN_VERTICAL_KEY "floating_margin_vertical"
+#define FLOATING_BACKGROUND_COLOR_KEY "floating_background_color"
+#define FLOATING_BACKGROUND_OPACITY_KEY "floating_background_opacity"
+#define MOVEMENT_PREVIEW_KEY "movement_preview"
+#define MOVEMENT_PREVIEW_COLOR_KEY "movement_preview_color"
+#define MOVEMENT_PREVIEW_BLOCKED_COLOR_KEY "movement_preview_blocked_color"
+#define MOVEMENT_PREVIEW_BEYOND_AP_COLOR_KEY "movement_preview_beyond_ap_color"
+#define MOVEMENT_PREVIEW_OPACITY_KEY "movement_preview_opacity"
 #define SCHEMATIC_COLOR_AVAILABLE_KEY "schematic_color_available"
 #define SCHEMATIC_COLOR_MISSING_KEY "schematic_color_missing"
 #define SCHEMATIC_OPACITY_AVAILABLE_KEY "schematic_opacity_available"
@@ -69,27 +78,27 @@ typedef void (*UiShowInvenLoot)(int64_t pc_obj, int64_t target_obj);
 typedef void (*UiShowInvenIdentify)(int64_t pc_obj, int64_t target_obj);
 typedef void (*UiTechAdjustDegree)(int64_t obj, int tech, int action);
 typedef void (*UiSkillPreprocess)(int64_t obj, int type);
-typedef void (*UiSkillActivate)(TargetDescriptor* td, int64_t obj, int a3);
+typedef void (*UiSkillActivate)(TargetDescriptor* td, int64_t obj, int skill);
 typedef void (*UiAdjustSkillFunc)(int64_t obj, int skill, int action);
 typedef void (*UiSetSkillTrainingFunc)(int64_t obj, int skill, int training);
-typedef void (*UiDialogScriptAndGreeting)(int64_t a1, int64_t a2);
+typedef void (*UiDialogScriptAndGreeting)(int64_t pc_obj, int64_t npc_obj);
 typedef bool (*UiIsInDialog)(int64_t obj);
 typedef void (*UiSpellAdd)(int64_t obj, int spell);
 typedef bool (*UiSpellMaintainAdd)(int mt_id);
 typedef void (*UiSpellMaintainEnd)(int magictech);
 typedef void (*UiSpellMaintainRefresh)(void);
-typedef void (*UiObjectExamineAndSelect)(int64_t a1, int64_t a2);
+typedef void (*UiObjectExamineAndSelect)(int64_t observer_obj, int64_t target_obj);
 typedef void (*UiEndDeath)(void);
 typedef void (*UiEndGame)(void);
-typedef void (*UiHotkeySlotClear)(int a1);
-typedef void (*UiItemLocationAssign)(int64_t a1, int64_t a2, int a3);
-typedef bool (*UiItemHotkeyBind)(int64_t a1, int a2);
+typedef void (*UiHotkeySlotClear)(int slot);
+typedef void (*UiItemLocationAssign)(int64_t critter_obj, int64_t item_obj, int inventory_location);
+typedef bool (*UiItemHotkeyBind)(int64_t critter_obj, int inventory_location);
 typedef void (*UiTargetingReset)(void);
 typedef void (*UiCountersRefresh)(void);
-typedef void (*UiSpellApply)(int64_t a1, void* a3, int a4);
+typedef void (*UiSpellApply)(int64_t source_obj, void* target_descriptor, int spell);
 typedef void (*UiDisplayWarning)(char* str);
 typedef void (*UiDisplayMsg)(UiMessage* ui_message);
-typedef void (*UiNumberedFeedbackDisplay)(int a1);
+typedef void (*UiNumberedFeedbackDisplay)(int message_id);
 typedef void (*UiMainmenuRequest)(void);
 typedef void (*UiWrittenStartObj)(int64_t written_obj, int64_t pc_obj);
 typedef void (*UiWrittenStartType)(WrittenType written_type, int num);
@@ -98,7 +107,7 @@ typedef void (*UiFollowerRefresh)(void);
 typedef void (*UiFollowerUpdate)(void);
 typedef void (*UiTogglePrimaryButton)(UiPrimaryButton btn, bool on);
 typedef void (*UiSetMapButton)(UiPrimaryButton btn);
-typedef void (*UiNotifySectorChanged)(int64_t a1, int64_t a2);
+typedef void (*UiNotifySectorChanged)(int64_t sector_id, int64_t obj);
 typedef void (*UiWrittenNewspaperHeadline)(int newspaper, char* str);
 typedef void (*UiSleepToggle)(int64_t bed_obj);
 typedef void (*UiChareditErrorMsg)(int type, int param);
@@ -108,39 +117,39 @@ typedef void (*UiProgressBarUpdate)(int value);
 typedef void (*UiWmapSelect)(int64_t obj, int spell);
 typedef bool (*UiSchematicProcess)(int schematic, int64_t primary_obj, int64_t secondary_obj);
 typedef bool (*UiSchematicFeedback)(bool success, int64_t primary_obj, int64_t secondary_obj);
-typedef void (*UiCharacterSheetOpen)(int64_t a1, int64_t a2);
+typedef void (*UiCharacterSheetOpen)(int64_t pc_obj, int64_t target_obj);
 typedef bool (*UiItemTransactionProcess)(InventoryTransactionPacket* pkt);
 typedef void (*UiInventoryDragBegin)(int64_t obj);
 typedef void (*UiInventoryDragRestoreAndRefreshCursor)(void);
 typedef void (*UiInventoryDragObjectInvalidate)(int64_t obj);
 typedef void (*UiGameUiLibReset)(void);
 typedef void (*UiStartDialog)(int64_t pc_obj, int64_t npc_obj, int script_num, int script_line, int num);
-typedef void (*UiEndDialog)(int64_t pc_obj, int a3);
-typedef void (*UiOptionalEventCallback)(int a1, int a2, void* a3);
+typedef void (*UiEndDialog)(int64_t pc_obj, int end_reason);
+typedef void (*UiOptionalEventCallback)(int event_type, int event_code, void* event_payload);
 typedef bool (*UiMainmenuReturn)(tig_button_handle_t button_handle);
 typedef void (*UiRefreshCursor)(void);
-typedef int (*UiTargetSkillResolve)(int a1, TargetDescriptor* td);
+typedef int (*UiTargetSkillResolve)(int requested_skill, TargetDescriptor* td);
 typedef void (*UiInventoryDragCancel)(void);
 typedef bool (*UiWmapRndTimeEventProcess)(TimeEvent* timeevent);
-typedef void (*UiSchematicOpenRequest)(int64_t a1, int64_t a2);
+typedef void (*UiSchematicOpenRequest)(int64_t primary_obj, int64_t secondary_obj);
 typedef void (*UiQueueSlide)(int slide);
 typedef bool (*UiGameUiLibModLoad)(void);
 typedef bool (*UiMultiplayerConfirmation1902)(void);
 typedef bool (*UiMultiplayerConfirmation1903)(void);
-typedef bool (*UiMultiplayerNamedConfirmation)(const char* a1, const char* a2);
+typedef bool (*UiMultiplayerNamedConfirmation)(const char* title, const char* message);
 typedef void (*UiSchematicInfoGet)(int schematic, SchematicInfo* schematic_info);
 typedef int64_t (*UiInventoryTargetObjectGet)(void);
 typedef void (*UiHoveredObjectRefresh)(int64_t obj);
-typedef bool (*UiInventoryOpenPreconditionsCheck)(int64_t a1, int64_t a2, int a3);
-typedef bool (*UiInventoryGameModeSelect)(int64_t a1, int64_t a2, int a3);
-typedef void (*UiInventoryTargetPrepare)(int64_t a1, int64_t a2, int a3);
+typedef bool (*UiInventoryOpenPreconditionsCheck)(int64_t pc_obj, int64_t target_obj, int mode);
+typedef bool (*UiInventoryGameModeSelect)(int64_t pc_obj, int64_t target_obj, int mode);
+typedef void (*UiInventoryTargetPrepare)(int64_t pc_obj, int64_t target_obj, int mode);
 typedef bool (*UiInvenCreate)(int64_t pc_obj, int64_t target_obj, int mode);
-typedef void (*UiReservedStringCallback144)(const char* a1);
-typedef void (*UiReservedStringCallback148)(const char* a1);
-typedef void (*UiReservedStringPairCallback14C)(const char* a1, const char* a2);
-typedef void (*UiReservedStringPairCallback150)(const char* a1, const char* a2);
-typedef void (*UiReservedIntegerPairCallback154)(int a1, int a2);
-typedef void (*UiReservedStringPairCallback158)(const char* a1, const char* a2);
+typedef void (*UiReservedStringCallback144)(const char* text);
+typedef void (*UiReservedStringCallback148)(const char* text);
+typedef void (*UiReservedStringPairCallback14C)(const char* first_text, const char* second_text);
+typedef void (*UiReservedStringPairCallback150)(const char* first_text, const char* second_text);
+typedef void (*UiReservedIntegerPairCallback154)(int first_value, int second_value);
+typedef void (*UiReservedStringPairCallback158)(const char* first_text, const char* second_text);
 typedef void (*UiReservedCallback15C)(void);
 typedef void (*UiShowInvenNpcIdentify)(int64_t pc_obj, int64_t target_obj);
 
@@ -247,7 +256,7 @@ void ui_show_inven_loot(int64_t pc_obj, int64_t target_obj);
 void ui_show_inven_identify(int64_t pc_obj, int64_t target_obj);
 void ui_tech_adjust_degree(int64_t obj, int tech, int action);
 void ui_skill_preprocess(int64_t obj, int type);
-void ui_skill_activate(TargetDescriptor* td, int64_t obj, int a3);
+void ui_skill_activate(TargetDescriptor* td, int64_t obj, int skill);
 void ui_adjust_skill(int64_t obj, int skill, int action);
 void ui_set_skill_training(int64_t obj, int skill, int training);
 void ui_dialog_script_and_greeting(int64_t pc_obj, int64_t npc_obj);
@@ -264,7 +273,7 @@ void ui_item_location_assign(int64_t item_obj, int64_t owner_obj, int inventory_
 int ui_item_hotkey_bind(int64_t item_obj, int slot);
 void ui_targeting_reset(void);
 void ui_counters_refresh(void);
-void ui_spell_apply(int64_t a1, void* a2, int a3);
+void ui_spell_apply(int64_t source_obj, void* spell_context, int spell);
 void ui_display_warning(char* str);
 void ui_display_msg(UiMessage* ui_message);
 void ui_message_schedule_delayed(UiMessage* ui_message, unsigned int milliseconds);
@@ -272,12 +281,12 @@ void ui_numbered_feedback_display(int message_id);
 void ui_mainmenu_request(void);
 void ui_written_start_obj(int64_t written_obj, int64_t pc_obj);
 void ui_written_start_type(WrittenType written_type, int num);
-void ui_item_activate(int64_t a1, int64_t a2);
+void ui_item_activate(int64_t owner_obj, int64_t item_obj);
 void ui_follower_refresh(void);
 void ui_follower_update(void);
 void ui_toggle_primary_button(UiPrimaryButton btn, bool on);
 void ui_set_map_button(UiPrimaryButton btn);
-void ui_notify_sector_changed(int64_t a1, int64_t a2);
+void ui_notify_sector_changed(int64_t sec, int64_t obj);
 void ui_written_newspaper_headline(int newspaper, char* str);
 void ui_sleep_toggle(int64_t bed_obj);
 void ui_charedit_error_msg(int type, int param);
@@ -292,19 +301,19 @@ void ui_item_transaction_process(InventoryTransactionPacket* pkt);
 void ui_inventory_drag_begin(int64_t item_obj);
 void ui_gameuilib_reset(void);
 void ui_start_dialog(int64_t pc_obj, int64_t npc_obj, int script_num, int script_line, int num);
-void ui_end_dialog(int64_t a1, int a3);
-void ui_optional_event_dispatch(int a1, int a2, void* a3);
+void ui_end_dialog(int64_t pc_obj, int end_reason);
+void ui_optional_event_dispatch(int event_type, int event_code, void* event_payload);
 void ui_mainmenu_return(int result);
 void ui_refresh_cursor(void);
 int ui_target_skill_resolve(int skill, TargetDescriptor* td);
 void ui_inventory_drag_cancel(void);
 bool ui_wmap_rnd_timeevent_process(TimeEvent* timeevent);
-void ui_schematic_open_request(int64_t a1, int64_t a2);
+void ui_schematic_open_request(int64_t primary_obj, int64_t secondary_obj);
 void ui_queue_slide(int slide);
 bool ui_gameuilib_mod_load(void);
 int ui_multiplayer_confirmation_1902(void);
 int ui_multiplayer_confirmation_1903(void);
-int ui_multiplayer_named_confirmation(const char* a1, const char* a2);
+int ui_multiplayer_named_confirmation(const char* title, const char* message);
 void ui_schematic_info_get(int schematic, SchematicInfo* schematic_info);
 int64_t ui_inventory_target_object_get(void);
 void ui_hovered_object_refresh(int64_t obj);
@@ -312,12 +321,12 @@ int ui_inventory_open_preconditions_check(int64_t pc_obj, int64_t target_obj, in
 int ui_inventory_game_mode_select(int64_t pc_obj, int64_t target_obj, int mode);
 void ui_inventory_target_prepare(int64_t pc_obj, int64_t target_obj, int mode);
 bool ui_inven_create(int64_t pc_obj, int64_t target_obj, int mode);
-void ui_reserved_string_callback_144_dispatch(const char* a1);
-void ui_reserved_string_callback_148_dispatch(const char* a1);
-void ui_reserved_string_pair_callback_14c_dispatch(const char* a1, const char* a2);
-void ui_reserved_string_pair_callback_150_dispatch(const char* a1, const char* a2);
-void ui_reserved_integer_pair_callback_154_dispatch(int a1, int a2);
-void ui_reserved_string_pair_callback_158_dispatch(const char* a1, const char* a2);
+void ui_reserved_string_callback_144_dispatch(const char* text);
+void ui_reserved_string_callback_148_dispatch(const char* text);
+void ui_reserved_string_pair_callback_14c_dispatch(const char* first_text, const char* second_text);
+void ui_reserved_string_pair_callback_150_dispatch(const char* first_text, const char* second_text);
+void ui_reserved_integer_pair_callback_154_dispatch(int first_value, int second_value);
+void ui_reserved_string_pair_callback_158_dispatch(const char* first_text, const char* second_text);
 void ui_reserved_callback_15c_dispatch(void);
 void ui_show_inven_npc_identify(int64_t pc_obj, int64_t target_obj);
 void ui_mp_charedit_cache_traits(int player);

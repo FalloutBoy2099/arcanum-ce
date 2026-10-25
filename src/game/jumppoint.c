@@ -606,26 +606,19 @@ void jumppoint_get_rect(int jumppoint, TigRect* rect)
  */
 bool jumppoint_read_all(TigFile* stream)
 {
-    int index;
-
-    // Read the number of jump points.
-    if (tig_file_fread(&jumppoints_count, sizeof(jumppoints_count), 1, stream) != 1) {
+int count;
+    if (stream == NULL || tig_file_fread(&count, sizeof(count), 1, stream) != 1 || count < 0) return false;
+    int position = tig_file_ftell(stream);
+    int length = tig_file_filelength(stream);
+    if (position < 0 || length < position || (size_t)count > (size_t)(length - position) / sizeof(JumpPoint)) return false;
+    JumpPoint* loaded = count == 0 ? NULL : (JumpPoint*)MALLOC(sizeof(*loaded) * (size_t)count);
+    if (count != 0 && (loaded == NULL || tig_file_fread(loaded, sizeof(*loaded), count, stream) != (size_t)count)) {
+        FREE(loaded);
         return false;
     }
-
-    if (jumppoints_count != 0) {
-        jumppoints = (JumpPoint*)MALLOC(sizeof(*jumppoints) * jumppoints_count);
-
-        // Read jumppoint one by one.
-        for (index = 0; index < jumppoints_count; index++) {
-            if (tig_file_fread(&(jumppoints[index]), sizeof(*jumppoints), 1, stream) != 1) {
-                // Clear partially loaded data on failure.
-                jumppoint_map_close();
-                return false;
-            }
-        }
-    }
-
+    FREE(jumppoints);
+    jumppoints = loaded;
+    jumppoints_count = count;
     return true;
 }
 

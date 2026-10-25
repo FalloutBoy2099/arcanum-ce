@@ -174,3 +174,11 @@
 {2070}{Désactivée}
 {2071}{Activée}
 {2072}{Adaptative}
+
+{210}{Couper les sons répétitifs}
+{1210}{Coupe les sons répétitifs de Krag, des quatre améliorations élémentaires et de Tempus Fugit. Effet immédiat, y compris sur les boucles en cours.}
+
+{117}{Maître éducateur}
+{118}{XP uniquement à la mort}
+{1117}{Transmet aux compagnons le même niveau d'entraînement que le joueur, si leurs compétences le permettent. L'historique Éducateur n'est pas requis.}
+{1118}{Supprime l'XP gagnée en infligeant des dégâts. L'XP encore disponible est attribuée à la mort de l'ennemi, y compris si un compagnon le tue.}

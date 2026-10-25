@@ -127,7 +127,7 @@ static int sequence_from_hdr(ObjPoolEntryHeader* hdr);
  *
  * 0x5B9258
  */
-static int obj_pool_entry_header_byte_size = ALIGN(sizeof(ObjPoolEntryHeader), sizeof(void*));
+static int obj_pool_entry_header_byte_size = ALIGN(sizeof(ObjPoolEntryHeader), sizeof(int64_t));
 
 /**
  * Monotonically increasing sequence counter used when minting new handles.
@@ -310,7 +310,7 @@ void obj_pool_init(int size, bool editor)
     obj_pool_next_seq = ((int)time(0) & (HANDLE_SEQ_MAX / 2)) * 2 + 1;
 
     // Precalculate element and bucket size.
-    obj_pool_element_byte_size = obj_pool_entry_header_byte_size + size;
+    obj_pool_element_byte_size = ALIGN(obj_pool_entry_header_byte_size + size, sizeof(int64_t));
     obj_pool_bucket_byte_size = obj_pool_element_byte_size * OBJ_POOL_BUCKET_SIZE;
 
     // Allocate the first bucket immediately so the pool is usable right away.
@@ -748,10 +748,10 @@ bool obj_handle_is_valid(int64_t obj)
     }
 
     // The index must fall within the currently used range of pool slots.
-    index = (int)(obj >> HANDLE_INDEX_SHIFT);
-    if (index >= obj_pool_num_objects + obj_pool_freed_indexes_size) {
+    if (((uint64_t)obj >> HANDLE_INDEX_SHIFT) >= (uint64_t)(obj_pool_num_objects + obj_pool_freed_indexes_size)) {
         return false;
     }
+    index = (int)((uint64_t)obj >> HANDLE_INDEX_SHIFT);
 
     // Sequence mismatch means the slot was freed and possibly reused since this
     // handle was issued.
@@ -787,7 +787,11 @@ bool obj_handle_request(int64_t obj)
         return false;
     }
 
-    index = index_from_handle(obj);
+    if (((uint64_t)obj >> HANDLE_INDEX_SHIFT) >= OBJ_POOL_CAP) {
+        tig_debug_println("Index of handle requested is too large.");
+        return false;
+    }
+    index = (int)((uint64_t)obj >> HANDLE_INDEX_SHIFT);
     if (index < obj_pool_freed_indexes_size + obj_pool_num_objects) {
         // Index is already within the live pool range, it must be freed.
         hdr = element_hdr_at_index(index);
@@ -796,13 +800,16 @@ bool obj_handle_request(int64_t obj)
             return false;
         }
 
-        obj_handle_requested = obj;
-
-        return true;
-    }
-
-    if (index >= OBJ_POOL_CAP) {
-        tig_debug_println("Index of handle requested is too large.");
+        for (int free_index = 0; free_index < obj_pool_freed_indexes_size; free_index++) {
+            if (obj_pool_freed_indexes[free_index] == index) {
+                int last_free = obj_pool_freed_indexes_size - 1;
+                obj_pool_freed_indexes[free_index] = obj_pool_freed_indexes[last_free];
+                obj_pool_freed_indexes[last_free] = index;
+                obj_handle_requested = obj;
+                return true;
+            }
+        }
+        tig_debug_println("Released handle is missing from the free index stack.");
         return false;
     }
 

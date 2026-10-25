@@ -1,5 +1,6 @@
 #include "ui/spell_ui.h"
 #include "game/activity_time.h"
+#include "game/progression_rules.h"
 
 #include "game/critter.h"
 #include "game/item.h"
@@ -117,7 +118,7 @@ SpellUiActivate spell_ui_activate(int64_t obj, int spl)
 {
     uint64_t* tgt_ptr;
     uint64_t tgt;
-    bool v1 = false;
+    bool restore_inventory = false;
     TargetDescriptor td;
 
     if (obj == OBJ_HANDLE_NULL) {
@@ -181,7 +182,7 @@ SpellUiActivate spell_ui_activate(int64_t obj, int spl)
         }
 
         if (inven_ui_is_created()) {
-            v1 = true;
+            restore_inventory = true;
         } else {
             inven_ui_open(spell_ui_source_obj, OBJ_HANDLE_NULL, INVEN_UI_MODE_INVENTORY);
         }
@@ -223,7 +224,7 @@ SpellUiActivate spell_ui_activate(int64_t obj, int spl)
         }
     }
 
-    if (v1) {
+    if (restore_inventory) {
         if (!inven_ui_is_created()) {
             inven_ui_open(spell_ui_source_obj, OBJ_HANDLE_NULL, INVEN_UI_MODE_INVENTORY);
         }
@@ -547,8 +548,10 @@ void spell_ui_remove(int64_t obj, int spell)
     cost = spell_cost(spell);
     unspent_points = stat_level_get(obj, STAT_UNSPENT_POINTS);
     if (spell_remove(obj, spell)) {
-        hotkey_ui_notify_spell_removed(spell);
-        stat_base_set(obj, STAT_UNSPENT_POINTS, unspent_points + cost);
+        if (player_is_local_pc_obj(obj)) {
+            hotkey_ui_notify_spell_removed(spell);
+        }
+        stat_base_set(obj, STAT_UNSPENT_POINTS, progression_points_add(unspent_points, cost));
         activity_time_record(obj, ACTIVITY_TIME_SPELL_POINTS, -cost);
 
         if (charedit_is_created()) {

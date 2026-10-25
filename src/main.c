@@ -1,3 +1,4 @@
+#include "ui/asset_warmup.h"
 #include <stdio.h>
 
 #include <SDL3/SDL_main.h>
@@ -231,7 +232,7 @@ int main(int argc, char** argv)
     }
 
     screenshotter.key = SDL_SCANCODE_F12;
-    screenshotter.field_4 = 0;
+    screenshotter.legacy_mode = 0;
     tig_video_screenshot_set_settings(&screenshotter);
 
     intgame_set_iso_window_width(init_info.width);
@@ -317,6 +318,15 @@ int main(int argc, char** argv)
         return EXIT_SUCCESS; // FIXME: Should be `EXIT_FAILURE`.
     }
 
+    tig_debug_printf("Startup: game and UI module initialization completed.\n");
+
+    tig_timestamp_t startup_art_started_at;
+    tig_timer_now(&startup_art_started_at);
+    int startup_art_count = ui_asset_warmup_startup();
+    tig_debug_printf("Startup: %d common ART images prepared in %d ms.\n",
+        startup_art_count, tig_timer_elapsed(startup_art_started_at));
+
+
     if (highres_config->intro) {
         gmovie_play(8, GAME_MOVIE_NO_FINAL_FLIP, 0);
     }
@@ -357,6 +367,9 @@ int main(int argc, char** argv)
 // 0x401560
 void main_loop(void)
 {
+    Uint64 profile_frame_start = 0;
+    Uint64 profile_tail_start = 0;
+    Uint64 profile_session = 0;
     int64_t location;
     int64_t pc_obj;
     tig_art_id_t art_id;
@@ -410,19 +423,43 @@ void main_loop(void)
             output_profile_data = false;
         }
 
+        if (profile_session == tig_performance_session())
+            tig_performance_end_detail(TIG_PERF_MAIN_TAIL, profile_tail_start, "between_main_frames");
+        Uint64 benchmark_start = tig_performance_begin();
+        Uint64 benchmark_session = tig_performance_session();
         benchmark_ui_begin_frame();
+        if (benchmark_session == tig_performance_session())
+            tig_performance_end_detail(TIG_PERF_BENCHMARK_CONTROL, benchmark_start, "begin_frame");
         Uint64 frame_start = tig_performance_begin();
+        if (frame_start != 0) {
+            if (profile_session == tig_performance_session() && profile_frame_start != 0) {
+                tig_performance_record(TIG_PERF_FRAME_INTERVAL,
+                    (frame_start - profile_frame_start) * 1000.0 / SDL_GetPerformanceFrequency());
+            }
+            profile_session = tig_performance_session();
+            profile_frame_start = frame_start;
+        }
+
         tig_ping();
         gamelib_ping();
+        ui_asset_warmup_tick(!gamelib_in_load() && !gamelib_in_reset() && !gamelib_in_save()
+            && !mainmenu_ui_is_active() && !timeevent_game_time_is_paused()
+            && intgame_mode_get() == INTGAME_MODE_MAIN);
         intgame_hud_tick_invalidate_alpha_strips();
         iso_redraw();
         tig_window_display();
         tig_performance_end(TIG_PERF_FRAME, frame_start);
+        profile_tail_start = tig_performance_begin();
+        benchmark_start = tig_performance_begin();
+        benchmark_session = tig_performance_session();
         benchmark_ui_end_frame();
+        if (benchmark_session == tig_performance_session())
+            tig_performance_end_detail(TIG_PERF_BENCHMARK_CONTROL, benchmark_start, "end_frame");
         tig_performance_poll();
 
         pc_obj = player_get_local_pc_obj();
 
+        Uint64 messages_start = tig_performance_begin();
         while (tig_message_dequeue(&message) == TIG_OK) {
             if (message.type == TIG_MESSAGE_QUIT
                 && mainmenu_ui_confirm_quit() == TIG_WINDOW_MODAL_DIALOG_CHOICE_OK) {
@@ -434,8 +471,12 @@ void main_loop(void)
                 gamelib_redraw();
             }
 
+            Uint64 input_start = tig_performance_begin();
             input_bindings_handle_message(&message);
+            tig_performance_end_detail(TIG_PERF_INPUT_DISPATCH, input_start, "bindings");
+            input_start = tig_performance_begin();
             intgame_process_event(&message);
+            tig_performance_end_detail(TIG_PERF_INPUT_DISPATCH, input_start, "interface");
 
             if (gameuilib_wants_mainmenu()) {
                 mainmenu_ui_start(MM_TYPE_DEFAULT);
@@ -812,6 +853,7 @@ void main_loop(void)
             }
         }
 
+        tig_performance_end_detail(TIG_PERF_MESSAGE_DISPATCH, messages_start, "main_messages");
         if (intgame_mode_supports_scrolling(intgame_mode_get())) {
             handle_mouse_scroll();
         }

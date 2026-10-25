@@ -11,7 +11,7 @@
 
 static int party_unused_id_find(void);
 static bool party_update(void);
-static void party_join_feedback_schedule(int64_t a1, int64_t a2, int a3);
+static void party_join_feedback_schedule(int64_t follower_obj, int64_t leader_obj, int feedback_type);
 
 // 0x5FC32C
 static int party_player_party_ids[PARTY_TABLE_SIZE];
@@ -291,16 +291,16 @@ bool party_membership_table_apply(int* party, int cnt)
 }
 
 // 0x4BA320
-void party_join_feedback_schedule(int64_t a1, int64_t a2, int a3)
+void party_join_feedback_schedule(int64_t follower_obj, int64_t leader_obj, int feedback_type)
 {
     TimeEvent timeevent;
     DateTime datetime;
 
     timeevent.type = TIMEEVENT_TYPE_MP_CTRL_UI;
     timeevent.params[0].integer_value = 1;
-    timeevent.params[1].object_value = a1;
-    timeevent.params[2].object_value = a2;
-    timeevent.params[3].integer_value = a3;
+    timeevent.params[1].object_value = follower_obj;
+    timeevent.params[2].object_value = leader_obj;
+    timeevent.params[3].integer_value = feedback_type;
 
     datetime.milliseconds = 500;
     datetime.days = 0;

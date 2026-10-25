@@ -15,7 +15,7 @@ static bool iso_interface_created;
 static tig_font_handle_t iso_font;
 
 // 0x64C710
-static int dword_64C710;
+static int iso_unused_state;
 
 // 0x64C714
 static tig_window_handle_t iso_window_handle;
@@ -44,7 +44,7 @@ bool iso_init(GameInitInfo* init_info)
     iso_interface_create(iso_window_handle);
     iso_interface_created = true;
 
-    dword_64C710 = 0;
+    iso_unused_state = 0;
     iso_loading_font_create();
 
     return true;

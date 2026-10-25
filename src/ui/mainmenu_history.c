@@ -2,7 +2,7 @@
 
 static bool window_valid(int window)
 {
-    return window >= MM_WINDOW_0 && window < MM_WINDOW_COUNT;
+    return window >= MM_WINDOW_RESERVED_PRIMARY && window < MM_WINDOW_COUNT;
 }
 
 void mainmenu_history_reset(MainMenuHistory* history)
@@ -22,7 +22,7 @@ MainMenuWindowType mainmenu_history_back(MainMenuHistory* history)
     if (history->count > 0 && --history->count > 0) {
         return history->entries[--history->count];
     }
-    return MM_WINDOW_0;
+    return MM_WINDOW_RESERVED_PRIMARY;
 }
 
 void mainmenu_history_discard_current(MainMenuHistory* history)

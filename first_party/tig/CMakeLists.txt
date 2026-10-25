@@ -1,10 +1,16 @@
 # Keep alphabetically sorted.
 set(HDRS
+    "include/tig/async_asset_reader.h"
+    "include/tig/asset_prefetch.h"
+    "include/tig/asset_source.h"
+    "include/tig/art_cache_budget.h"
     "include/tig/art.h"
     "include/tig/art_decode.h"
+    "include/tig/art_frame.h"
     "include/tig/bmp.h"
     "include/tig/bsearch.h"
     "include/tig/button.h"
+    "include/tig/cache_budget.h"
     "include/tig/color.h"
     "include/tig/color_grade.h"
     "include/tig/compat.h"
@@ -14,6 +20,7 @@ set(HDRS
     "include/tig/debug.h"
     "include/tig/draw.h"
     "include/tig/file_cache.h"
+    "include/tig/file_position.h"
     "include/tig/file.h"
     "include/tig/find_file.h"
     "include/tig/font.h"
@@ -25,10 +32,12 @@ set(HDRS
     "include/tig/mouse.h"
     "include/tig/movie.h"
     "include/tig/palette.h"
+    "include/tig/pixel_buffer.h"
     "include/tig/performance.h"
     "include/tig/rect.h"
     "include/tig/scale_region.h"
     "include/tig/sound.h"
+    "include/tig/sprite_cache.h"
     "include/tig/str_parse.h"
     "include/tig/text_cache.h"
     "include/tig/tig.h"
@@ -40,11 +49,14 @@ set(HDRS
 
 # Keep alphabetically sorted.
 set(SRCS
+    "src/async_asset_reader.c"
+    "src/asset_prefetch.c"
     "src/art.c"
     "src/art_decode.c"
     "src/bmp.c"
     "src/bsearch.c"
     "src/button.c"
+    "src/cache_budget.c"
     "src/color.c"
     "src/color_grade.c"
     "src/color_grade_dxil.h"
@@ -64,12 +76,12 @@ set(SRCS
     "src/memory.c"
     "src/message.c"
     "src/mouse.c"
-    "src/movie.c"
     "src/palette.c"
     "src/performance.c"
     "src/rect.c"
     "src/scale_region.c"
     "src/sound.c"
+    "src/sprite_cache.c"
     "src/str_parse.c"
     "src/text_cache.c"
     "src/timer.c"
@@ -102,6 +114,13 @@ if(WIN32)
         _CRT_NONSTDC_NO_WARNINGS
         _CRT_SECURE_NO_WARNINGS
     )
+endif()
+
+if(ARCANUM_NATIVE_MOVIES)
+    list(APPEND SRCS "src/movie_native.c")
+    target_link_libraries(tig_common INTERFACE movie_decoder)
+else()
+    list(APPEND SRCS "src/movie.c")
 endif()
 
 add_library(tig STATIC

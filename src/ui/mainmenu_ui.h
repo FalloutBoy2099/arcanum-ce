@@ -40,9 +40,9 @@ typedef enum MainMenuType {
     MM_TYPE_IN_PLAY_WITHOUT_LOAD,
 } MainMenuType;
 
-extern int dword_5C3618;
-extern int dword_64C420;
-extern int64_t* dword_64C41C;
+extern int mainmenu_reserved_selection;
+extern int mainmenu_reserved_object_count;
+extern int64_t* mainmenu_reserved_object_handles;
 
 bool mainmenu_ui_init(GameInitInfo* init_info);
 void mainmenu_ui_exit(void);
@@ -79,7 +79,7 @@ void mainmenu_ui_window_type_set(MainMenuWindowType window_type);
 mes_file_handle_t mainmenu_ui_mes_file(void);
 tig_font_handle_t mainmenu_ui_font(MainMenuFont font, MainMenuColor color);
 void mainmenu_ui_button_labels_refresh(void);
-void mainmenu_ui_history_route_seed(int* a1, int num);
+void mainmenu_ui_history_route_seed(int* window_types, int num);
 void mainmenu_ui_activity_counter_increment(void);
 void mainmenu_ui_activity_counter_decrement(void);
 int mainmenu_ui_activity_counter_get(void);

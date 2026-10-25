@@ -31,14 +31,14 @@ int64_t inven_ui_drag_item_obj_get(void);
 void inven_ui_item_drag_begin(int64_t obj);
 void inven_ui_drag_cursor_refresh(void);
 void inven_ui_mouse_down_clear(void);
-void inven_ui_item_cursor_begin(int64_t a1, bool a2);
+void inven_ui_item_cursor_begin(int64_t item_obj, bool prompt_for_quantity);
 void inven_ui_drag_object_clear(void);
 bool inven_ui_can_open_inven(int64_t pc_obj, int64_t npc_obj);
 void inven_ui_drag_cancel_and_restore(void);
 void inven_ui_drag_item_restore_or_drop(void);
 void inven_ui_drag_object_invalidate(int64_t obj);
 void inven_ui_update(int64_t obj);
-void inven_ui_item_transaction_send(int a1);
+void inven_ui_item_transaction_send(int transaction_quantity);
 bool inven_ui_item_transaction_process(InventoryTransactionPacket* pkt);
 int64_t inven_ui_transaction_item_get(void);
 

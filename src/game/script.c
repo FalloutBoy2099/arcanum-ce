@@ -1,4 +1,5 @@
 #include "game/script.h"
+#include <limits.h>
 
 #include "game/ai.h"
 #include "game/anim.h"
@@ -62,13 +63,13 @@ typedef struct ScriptState {
     /* 0008 */ int loop_cnt;
     /* 000C */ int loop_start_line;
     /* 0010 */ int script_num;
-    /* 0014 */ int field_14;
+    /* 0014 */ int reserved_slot_1;
     /* 0018 */ int64_t current_loop_obj;
     /* 0020 */ int64_t objs[100];
     /* 0340 */ ObjectList objects;
     /* 0398 */ int loop_focus_type;
     /* 039C */ int lc_vars[10];
-    /* 03C4 */ int field_3C4;
+    /* 03C4 */ int reserved_slot_2;
     /* 03C8 */ int64_t lc_objs[10];
 } ScriptState;
 
@@ -1992,8 +1993,8 @@ int script_execute_action(ScriptAction* action, int line, ScriptState* state)
             datetime.milliseconds += 86400000;
             datetime_sub_milliseconds(&datetime, datetime_start_time_milliseconds_get());
 
-            int v1 = datetime_seconds_since_reference_date(&datetime) % 86400;
-            seconds = seconds % 86400 - v1 + (seconds % 86400 - v1 < 0 ? 86400 : 0);
+            int current_seconds_of_day = datetime_seconds_since_reference_date(&datetime) % 86400;
+            seconds = seconds % 86400 - current_seconds_of_day + (seconds % 86400 - current_seconds_of_day < 0 ? 86400 : 0);
         }
 
         TimeEvent timeevent;
@@ -2893,7 +2894,7 @@ void script_action_object_script_execute(ScriptAction* action, ScriptState* stat
 void script_float_line(ScriptAction* action, ScriptState* state)
 {
     char path[TIG_MAX_PATH];
-    DialogState v1;
+    DialogState dialog_state;
     int64_t objs[100];
     ObjectList objects;
     int cnt;
@@ -2911,7 +2912,7 @@ void script_float_line(ScriptAction* action, ScriptState* state)
         return;
     }
 
-    if (!dialog_load(path, &(v1.dlg))) {
+    if (!dialog_load(path, &(dialog_state.dlg))) {
         return;
     }
 
@@ -2922,27 +2923,27 @@ void script_float_line(ScriptAction* action, ScriptState* state)
         return;
     }
 
-    v1.pc_obj = objects.head->obj;
+    dialog_state.pc_obj = objects.head->obj;
     object_list_destroy(&objects);
-    v1.num = script_get_value(action->op_type[0], action->op_value[0], state);
-    v1.script_num = state->invocation->script->num;
+    dialog_state.num = script_get_value(action->op_type[0], action->op_value[0], state);
+    dialog_state.script_num = state->invocation->script->num;
 
     cnt = script_resolve_focus_obj(action->op_type[1], action->op_value[1], state, objs, &objects);
     for (index = 0; index < cnt; index++) {
-        v1.npc_obj = objs[index];
-        dialog_prepare_npc_reply(&v1, true);
-        script_float_line_func(objs[index], v1.pc_obj, v1.reply, v1.speech_id);
+        dialog_state.npc_obj = objs[index];
+        dialog_prepare_npc_reply(&dialog_state, true);
+        script_float_line_func(objs[index], dialog_state.pc_obj, dialog_state.reply, dialog_state.speech_id);
     }
 
     script_focus_list_release(action->op_type[1], &objects);
-    dialog_unload(v1.dlg);
+    dialog_unload(dialog_state.dlg);
 }
 
 // 0x44B390
 void script_print_line(ScriptAction* action, ScriptState* state)
 {
     char path[TIG_MAX_PATH];
-    DialogState v1;
+    DialogState dialog_state;
     UiMessage ui_message;
     int player;
 
@@ -2954,7 +2955,7 @@ void script_print_line(ScriptAction* action, ScriptState* state)
         return;
     }
 
-    if (!dialog_load(path, &(v1.dlg))) {
+    if (!dialog_load(path, &(dialog_state.dlg))) {
         return;
     }
 
@@ -2962,32 +2963,32 @@ void script_print_line(ScriptAction* action, ScriptState* state)
         return;
     }
 
-    v1.npc_obj = state->invocation->attachee_obj;
-    v1.pc_obj = state->invocation->triggerer_obj;
-    v1.num = script_get_value(action->op_type[0], action->op_value[0], state);
-    v1.script_num = state->invocation->script->num;
-    dialog_prepare_npc_reply(&v1, true);
+    dialog_state.npc_obj = state->invocation->attachee_obj;
+    dialog_state.pc_obj = state->invocation->triggerer_obj;
+    dialog_state.num = script_get_value(action->op_type[0], action->op_value[0], state);
+    dialog_state.script_num = state->invocation->script->num;
+    dialog_prepare_npc_reply(&dialog_state, true);
 
     ui_message.type = script_get_value(action->op_type[1], action->op_value[1], state);
-    ui_message.str = v1.reply;
+    ui_message.str = dialog_state.reply;
     ui_message.primary_value = 0;
 
     // TODO: Refactor.
     if (tig_net_is_active()) {
         player = multiplayer_find_slot_from_obj(state->invocation->triggerer_obj);
         if (player == -1) {
-            dialog_unload(v1.dlg);
+            dialog_unload(dialog_state.dlg);
             return;
         }
 
         if (player != 0) {
             mp_ui_message_send(&ui_message, player, 0);
-            dialog_unload(v1.dlg);
+            dialog_unload(dialog_state.dlg);
             return;
         }
     } else {
         ui_display_msg(&ui_message);
-        dialog_unload(v1.dlg);
+        dialog_unload(dialog_state.dlg);
     }
 }
 
@@ -3407,6 +3408,7 @@ bool script_file_create(ScriptFile** script_file_ptr)
     ScriptFile* script_file;
 
     script_file = (ScriptFile*)MALLOC(sizeof(ScriptFile));
+    if (script_file == NULL) return false;
     script_file->description[0] = '\0';
     script_file->flags = 0;
     script_file->num_entries = 0;
@@ -3449,19 +3451,21 @@ bool cache_add(int cache_entry_id, int script_id)
 
     if (!script_file_load_hdr(stream, &hdr)) {
         tig_debug_printf("Script: cache_add: ERROR: Failed to load script variables: %d!\n", script_id);
-        // FIXME: Leaking stream.
+        tig_file_fclose(stream);
         return false;
     }
 
     if (!script_file_create(&(script_cache_entries[cache_entry_id].file))) {
         tig_debug_printf("Script: cache_add: ERROR: Failed to build script code: %d!\n", script_id);
-        // FIXME: Leaking stream.
+        tig_file_fclose(stream);
         return false;
     }
 
     if (!script_file_load_code(stream, script_cache_entries[cache_entry_id].file)) {
         tig_debug_printf("Script: cache_add: ERROR: Failed to load script code: %d!\n", script_id);
-        // FIXME: Leaking stream.
+        script_file_destroy(script_cache_entries[cache_entry_id].file);
+        script_cache_entries[cache_entry_id].file = NULL;
+        tig_file_fclose(stream);
         return false;
     }
 
@@ -3544,10 +3548,17 @@ bool script_file_load_code(TigFile* stream, ScriptFile* script_file)
         return false;
     }
 
+    if (!tig_file_count_fits(stream, script_file->num_entries, SIZE_MAX / sizeof(ScriptCondition), sizeof(ScriptCondition))
+        || script_file->max_entries < script_file->num_entries || script_file->max_entries < 0
+        || (size_t)script_file->max_entries > INT_MAX / sizeof(ScriptCondition)) return false;
+    script_file->description[sizeof(script_file->description) - 1] = '\0';
+    script_file->max_entries = script_file->num_entries;
     if (script_file->num_entries > 0) {
         script_file->entries = (ScriptCondition*)CALLOC(script_file->max_entries, sizeof(ScriptCondition));
+        if (script_file->entries == NULL) return false;
         if (tig_file_fread(script_file->entries, sizeof(ScriptCondition), script_file->num_entries, stream) != script_file->num_entries) {
-            // FIXME: Leaks entries.
+            FREE(script_file->entries);
+            script_file->entries = NULL;
             return false;
         }
     } else {

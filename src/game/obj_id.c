@@ -92,11 +92,11 @@ bool objid_is_equal(ObjectID a, ObjectID b)
 
 // Constructs an OID_TYPE_A identifier from its integer payload.
 // 0x4E6540
-ObjectID objid_make_a(int a1)
+ObjectID objid_make_a(int allocated_id)
 {
     ObjectID oid;
     oid.type = OID_TYPE_A;
-    oid.d.a = a1;
+    oid.d.a = allocated_id;
     return oid;
 }
 

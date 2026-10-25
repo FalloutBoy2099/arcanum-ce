@@ -1,5 +1,8 @@
 #include "game/effect.h"
 
+#include <errno.h>
+#include <limits.h>
+
 #include "game/anim.h"
 #include "game/critter.h"
 #include "game/mes.h"
@@ -11,7 +14,7 @@
 /**
  * Defines the maximum number of effects per effect type.
  */
-#define EFFECT_LIST_CAPACITY 400
+#define EFFECT_LIST_CAPACITY 1000
 
 typedef enum EffectSpecial {
     EFFECT_SPECIAL_MAX_HIT_POINTS,
@@ -274,8 +277,7 @@ bool effect_init(GameInitInfo* init_info)
     effect_tech_effects = (Effect*)CALLOC(EFFECT_LIST_CAPACITY, sizeof(*effect_tech_effects));
     effect_special_effects = (Effect*)CALLOC(EFFECT_LIST_CAPACITY, sizeof(*effect_special_effects));
 
-    // Parse effects from engine-wide range (50-400).
-    for (mes_file_entry.num = 50; mes_file_entry.num < 400; mes_file_entry.num++) {
+    for (mes_file_entry.num = 50; mes_file_entry.num < EFFECT_LIST_CAPACITY; mes_file_entry.num++) {
         if (mes_search(mes_file, &mes_file_entry)) {
             effect_parse(mes_file_entry.num, mes_file_entry.str);
         }
@@ -357,6 +359,17 @@ void effect_mod_unload(void)
  *
  * 0x4E9C20
  */
+static bool effect_parse_integer(const char* token, bool percent, int* value)
+{
+    char* end;
+    errno = 0;
+    long result = strtol(token, &end, 10);
+    if (end == token || errno == ERANGE || result < INT_MIN || result > INT_MAX) return false;
+    if (*end != '\0' && !(percent && end[0] == '%' && end[1] == '\0')) return false;
+    *value = (int)result;
+    return true;
+}
+
 static void effect_parse(int num, char* text)
 {
     char* tok;
@@ -364,7 +377,10 @@ static void effect_parse(int num, char* text)
     int type;
     int index;
 
-    tok = strtok(text, " ,");
+    if (num < 0 || num >= EFFECT_LIST_CAPACITY || text == NULL) return;
+    char buffer[MAX_STRING];
+    if (SDL_strlcpy(buffer, text, sizeof(buffer)) >= sizeof(buffer)) return;
+    tok = strtok(buffer, " ,");
     while (tok != NULL) {
         // NOTE: Original code is different. Probably uses an inlined routine or
         // a tree of loops.
@@ -382,6 +398,10 @@ static void effect_parse(int num, char* text)
                 for (index = 0; index < STAT_COUNT; index++) {
                     if (SDL_strcasecmp(tok, effect_stat_lookup_tbl[index]) == 0) {
                         effect_info = &(effect_stat_effects[num]);
+                        if (effect_info->count >= MAX_CHANGE_COUNT) {
+                            tig_debug_printf("Effect %d: too many changes.\n", num);
+                            return;
+                        }
                         effect_info->ids[effect_info->count] = index;
                         break;
                     }
@@ -392,6 +412,10 @@ static void effect_parse(int num, char* text)
                 for (index = 0; index < BASIC_SKILL_COUNT; index++) {
                     if (SDL_strcasecmp(tok, effect_basic_skill_lookup_tbl[index]) == 0) {
                         effect_info = &(effect_basic_skill_effects[num]);
+                        if (effect_info->count >= MAX_CHANGE_COUNT) {
+                            tig_debug_printf("Effect %d: too many changes.\n", num);
+                            return;
+                        }
                         effect_info->ids[effect_info->count] = index;
                         break;
                     }
@@ -402,6 +426,10 @@ static void effect_parse(int num, char* text)
                 for (index = 0; index < TECH_SKILL_COUNT; index++) {
                     if (SDL_strcasecmp(tok, effect_tech_skill_lookup_tbl[index]) == 0) {
                         effect_info = &(effect_tech_skill_effects[num]);
+                        if (effect_info->count >= MAX_CHANGE_COUNT) {
+                            tig_debug_printf("Effect %d: too many changes.\n", num);
+                            return;
+                        }
                         effect_info->ids[effect_info->count] = index;
                         break;
                     }
@@ -412,6 +440,10 @@ static void effect_parse(int num, char* text)
                 for (index = 0; index < RESISTANCE_TYPE_COUNT; index++) {
                     if (SDL_strcasecmp(tok, effect_resistance_lookup_tbl[index]) == 0) {
                         effect_info = &(effect_resistance_effects[num]);
+                        if (effect_info->count >= MAX_CHANGE_COUNT) {
+                            tig_debug_printf("Effect %d: too many changes.\n", num);
+                            return;
+                        }
                         effect_info->ids[effect_info->count] = index;
                         break;
                     }
@@ -422,6 +454,10 @@ static void effect_parse(int num, char* text)
                 for (index = 0; index < TECH_COUNT; index++) {
                     if (SDL_strcasecmp(tok, effect_tech_discipline_lookup_tbl[index]) == 0) {
                         effect_info = &(effect_tech_effects[num]);
+                        if (effect_info->count >= MAX_CHANGE_COUNT) {
+                            tig_debug_printf("Effect %d: too many changes.\n", num);
+                            return;
+                        }
                         effect_info->ids[effect_info->count] = index;
                         break;
                     }
@@ -432,6 +468,10 @@ static void effect_parse(int num, char* text)
                 for (index = 0; index < EFFECT_SPECIAL_COUNT; index++) {
                     if (SDL_strcasecmp(tok, effect_special_attributes_lookup_tbl[index]) == 0) {
                         effect_info = &(effect_special_effects[num]);
+                        if (effect_info->count >= MAX_CHANGE_COUNT) {
+                            tig_debug_printf("Effect %d: too many changes.\n", num);
+                            return;
+                        }
                         effect_info->ids[effect_info->count] = index;
                         break;
                     }
@@ -448,6 +488,7 @@ static void effect_parse(int num, char* text)
 
         // Parse operator and associated parameter.
         tok = strtok(NULL, " ,");
+        if (tok == NULL) return;
         if (SDL_strcasecmp(tok, "min") == 0 || SDL_strcasecmp(tok, "max") == 0) {
             // FIX: Force lowercase.
             if (SDL_tolower(tok[1]) == 'i') {
@@ -457,22 +498,25 @@ static void effect_parse(int num, char* text)
             }
 
             tok = strtok(NULL, " ,");
-            effect_info->params[effect_info->count] = atoi(tok);
+            if (tok == NULL) return;
+            if (!effect_parse_integer(tok, false, &effect_info->params[effect_info->count])) return;
         } else if (tok[0] == '+' || tok[0] == '-') {
             effect_info->operators[effect_info->count] = EFFECT_OPERATOR_ADD;
-            effect_info->params[effect_info->count] = atoi(tok);
+            if (!effect_parse_integer(tok, true, &effect_info->params[effect_info->count])) return;
 
             if (tok[strlen(tok) - 1] == '%') {
                 effect_info->operators[effect_info->count] = EFFECT_OPERATOR_PERCENT;
             }
         } else if (tok[0] == '*') {
             effect_info->operators[effect_info->count] = EFFECT_OPERATOR_MULTIPLY;
-            effect_info->params[effect_info->count] = atoi(tok);
+            if (!effect_parse_integer(tok + 1, false, &effect_info->params[effect_info->count])) return;
         } else if (tok[0] == '/') {
             effect_info->operators[effect_info->count] = EFFECT_OPERATOR_DIVIDE;
-            effect_info->params[effect_info->count] = atoi(tok);
+            if (!effect_parse_integer(tok + 1, false, &effect_info->params[effect_info->count])) return;
+            if (effect_info->params[effect_info->count] == 0) return;
         } else {
             tig_debug_printf("Effect: ERROR: Invalid symbol: %s.\n", tok);
+            return;
         }
 
         effect_info->count++;
@@ -492,6 +536,9 @@ void effect_add(int64_t obj, int effect, int cause)
     int hp_max;
     int fatigue_max;
     int diff;
+
+    if (!effect_initialized || effect < 0 || effect >= EFFECT_LIST_CAPACITY
+        || cause < 0 || cause >= EFFECT_CAUSE_COUNT) return;
 
     // Ensure the object is a critter.
     if (!obj_type_is_critter(obj_field_int32_get(obj, OBJ_F_TYPE))) {
@@ -731,7 +778,11 @@ void effect_remove_internal(int64_t obj, int index)
  */
 int effect_adjust_stat_level(int64_t obj, int stat, int value)
 {
-    return effect_adjust_func(obj, stat, value, effect_stat_effects, false);
+    value = effect_adjust_func(obj, stat, value, effect_stat_effects, false);
+    if (stat == STAT_SPEED) {
+        value -= critter_load_speed_penalty(obj);
+    }
+    return value;
 }
 
 /**
@@ -768,6 +819,12 @@ int effect_adjust_func(int64_t obj, int id, int value, Effect* tbl, bool ignore_
     // Process each effect.
     for (index = 0; index < cnt; index++) {
         effect = obj_arrayfield_uint32_get(obj, OBJ_F_CRITTER_EFFECTS_IDX, index);
+
+        if (effect < 0 || effect >= EFFECT_LIST_CAPACITY) continue;
+
+        if (effect == EFFECT_ENCUMBRANCE) {
+            continue;
+        }
 
         // Filter out innate effects.
         if (ignore_innate_effects) {
@@ -859,7 +916,11 @@ int effect_adjust_func(int64_t obj, int id, int value, Effect* tbl, bool ignore_
  */
 int effect_adjust_stat_level_no_innate(int64_t obj, int stat, int value)
 {
-    return effect_adjust_func(obj, stat, value, effect_stat_effects, true);
+    value = effect_adjust_func(obj, stat, value, effect_stat_effects, true);
+    if (stat == STAT_SPEED) {
+        value -= critter_load_speed_penalty(obj);
+    }
+    return value;
 }
 
 /**

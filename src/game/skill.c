@@ -621,6 +621,10 @@ int basic_skill_points_set(int64_t obj, int bs, int value)
     // Update the skill field with the new points (preserving training bits).
     obj_arrayfield_int32_set(obj, OBJ_F_CRITTER_BASIC_SKILL_IDX, bs, value | (current_value & ~63));
 
+    if (settings_get_value(&settings, MASTER_EDUCATOR_KEY) != 0) {
+        int64_t leader = critter_pc_leader_get(obj);
+        if (leader != OBJ_HANDLE_NULL) background_educate_followers(leader);
+    }
     return value;
 }
 
@@ -1139,6 +1143,10 @@ int tech_skill_points_set(int64_t obj, int ts, int value)
     tech_points += value - (current_value & 63);
     stat_base_set(obj, STAT_TECH_POINTS, tech_points);
 
+    if (settings_get_value(&settings, MASTER_EDUCATOR_KEY) != 0) {
+        int64_t leader = critter_pc_leader_get(obj);
+        if (leader != OBJ_HANDLE_NULL) background_educate_followers(leader);
+    }
     return value;
 }
 
@@ -1473,9 +1481,9 @@ bool skill_plant_item(int64_t obj, int64_t target_obj, int64_t item_obj)
  *
  * 0x4C7050
  */
-bool skill_disarm_trap(int64_t obj, int a2, int64_t target_obj)
+bool skill_disarm_trap(int64_t obj, int skill_use_flag_shift, int64_t target_obj)
 {
-    return anim_goal_use_skill_on(obj, target_obj, OBJ_HANDLE_NULL, SKILL_DISARM_TRAPS, 2 << a2);
+    return anim_goal_use_skill_on(obj, target_obj, OBJ_HANDLE_NULL, SKILL_DISARM_TRAPS, 2 << skill_use_flag_shift);
 }
 
 /**
@@ -2379,14 +2387,14 @@ int skill_invocation_difficulty(SkillInvocation* skill_invocation)
 
         // Check for obstructions between source and target.
         int64_t blocking_obj;
-        int v2 = ai_straight_path_cost_to_location(source_obj, skill_invocation->target_loc, &blocking_obj);
+        int source_path_cost = ai_straight_path_cost_to_location(source_obj, skill_invocation->target_loc, &blocking_obj);
         if (blocking_obj != OBJ_HANDLE_NULL) {
             // Target is blocked.
             difficulty += 1000000;
             skill_invocation->flags |= SKILL_INVOCATION_BLOCKED_SHOT;
-        } else if (v2 > 0) {
+        } else if (source_path_cost > 0) {
             // TODO: Unclear.
-            difficulty += v2;
+            difficulty += source_path_cost;
             skill_invocation->flags |= SKILL_INVOCATION_PENALTY_COVER;
         }
     }
@@ -2516,7 +2524,7 @@ int skill_invocation_difficulty(SkillInvocation* skill_invocation)
         if ((skill_invocation->flags & SKILL_INVOCATION_CHECK_SEEING) != 0) {
             // Check for blocking objects when hiding from a target.
             int64_t blocking_obj;
-            int v6 = ai_straight_path_cost_to_location(target_obj,
+            int target_path_cost = ai_straight_path_cost_to_location(target_obj,
                 obj_field_int64_get(source_obj, OBJ_F_LOCATION),
                 &blocking_obj);
             if (blocking_obj != OBJ_HANDLE_NULL) {
@@ -2527,11 +2535,11 @@ int skill_invocation_difficulty(SkillInvocation* skill_invocation)
             }
 
             // TODO: Unclear.
-            if (training < TRAINING_EXPERT && v6 == 0) {
-                v6 = -50;
+            if (training < TRAINING_EXPERT && target_path_cost == 0) {
+                target_path_cost = -50;
             }
 
-            difficulty -= v6;
+            difficulty -= target_path_cost;
         } else if ((skill_invocation->flags & SKILL_INVOCATION_CHECK_HEARING) != 0) {
             // Apply armor-based modifier for silent movement.
             for (int inventory_location = FIRST_WEAR_INV_LOC; inventory_location <= LAST_WEAR_INV_LOC; inventory_location++) {

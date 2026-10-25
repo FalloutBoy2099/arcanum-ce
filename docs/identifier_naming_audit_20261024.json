@@ -1,0 +1,1268 @@
+{
+  "scope": [
+    "src/**/*.c",
+    "src/**/*.h",
+    "first_party/**/*.c",
+    "first_party/**/*.h"
+  ],
+  "counting": "Lexical occurrences outside comments and string/character literals. Repeated spellings can identify different scoped entities. Categories are review candidates, not confirmed defects.",
+  "summary": {
+    "inherited_address": {
+      "occurrences": 0,
+      "distinct_spellings": 0,
+      "files": 0
+    },
+    "offset_field": {
+      "occurrences": 0,
+      "distinct_spellings": 0,
+      "files": 0
+    },
+    "anonymous_parameter": {
+      "occurrences": 0,
+      "distinct_spellings": 0,
+      "files": 0
+    },
+    "anonymous_temporary": {
+      "occurrences": 0,
+      "distinct_spellings": 0,
+      "files": 0
+    },
+    "stub": {
+      "occurrences": 175,
+      "distinct_spellings": 61,
+      "files": 31
+    },
+    "numeric_constant": {
+      "occurrences": 0,
+      "distinct_spellings": 0,
+      "files": 0
+    }
+  },
+  "entries": [
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 110,
+      "symbol": "anim_goal_move_pause_step_2_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 111,
+      "symbol": "anim_goal_move_pause_step_3_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 122,
+      "symbol": "anim_goal_open_door_pickup_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 130,
+      "symbol": "anim_goal_pickup_step_1_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 131,
+      "symbol": "anim_goal_pickup_step_2_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 132,
+      "symbol": "anim_goal_pickup_step_4_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 133,
+      "symbol": "anim_goal_pickup_step_5_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 134,
+      "symbol": "anim_goal_pickup_kill_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 135,
+      "symbol": "anim_goal_pickup_pickpocket_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 137,
+      "symbol": "anim_goal_pickup_secondary_kill_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 138,
+      "symbol": "anim_goal_pickup_secondary_pickpocket_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 139,
+      "symbol": "anim_goal_throw_spell_target_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 148,
+      "symbol": "anim_goal_kill_pick_weapon_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 150,
+      "symbol": "anim_goal_spell_pick_weapon_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 246,
+      "symbol": "anim_goal_knockback_finish_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 247,
+      "symbol": "anim_goal_hit_by_spell_begin_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 248,
+      "symbol": "anim_goal_hit_by_spell_update_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 458,
+      "symbol": "anim_goal_move_pause_step_2_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 459,
+      "symbol": "anim_goal_move_pause_step_3_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 596,
+      "symbol": "anim_goal_open_door_pickup_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 673,
+      "symbol": "anim_goal_pickup_step_1_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 674,
+      "symbol": "anim_goal_pickup_step_2_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 676,
+      "symbol": "anim_goal_pickup_step_4_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 677,
+      "symbol": "anim_goal_pickup_step_5_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 678,
+      "symbol": "anim_goal_pickup_kill_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 679,
+      "symbol": "anim_goal_pickup_pickpocket_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 680,
+      "symbol": "anim_goal_pickup_secondary_kill_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 681,
+      "symbol": "anim_goal_pickup_secondary_pickpocket_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 812,
+      "symbol": "anim_goal_kill_pick_weapon_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 943,
+      "symbol": "anim_goal_throw_spell_target_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 947,
+      "symbol": "anim_goal_spell_pick_weapon_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 1025,
+      "symbol": "anim_goal_hit_by_spell_update_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 1026,
+      "symbol": "anim_goal_hit_by_spell_begin_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 1405,
+      "symbol": "anim_goal_knockback_finish_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 2212,
+      "symbol": "anim_goal_throw_spell_target_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 2216,
+      "symbol": "anim_goal_spell_pick_weapon_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 2455,
+      "symbol": "anim_goal_throw_spell_target_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 2459,
+      "symbol": "anim_goal_spell_pick_weapon_branch_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 3578,
+      "symbol": "anim_timeevent_begin_hook_stub",
+      "function": "anim_timeevent_begin_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 3584,
+      "symbol": "anim_goal_step_before_hook_stub",
+      "function": "anim_goal_step_before_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 3590,
+      "symbol": "anim_goal_step_after_hook_stub",
+      "function": "anim_goal_step_after_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 3670,
+      "symbol": "anim_timeevent_begin_hook_stub",
+      "function": "anim_timeevent_process"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 3697,
+      "symbol": "anim_goal_step_before_hook_stub",
+      "function": "anim_timeevent_process"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 3701,
+      "symbol": "anim_goal_step_after_hook_stub",
+      "function": "anim_timeevent_process"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 6068,
+      "symbol": "anim_goal_move_pause_step_2_stub",
+      "function": "anim_goal_move_pause_step_2_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 6076,
+      "symbol": "anim_goal_move_pause_step_3_stub",
+      "function": "anim_goal_move_pause_step_3_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 6703,
+      "symbol": "anim_goal_open_door_pickup_branch_stub",
+      "function": "anim_goal_open_door_pickup_branch_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 7053,
+      "symbol": "anim_goal_pickup_step_1_stub",
+      "function": "anim_goal_pickup_step_1_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 7061,
+      "symbol": "anim_goal_pickup_step_2_stub",
+      "function": "anim_goal_pickup_step_2_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 7069,
+      "symbol": "anim_goal_pickup_step_4_stub",
+      "function": "anim_goal_pickup_step_4_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 7077,
+      "symbol": "anim_goal_pickup_step_5_stub",
+      "function": "anim_goal_pickup_step_5_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 7085,
+      "symbol": "anim_goal_pickup_kill_branch_stub",
+      "function": "anim_goal_pickup_kill_branch_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 7093,
+      "symbol": "anim_goal_pickup_pickpocket_branch_stub",
+      "function": "anim_goal_pickup_pickpocket_branch_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 7119,
+      "symbol": "anim_goal_pickup_secondary_kill_branch_stub",
+      "function": "anim_goal_pickup_secondary_kill_branch_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 7127,
+      "symbol": "anim_goal_pickup_secondary_pickpocket_branch_stub",
+      "function": "anim_goal_pickup_secondary_pickpocket_branch_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 7135,
+      "symbol": "anim_goal_throw_spell_target_branch_stub",
+      "function": "anim_goal_throw_spell_target_branch_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 7423,
+      "symbol": "anim_goal_kill_pick_weapon_branch_stub",
+      "function": "anim_goal_kill_pick_weapon_branch_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 7455,
+      "symbol": "anim_goal_spell_pick_weapon_branch_stub",
+      "function": "anim_goal_spell_pick_weapon_branch_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 11313,
+      "symbol": "anim_goal_knockback_finish_stub",
+      "function": "anim_goal_knockback_finish_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 11321,
+      "symbol": "anim_goal_hit_by_spell_begin_stub",
+      "function": "anim_goal_hit_by_spell_begin_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 11329,
+      "symbol": "anim_goal_hit_by_spell_update_stub",
+      "function": "anim_goal_hit_by_spell_update_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 13697,
+      "symbol": "anim_run_update_hook_stub",
+      "function": "anim_goal_move_to_tile"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 13905,
+      "symbol": "anim_run_update_hook_stub",
+      "function": "anim_goal_run_to_tile"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 14019,
+      "symbol": "anim_run_update_hook_stub",
+      "function": "anim_goal_move_near_tile"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 14098,
+      "symbol": "anim_run_update_hook_stub",
+      "function": "anim_goal_run_near_tile"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 15391,
+      "symbol": "anim_run_update_hook_stub",
+      "function": "turn_on_running"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 15481,
+      "symbol": "anim_run_update_hook_stub",
+      "function": "turn_on_flags"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 15688,
+      "symbol": "anim_map_change_hook_stub",
+      "function": "anim_map_change_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.c",
+      "line": 15876,
+      "symbol": "anim_reserved_predicate_stub",
+      "function": "anim_reserved_predicate_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.h",
+      "line": 151,
+      "symbol": "anim_map_change_hook_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim.h",
+      "line": 152,
+      "symbol": "anim_reserved_predicate_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim_private.c",
+      "line": 534,
+      "symbol": "anim_run_update_hook_stub",
+      "function": "anim_run_update_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/anim_private.h",
+      "line": 280,
+      "symbol": "anim_run_update_hook_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/combat.c",
+      "line": 1326,
+      "symbol": "map_game_entry_hook_stub",
+      "function": "combat_critter_toggle_combat_mode"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/combat.c",
+      "line": 1774,
+      "symbol": "magictech_object_callback_stub",
+      "function": "combat_dmg"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/combat.c",
+      "line": 3034,
+      "symbol": "object_notify_stub",
+      "function": "combat_turn_based_whos_turn_set"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/combat.c",
+      "line": 3035,
+      "symbol": "object_notify_stub",
+      "function": "combat_turn_based_whos_turn_set"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/combat.h",
+      "line": 19,
+      "symbol": "object_notify_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/item.c",
+      "line": 43,
+      "symbol": "item_unwield_check_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/item.c",
+      "line": 2621,
+      "symbol": "item_unwield_check_stub",
+      "function": "item_unwield_check_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/item.c",
+      "line": 3654,
+      "symbol": "item_unwield_check_stub",
+      "function": "item_check_remove"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/light.c",
+      "line": 196,
+      "symbol": "sector_block_list_setup_hook_stub",
+      "function": "light_init"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/magictech.c",
+      "line": 1682,
+      "symbol": "magictech_maintained_spell_count_stub",
+      "function": "magictech_maintained_spell_count_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/magictech.c",
+      "line": 1712,
+      "symbol": "magictech_maintained_spell_count_stub",
+      "function": "magictech_maintenance_slots_available"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/magictech.c",
+      "line": 6634,
+      "symbol": "magictech_object_callback_stub",
+      "function": "magictech_object_callback_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/magictech.c",
+      "line": 6974,
+      "symbol": "magictech_maintained_spell_count_stub",
+      "function": "magictech_debug_lists"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/magictech.h",
+      "line": 408,
+      "symbol": "magictech_object_callback_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/map.c",
+      "line": 878,
+      "symbol": "map_game_entry_hook_stub",
+      "function": "map_game_entry_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/map.h",
+      "line": 27,
+      "symbol": "map_game_entry_hook_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/mp_utils.c",
+      "line": 495,
+      "symbol": "mp_reserved_hook_1_stub",
+      "function": "mp_reserved_hook_1_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/mp_utils.c",
+      "line": 501,
+      "symbol": "mp_reserved_hook_2_stub",
+      "function": "mp_reserved_hook_2_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/mp_utils.c",
+      "line": 507,
+      "symbol": "mp_reserved_hook_3_stub",
+      "function": "mp_reserved_hook_3_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/mp_utils.c",
+      "line": 588,
+      "symbol": "mp_inventory_spawn_packet_hook_stub",
+      "function": "mp_inventory_spawn_packet_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/mp_utils.c",
+      "line": 614,
+      "symbol": "mp_reserved_hook_4_stub",
+      "function": "mp_reserved_hook_4_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/multiplayer.c",
+      "line": 638,
+      "symbol": "tig_net_shutdown_status_stub",
+      "function": "multiplayer_end"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/multiplayer.c",
+      "line": 757,
+      "symbol": "tig_net_legacy_play_begin_stub",
+      "function": "multiplayer_host_game_load"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/multiplayer.c",
+      "line": 760,
+      "symbol": "tig_net_legacy_play_end_stub",
+      "function": "multiplayer_host_game_load"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/multiplayer.c",
+      "line": 777,
+      "symbol": "tig_net_legacy_session_ready_stub",
+      "function": "multiplayer_host_game_load"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/multiplayer.c",
+      "line": 779,
+      "symbol": "tig_net_legacy_preferences_applied_stub",
+      "function": "multiplayer_host_game_load"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/multiplayer.c",
+      "line": 919,
+      "symbol": "tig_net_legacy_timed_event_stub",
+      "function": "multiplayer_timeevent_process"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/multiplayer.c",
+      "line": 944,
+      "symbol": "tig_net_legacy_play_begin_stub",
+      "function": "multiplayer_map_open_by_name"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/multiplayer.c",
+      "line": 959,
+      "symbol": "tig_net_legacy_play_end_stub",
+      "function": "multiplayer_map_open_by_name"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/multiplayer.c",
+      "line": 1202,
+      "symbol": "multiplayer_deferred_queue_hook_stub",
+      "function": "multiplayer_deferred_queue_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/multiplayer.c",
+      "line": 1404,
+      "symbol": "tig_net_legacy_play_begin_stub",
+      "function": "multiplayer_map_state_transfer"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/multiplayer.c",
+      "line": 1415,
+      "symbol": "tig_net_legacy_play_end_stub",
+      "function": "multiplayer_map_state_transfer"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/multiplayer.c",
+      "line": 1518,
+      "symbol": "multiplayer_character_transfer_hook_stub",
+      "function": "multiplayer_character_transfer_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/multiplayer.h",
+      "line": 38,
+      "symbol": "multiplayer_character_transfer_hook_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/object.c",
+      "line": 2595,
+      "symbol": "wall_editor_pair_hook_stub",
+      "function": "object_bust"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/sector_block_list.c",
+      "line": 82,
+      "symbol": "sector_block_list_setup_hook_stub",
+      "function": "sector_block_list_setup_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/sector_block_list.h",
+      "line": 23,
+      "symbol": "sector_block_list_setup_hook_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/sector_object_list.c",
+      "line": 477,
+      "symbol": "sector_object_list_reserved_hook_stub",
+      "function": "sector_object_list_reserved_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/teleport.c",
+      "line": 231,
+      "symbol": "anim_map_change_hook_stub",
+      "function": "teleport_process"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/terrain.c",
+      "line": 28,
+      "symbol": "terrain_editor_bitmap_render_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/terrain.c",
+      "line": 368,
+      "symbol": "terrain_editor_bitmap_render_stub",
+      "function": "terrain_editor_bitmap_export"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/terrain.c",
+      "line": 387,
+      "symbol": "terrain_editor_bitmap_render_stub",
+      "function": "terrain_editor_bitmap_render_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/text_filter.c",
+      "line": 89,
+      "symbol": "text_filter_reserved_hook_1_stub",
+      "function": "text_filter_reserved_hook_1_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/text_filter.c",
+      "line": 95,
+      "symbol": "text_filter_reserved_hook_2_stub",
+      "function": "text_filter_reserved_hook_2_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/tile.c",
+      "line": 235,
+      "symbol": "tile_reserved_hook_stub",
+      "function": "tile_reserved_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/wall.c",
+      "line": 9,
+      "symbol": "wall_delete_piece_group_9_to_20_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/wall.c",
+      "line": 10,
+      "symbol": "wall_delete_piece_group_21_to_33_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/game/wall.c",
+      "line": 102,
+      "symbol": "wall_editor_pair_hook_stub",
+      "function": "wall_editor_pair_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/wall.c",
+      "line": 121,
+      "symbol": "wall_delete_piece_group_9_to_20_stub",
+      "function": "wall_delete"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/wall.c",
+      "line": 123,
+      "symbol": "wall_delete_piece_group_21_to_33_stub",
+      "function": "wall_delete"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/wall.c",
+      "line": 266,
+      "symbol": "wall_delete_piece_group_9_to_20_stub",
+      "function": "wall_delete_piece_group_9_to_20_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/wall.c",
+      "line": 272,
+      "symbol": "wall_delete_piece_group_21_to_33_stub",
+      "function": "wall_delete_piece_group_21_to_33_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/game/wall.h",
+      "line": 12,
+      "symbol": "wall_editor_pair_hook_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/net_compat.h",
+      "line": 26,
+      "symbol": "tig_net_shutdown_status_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/net_compat.h",
+      "line": 28,
+      "symbol": "tig_net_legacy_play_begin_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/net_compat.h",
+      "line": 29,
+      "symbol": "tig_net_legacy_play_end_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/net_compat.h",
+      "line": 30,
+      "symbol": "tig_net_legacy_session_ready_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/net_compat.h",
+      "line": 31,
+      "symbol": "tig_net_legacy_preferences_applied_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/net_compat.h",
+      "line": 36,
+      "symbol": "tig_net_legacy_timed_event_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/combat_ui.c",
+      "line": 33,
+      "symbol": "combat_ui_object_callback_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/combat_ui.c",
+      "line": 110,
+      "symbol": "object_notify_stub",
+      "function": "combat_ui_init"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/combat_ui.c",
+      "line": 110,
+      "symbol": "combat_ui_object_callback_stub",
+      "function": "combat_ui_init"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/combat_ui.c",
+      "line": 641,
+      "symbol": "combat_ui_object_callback_stub",
+      "function": "combat_ui_object_callback_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/compact_ui.c",
+      "line": 38,
+      "symbol": "compact_ui_health_bar_exit_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/compact_ui.c",
+      "line": 43,
+      "symbol": "compact_ui_hotkey_bar_exit_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/compact_ui.c",
+      "line": 59,
+      "symbol": "compact_ui_health_bar_exit_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/compact_ui.c",
+      "line": 73,
+      "symbol": "compact_ui_hotkey_bar_exit_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/compact_ui.c",
+      "line": 308,
+      "symbol": "compact_ui_health_bar_exit_stub",
+      "function": "compact_ui_health_bar_exit_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/compact_ui.c",
+      "line": 440,
+      "symbol": "compact_ui_hotkey_bar_exit_stub",
+      "function": "compact_ui_hotkey_bar_exit_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/dialog_ui.c",
+      "line": 42,
+      "symbol": "dialog_ui_first_entry_get_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/dialog_ui.c",
+      "line": 108,
+      "symbol": "dialog_ui_first_entry_get_stub",
+      "function": "dialog_ui_is_in_dialog"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/dialog_ui.c",
+      "line": 112,
+      "symbol": "dialog_ui_first_entry_get_stub",
+      "function": "dialog_ui_first_entry_get_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/dialog_ui.c",
+      "line": 149,
+      "symbol": "dialog_ui_first_entry_get_stub",
+      "function": "dialog_ui_start_dialog"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/dialog_ui.c",
+      "line": 222,
+      "symbol": "dialog_ui_first_entry_get_stub",
+      "function": "dialog_ui_end_dialog"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/dialog_ui.c",
+      "line": 264,
+      "symbol": "dialog_ui_first_entry_get_stub",
+      "function": "dialog_ui_notify_dialog_ended"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/dialog_ui.c",
+      "line": 274,
+      "symbol": "dialog_ui_first_entry_get_stub",
+      "function": "dialog_ui_notify_dialog_started"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/dialog_ui.c",
+      "line": 377,
+      "symbol": "dialog_ui_first_entry_get_stub",
+      "function": "dialog_ui_message_filter"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/mainmenu_ui.c",
+      "line": 1744,
+      "symbol": "map_game_entry_hook_stub",
+      "function": "mainmenu_ui_game_enter"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 212,
+      "symbol": "wmap_ui_info_loaded_hook_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 224,
+      "symbol": "wmap_ui_destination_location_check_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 252,
+      "symbol": "wmap_ui_note_changed_hook_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 264,
+      "symbol": "wmap_ui_note_removed_hook_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 271,
+      "symbol": "wmap_ui_waypoint_drag_hook_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 277,
+      "symbol": "wmap_ui_selected_waypoint_value_hook_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 292,
+      "symbol": "wmap_ui_note_check_stub",
+      "function": null
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 1418,
+      "symbol": "wmap_ui_info_loaded_hook_stub",
+      "function": "wmap_load_worldmap_info"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 1426,
+      "symbol": "wmap_ui_info_loaded_hook_stub",
+      "function": "wmap_ui_info_loaded_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 1903,
+      "symbol": "wmap_ui_selected_waypoint_value_hook_stub",
+      "function": "wmap_ui_message_filter"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 1932,
+      "symbol": "wmap_ui_waypoint_drag_hook_stub",
+      "function": "wmap_ui_message_filter"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 1955,
+      "symbol": "wmap_ui_selected_waypoint_value_hook_stub",
+      "function": "wmap_ui_message_filter"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 2168,
+      "symbol": "wmap_ui_waypoint_drag_hook_stub",
+      "function": "wmap_ui_message_filter"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 2494,
+      "symbol": "wmap_ui_destination_location_check_stub",
+      "function": "wmap_ui_destination_coords_check"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 2498,
+      "symbol": "wmap_ui_destination_location_check_stub",
+      "function": "wmap_ui_destination_location_check_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 3290,
+      "symbol": "wmap_ui_note_changed_hook_stub",
+      "function": "wmap_ui_note_insert_or_update"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 3308,
+      "symbol": "wmap_ui_note_changed_hook_stub",
+      "function": "wmap_ui_note_changed_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 3517,
+      "symbol": "wmap_ui_note_changed_hook_stub",
+      "function": "wmap_note_add_mode"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 3551,
+      "symbol": "wmap_ui_note_removed_hook_stub",
+      "function": "wmap_note_remove"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 3565,
+      "symbol": "wmap_ui_note_removed_hook_stub",
+      "function": "wmap_ui_note_removed_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 3757,
+      "symbol": "wmap_ui_waypoint_drag_hook_stub",
+      "function": "wmap_ui_waypoint_drag_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 3936,
+      "symbol": "wmap_ui_selected_waypoint_value_hook_stub",
+      "function": "wmap_ui_selected_waypoint_value_hook_stub"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 4548,
+      "symbol": "wmap_ui_note_check_stub",
+      "function": "wmap_world_refresh_rect"
+    },
+    {
+      "category": "stub",
+      "file": "src/ui/wmap_ui.c",
+      "line": 4600,
+      "symbol": "wmap_ui_note_check_stub",
+      "function": "wmap_ui_note_check_stub"
+    }
+  ]
+}

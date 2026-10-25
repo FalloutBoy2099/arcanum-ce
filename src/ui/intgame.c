@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "ui/item_compare.h"
+#include "ui/movement_preview.h"
 #include "game/modern_font.h"
 
 #include "game/dialog_camera.h"
@@ -156,7 +157,7 @@ static void intgame_center_on_player(void);
 static void intgame_combat_mode_toggle(void);
 static void intgame_pending_object_examine(void);
 static void intgame_main_target_action_process(TargetDescriptor* td);
-static void intgame_hotkey_item_equip(int64_t critter_obj, Hotkey* a2, int inventory_location);
+static void intgame_hotkey_item_equip(int64_t critter_obj, Hotkey* hotkey, int inventory_location);
 static bool intgame_action_buttons_create(void);
 static bool intgame_rotating_window_frame_draw(RotatingWindowType window_type, int progress);
 static void iso_interface_window_disable(RotatingWindowType window_type);
@@ -206,12 +207,12 @@ static void intgame_refresh_quantity(void);
 static void intgame_object_hover_process(TigMessage* msg);
 static void intgame_examine_critter(int64_t pc_obj, int64_t critter_obj, char* str);
 static void intgame_message_window_draw_image(tig_window_handle_t window_handle, int num);
-static void intgame_message_percentage_bar_draw(int a1, int a2, TigRect* rect, int value);
-static void intgame_weapon_skill_summary_draw(int64_t a1, int64_t a2);
+static void intgame_message_percentage_bar_draw(int background_art_number, int foreground_art_number, TigRect* rect, int value);
+static void intgame_weapon_skill_summary_draw(int64_t source_obj, int64_t target_obj);
 static void intgame_message_icon_draw(tig_window_handle_t window_handle, int art_num, int x, int y);
 static int intgame_item_icon_get(int64_t item_obj);
 static void intgame_examine_item(int64_t pc_obj, int64_t item_obj, char* str);
-static void append_stat(char* buffer, size_t maxlen, int num, int min, int max, int a5, bool is_modifier, ItemCompareStats* stats);
+static void append_stat(char* buffer, size_t maxlen, int num, int min, int max, int adj, bool is_modifier, ItemCompareStats* stats);
 static void format_weapon_stats(int64_t weapon_obj, char* buffer, size_t maxlen, ItemCompareStats* stats);
 static void format_armor_stats(int64_t armor_obj, char* buffer, size_t maxlen, ItemCompareStats* stats);
 static void intgame_examine_scenery(int64_t pc_obj, int64_t scenery_obj, char* str);
@@ -474,7 +475,7 @@ static UiButtonInfo intgame_quantity_buttons[INTGAME_QUANTITY_BUTTON_COUNT] = {
 };
 
 // 0x5C6D58
-static RotatingWindowType dword_5C6D58 = ROTWIN_TYPE_INVALID;
+static RotatingWindowType intgame_saved_rotating_window_type = ROTWIN_TYPE_INVALID;
 
 // 0x5C6D60
 struct IntgameIsoWindowTypeInfo intgame_rotwin_text_frame[ROTWIN_TYPE_COUNT] = {
@@ -522,7 +523,7 @@ static TigRect intgame_maintain_window_rects[5] = {
 };
 
 // 0x5C6F30
-static UiButtonInfo stru_5C6F30 = { 616, 455, 182, TIG_BUTTON_HANDLE_INVALID };
+static UiButtonInfo intgame_legacy_action_button = { 616, 455, 182, TIG_BUTTON_HANDLE_INVALID };
 
 // 0x5C6F40
 static UiButtonInfo intgame_recent_action_buttons[] = {
@@ -742,7 +743,7 @@ static int intgame_ammo_icon_art_numbers[TIG_ART_AMMO_TYPE_COUNT] = {
     /*   TIG_ART_AMMO_TYPE_FUEL */ 253,
 };
 
-static int dword_5C729C[] = {
+static int intgame_unused_lookup_values[] = {
     0,
     199,
     495,
@@ -879,7 +880,7 @@ static tig_font_handle_t intgame_compare_equal_font;
 static tig_font_handle_t intgame_flare14_white_font;
 
 // 0x64C4A8
-static UiButtonInfo stru_64C4A8[5];
+static UiButtonInfo intgame_rotwin_text_buttons[5];
 
 // 0x64C4F8
 static tig_window_handle_t intgame_interface_windows[2];
@@ -951,7 +952,7 @@ static TigRect intgame_pc_lens_blackout_draw_rect;
 static RotatingWindowType intgame_iso_window_type;
 
 // 0x64C6AC
-static RotatingWindowType dword_64C6AC;
+static RotatingWindowType intgame_requested_rotating_window_type;
 
 // 0x64C6B0
 static bool intgame_vital_bars_enabled;
@@ -1072,6 +1073,7 @@ bool intgame_init(GameInitInfo* init_info)
 // 0x549F00
 void intgame_reset(void)
 {
+    movement_preview_destroy();
     int index;
 
     intgame_action_tooltips_reset();
@@ -1094,6 +1096,7 @@ void intgame_reset(void)
 // 0x549F60
 void intgame_resize(GameResizeInfo* resize_info)
 {
+    movement_preview_destroy();
     int index;
     TigWindowData window_data;
     TigRect rect;
@@ -1155,6 +1158,7 @@ void intgame_resize(GameResizeInfo* resize_info)
 // 0x54A130
 void intgame_exit(void)
 {
+    movement_preview_destroy();
     intgame_action_tooltips_reset();
     tig_font_destroy(intgame_morph15_white_font);
     tig_font_destroy(intgame_morph15_blue_font);
@@ -1186,14 +1190,14 @@ bool intgame_save(TigFile* stream)
 // 0x54A220
 bool intgame_load(GameLoadInfo* load_info)
 {
-    int v1;
+    int legacy_saved_state;
     int btn;
     int64_t obj;
 
     intgame_action_tooltips_reset();
 
     if (load_info->stream == NULL) return false;
-    if (tig_file_fread(&v1, sizeof(v1), 1, load_info->stream) != 1) return false;
+    if (tig_file_fread(&legacy_saved_state, sizeof(legacy_saved_state), 1, load_info->stream) != 1) return false;
     if (tig_file_fread(&intgame_selected_spell_college, sizeof(intgame_selected_spell_college), 1, load_info->stream) != 1) return false;
 
     if (intgame_iso_window_type == ROTWIN_TYPE_SPELLS) {
@@ -1362,7 +1366,7 @@ void iso_interface_create(tig_window_handle_t window_handle)
     }
 
     hotkey_ui_start(intgame_interface_windows[1], &(intgame_interface_window_frames[1]), intgame_interface_windows[1], false);
-    intgame_button_create(&stru_5C6F30);
+    intgame_button_create(&intgame_legacy_action_button);
     intgame_button_create(&intgame_mt_button_info);
     intgame_mt_button_disable();
 
@@ -1742,28 +1746,28 @@ void intgame_draw_bar_rect(TigRect* rect)
         }
 
         if (filled_height > 0) {
-            int v14;
-            int v15;
-            int v16;
+            int top_cap_height;
+            int visible_fill_height;
+            int empty_top_offset;
 
             tmp_rect.x = rects[bar].x;
             tmp_rect.y = rects[bar].y;
             tmp_rect.width = rects[bar].width;
 
-            v14 = 8;
-            v15 = filled_height + 8;
-            v16 = empty_height - 8;
-            if (v15 > rects[bar].height) {
-                v14 += rects[bar].height - v15;
-                v16 += v15 - rects[bar].height;
-                v15 = rects[bar].height;
+            top_cap_height = 8;
+            visible_fill_height = filled_height + 8;
+            empty_top_offset = empty_height - 8;
+            if (visible_fill_height > rects[bar].height) {
+                top_cap_height += rects[bar].height - visible_fill_height;
+                empty_top_offset += visible_fill_height - rects[bar].height;
+                visible_fill_height = rects[bar].height;
             }
-            tmp_rect.y += v16;
-            tmp_rect.height = v15;
+            tmp_rect.y += empty_top_offset;
+            tmp_rect.height = visible_fill_height;
 
             if (tig_rect_intersection(&tmp_rect, rect, &blit_rect) == TIG_OK) {
                 tmp_rect.x = blit_rect.x - tmp_rect.x;
-                tmp_rect.y = blit_rect.y - v14 - tmp_rect.y + 8;
+                tmp_rect.y = blit_rect.y - top_cap_height - tmp_rect.y + 8;
                 tmp_rect.width = blit_rect.width;
                 tmp_rect.height = blit_rect.height;
                 tig_art_interface_id_create(nums[bar], 0, 0, 0, &(art_blit_info.art_id));
@@ -2967,14 +2971,14 @@ void intgame_process_event(TigMessage* msg)
                     && intgame_target_pick_at_mouse(msg->data.mouse.x, msg->data.mouse.y, &td)) {
                     if (td.is_loc) {
                         if (inven_ui_drag_item_obj_get() != OBJ_HANDLE_NULL) {
-                            int64_t v2;
+                            int64_t dragged_item_obj;
 
-                            v2 = inven_ui_drag_item_obj_get();
+                            dragged_item_obj = inven_ui_drag_item_obj_get();
                             if (hotkey_ui_is_dragging()) {
                                 hotkey_ui_cancel_drag();
-                                inven_ui_item_cursor_begin(v2, false);
+                                inven_ui_item_cursor_begin(dragged_item_obj, false);
                                 if (inven_ui_drag_item_obj_get() != OBJ_HANDLE_NULL) {
-                                    v2 = inven_ui_drag_item_obj_get();
+                                    dragged_item_obj = inven_ui_drag_item_obj_get();
                                 }
                             }
 
@@ -2982,7 +2986,7 @@ void intgame_process_event(TigMessage* msg)
                                 if (critter_is_active(pc_obj)) {
                                     inven_ui_drag_object_clear();
                                     intgame_refresh_cursor();
-                                    anim_goal_throw_item(pc_obj, v2, td.loc);
+                                    anim_goal_throw_item(pc_obj, dragged_item_obj, td.loc);
                                 } else {
                                     inven_ui_drag_cancel_and_restore();
                                 }
@@ -3373,29 +3377,29 @@ void intgame_process_event(TigMessage* msg)
 void intgame_target_action_dispatch(TargetDescriptor* td)
 {
     int64_t pc_obj;
-    TargetDescriptorEvaluation v1;
+    TargetDescriptorEvaluation evaluation;
 
     pc_obj = player_get_local_pc_obj();
 
     if (!combat_turn_based_is_active()
         || combat_turn_based_whos_turn_get() == pc_obj) {
-        v1.source_obj = pc_obj;
-        v1.self_obj = pc_obj;
-        v1.descriptor = td;
+        evaluation.source_obj = pc_obj;
+        evaluation.self_obj = pc_obj;
+        evaluation.descriptor = td;
 
         switch (intgame_mode_get()) {
         case INTGAME_MODE_SPELL:
-            if (target_descriptor_evaluate_current(&v1)) {
+            if (target_descriptor_evaluate_current(&evaluation)) {
                 spell_ui_apply(td);
             }
             break;
         case INTGAME_MODE_SKILL:
-            if (target_descriptor_evaluate_current(&v1)) {
+            if (target_descriptor_evaluate_current(&evaluation)) {
                 skill_ui_apply(td);
             }
             break;
         case INTGAME_MODE_ITEM:
-            if (target_descriptor_evaluate_current(&v1)) {
+            if (target_descriptor_evaluate_current(&evaluation)) {
                 item_ui_apply(td);
             }
             break;
@@ -3518,7 +3522,7 @@ void intgame_main_target_action_process(TargetDescriptor* td)
     AnimGoalData goal_data;
     AnimID anim_id;
     int anim;
-    bool v26 = false;
+    bool use_alternate_pathfinding = false;
 
     pc_obj = player_get_local_pc_obj();
     if (pc_obj == OBJ_HANDLE_NULL) {
@@ -3589,7 +3593,7 @@ void intgame_main_target_action_process(TargetDescriptor* td)
                     }
 
                     anim = AG_USE_OBJECT;
-                    v26 = true;
+                    use_alternate_pathfinding = true;
                 }
                 break;
             case OBJ_TYPE_CONTAINER:
@@ -3605,7 +3609,7 @@ void intgame_main_target_action_process(TargetDescriptor* td)
                     }
                 } else {
                     anim = AG_USE_CONTAINER;
-                    v26 = true;
+                    use_alternate_pathfinding = true;
                 }
                 break;
             case OBJ_TYPE_SCENERY:
@@ -3621,7 +3625,7 @@ void intgame_main_target_action_process(TargetDescriptor* td)
                     }
 
                     anim = AG_USE_OBJECT;
-                    v26 = true;
+                    use_alternate_pathfinding = true;
                 }
                 break;
             case OBJ_TYPE_WEAPON:
@@ -3645,7 +3649,7 @@ void intgame_main_target_action_process(TargetDescriptor* td)
                 if (critter_is_dead(td->obj)) {
                     if (tig_kb_get_modifier(SDL_KMOD_ALT)) {
                         anim = AG_USE_CONTAINER;
-                        v26 = true;
+                        use_alternate_pathfinding = true;
                     }
                 } else {
                     if (tig_kb_get_modifier(SDL_KMOD_SHIFT)) {
@@ -3690,7 +3694,7 @@ void intgame_main_target_action_process(TargetDescriptor* td)
                 }
 
                 anim = AG_USE_OBJECT;
-                v26 = true;
+                use_alternate_pathfinding = true;
                 break;
             case OBJ_TYPE_CONTAINER:
                 if ((spell_flags & OSF_POLYMORPHED) != 0) {
@@ -3698,11 +3702,11 @@ void intgame_main_target_action_process(TargetDescriptor* td)
                 }
 
                 anim = AG_USE_CONTAINER;
-                v26 = true;
+                use_alternate_pathfinding = true;
                 break;
             case OBJ_TYPE_SCENERY:
                 anim = AG_USE_OBJECT;
-                v26 = true;
+                use_alternate_pathfinding = true;
                 break;
             case OBJ_TYPE_WEAPON:
             case OBJ_TYPE_AMMO:
@@ -3748,7 +3752,7 @@ void intgame_main_target_action_process(TargetDescriptor* td)
                     }
 
                     anim = AG_USE_CONTAINER;
-                    v26 = true;
+                    use_alternate_pathfinding = true;
                 }
                 break;
             case OBJ_TYPE_TRAP:
@@ -3823,7 +3827,7 @@ void intgame_main_target_action_process(TargetDescriptor* td)
                 flags |= 0x40;
             }
 
-            if (v26) {
+            if (use_alternate_pathfinding) {
                 flags |= 0x4000;
             }
         }
@@ -3892,7 +3896,7 @@ void intgame_main_target_action_process(TargetDescriptor* td)
                         }
                     }
 
-                    if (v26) {
+                    if (use_alternate_pathfinding) {
                         anim_alternate_pathfinding_enable(anim_id);
                     }
                 }
@@ -3923,7 +3927,7 @@ void intgame_main_target_action_process(TargetDescriptor* td)
                     }
                 }
 
-                if (v26) {
+                if (use_alternate_pathfinding) {
                     anim_alternate_pathfinding_enable(anim_id);
                 }
             }
@@ -3954,7 +3958,7 @@ void intgame_main_target_action_process(TargetDescriptor* td)
         }
     }
 
-    if (v26) {
+    if (use_alternate_pathfinding) {
         anim_alternate_pathfinding_enable(anim_id);
     }
 }
@@ -3964,8 +3968,8 @@ void intgame_hotkey_activate(Hotkey* hotkey)
 {
     int64_t pc_obj;
     int64_t weapon_obj;
-    int64_t v1;
-    int64_t v2;
+    int64_t candidate_item_obj;
+    int64_t hotkey_item_obj;
 
     if ((hotkey->flags & HOTKEY_DRAGGED) != 0) {
         return;
@@ -3996,19 +4000,19 @@ void intgame_hotkey_activate(Hotkey* hotkey)
         intgame_mode_set(INTGAME_MODE_MAIN);
         object_handle_reference_recover_if_stale(&(hotkey->item_obj));
         if (obj_field_handle_get(hotkey->item_obj.obj, OBJ_F_ITEM_PARENT) == pc_obj) {
-            v2 = hotkey->item_obj.obj;
-            if (obj_field_int32_get(v2, OBJ_F_TYPE) != OBJ_TYPE_WRITTEN
-                || (item_check_use_box_flag(pc_obj, v2)
-                    && (obj_field_int32_get(v2, OBJ_F_ITEM_FLAGS) & OIF_USE_IS_THROW) == 0)) {
-                v1 = item_find_first_matching_prototype(pc_obj, v2);
-                if (v1 != OBJ_HANDLE_NULL) {
-                    v2 = v1;
+            hotkey_item_obj = hotkey->item_obj.obj;
+            if (obj_field_int32_get(hotkey_item_obj, OBJ_F_TYPE) != OBJ_TYPE_WRITTEN
+                || (item_check_use_box_flag(pc_obj, hotkey_item_obj)
+                    && (obj_field_int32_get(hotkey_item_obj, OBJ_F_ITEM_FLAGS) & OIF_USE_IS_THROW) == 0)) {
+                candidate_item_obj = item_find_first_matching_prototype(pc_obj, hotkey_item_obj);
+                if (candidate_item_obj != OBJ_HANDLE_NULL) {
+                    hotkey_item_obj = candidate_item_obj;
                 }
             }
 
-            if (item_check_use_box_flag(pc_obj, v2)
-                || (obj_field_int32_get(v2, OBJ_F_ITEM_FLAGS) & OIF_USE_IS_THROW) != 0) {
-                switch (obj_field_int32_get(v2, OBJ_F_TYPE)) {
+            if (item_check_use_box_flag(pc_obj, hotkey_item_obj)
+                || (obj_field_int32_get(hotkey_item_obj, OBJ_F_ITEM_FLAGS) & OIF_USE_IS_THROW) != 0) {
+                switch (obj_field_int32_get(hotkey_item_obj, OBJ_F_TYPE)) {
                 case OBJ_TYPE_WEAPON:
                     intgame_hotkey_item_equip(pc_obj, hotkey, ITEM_INV_LOC_WEAPON);
                     break;
@@ -4016,23 +4020,23 @@ void intgame_hotkey_activate(Hotkey* hotkey)
                 case OBJ_TYPE_GOLD:
                     break;
                 case OBJ_TYPE_ARMOR:
-                    intgame_hotkey_item_equip(pc_obj, hotkey, item_location_get(v2));
+                    intgame_hotkey_item_equip(pc_obj, hotkey, item_location_get(hotkey_item_obj));
                     break;
                 default:
-                    v1 = inven_ui_drag_item_obj_get();
-                    if (v1 != v2) {
-                        if (v1 != OBJ_HANDLE_NULL) {
+                    candidate_item_obj = inven_ui_drag_item_obj_get();
+                    if (candidate_item_obj != hotkey_item_obj) {
+                        if (candidate_item_obj != OBJ_HANDLE_NULL) {
                             inven_ui_drag_cancel_and_restore();
                         }
                         inven_ui_destroy();
-                        inven_ui_item_cursor_begin(v2, true);
+                        inven_ui_item_cursor_begin(hotkey_item_obj, true);
                     }
                     break;
                 }
             } else if (tig_kb_get_modifier(SDL_KMOD_SHIFT)) {
-                item_use_on_obj(pc_obj, v2, pc_obj);
+                item_use_on_obj(pc_obj, hotkey_item_obj, pc_obj);
             } else {
-                item_use_on_obj(pc_obj, v2, OBJ_HANDLE_NULL);
+                item_use_on_obj(pc_obj, hotkey_item_obj, OBJ_HANDLE_NULL);
             }
         }
         break;
@@ -4063,7 +4067,7 @@ void intgame_hotkey_activate(Hotkey* hotkey)
 void intgame_hotkey_item_equip(int64_t critter_obj, Hotkey* hotkey, int inventory_location)
 {
     int64_t item_obj;
-    int v1;
+    int equip_result;
     int sound_id;
 
     item_obj = item_wield_get(critter_obj, inventory_location);
@@ -4072,9 +4076,9 @@ void intgame_hotkey_item_equip(int64_t critter_obj, Hotkey* hotkey, int inventor
     }
 
     if (item_obj != OBJ_HANDLE_NULL) {
-        v1 = item_equipment_slot_check(hotkey->item_obj.obj, inventory_location, critter_obj);
-        if (v1 != 0 && v1 != 4) {
-            item_error_msg(critter_obj, v1);
+        equip_result = item_equipment_slot_check(hotkey->item_obj.obj, inventory_location, critter_obj);
+        if (equip_result != 0 && equip_result != 4) {
+            item_error_msg(critter_obj, equip_result);
             return;
         }
 
@@ -4083,9 +4087,9 @@ void intgame_hotkey_item_equip(int64_t critter_obj, Hotkey* hotkey, int inventor
         }
     }
 
-    v1 = item_equipment_slot_check(hotkey->item_obj.obj, inventory_location, critter_obj);
-    if (v1 != 0) {
-        item_error_msg(critter_obj, v1);
+    equip_result = item_equipment_slot_check(hotkey->item_obj.obj, inventory_location, critter_obj);
+    if (equip_result != 0) {
+        item_error_msg(critter_obj, equip_result);
         if (item_obj != OBJ_HANDLE_NULL) {
             item_wield_set(item_obj, inventory_location);
         }
@@ -4175,11 +4179,11 @@ bool intgame_action_buttons_create(void)
     intgame_mt_spells_init();
 
     for (index = 0; index < 5; index++) {
-        stru_64C4A8[index].x = intgame_rotwin_text_frame[5].rect.x;
-        stru_64C4A8[index].y = intgame_rotwin_text_frame[5].rect.y + intgame_rotwin_text_frame[5].rect.y / 5;
-        stru_64C4A8[index].art_num = -1;
-        stru_64C4A8[index].button_handle = TIG_BUTTON_HANDLE_INVALID;
-        button_create_no_art(&(stru_64C4A8[index]), intgame_rotwin_text_frame[5].rect.width, intgame_rotwin_text_frame[5].rect.y / 5);
+        intgame_rotwin_text_buttons[index].x = intgame_rotwin_text_frame[5].rect.x;
+        intgame_rotwin_text_buttons[index].y = intgame_rotwin_text_frame[5].rect.y + intgame_rotwin_text_frame[5].rect.y / 5;
+        intgame_rotwin_text_buttons[index].art_num = -1;
+        intgame_rotwin_text_buttons[index].button_handle = TIG_BUTTON_HANDLE_INVALID;
+        button_create_no_art(&(intgame_rotwin_text_buttons[index]), intgame_rotwin_text_frame[5].rect.width, intgame_rotwin_text_frame[5].rect.y / 5);
     }
 
     for (index = 0; index < 6; index++) {
@@ -4207,7 +4211,7 @@ bool intgame_action_buttons_create(void)
 
     intgame_iso_window_type = ROTWIN_TYPE_MSG;
 
-    dword_5C6D58 = ROTWIN_TYPE_INVALID;
+    intgame_saved_rotating_window_type = ROTWIN_TYPE_INVALID;
 
     return true;
 }
@@ -4278,7 +4282,7 @@ void iso_interface_window_disable(RotatingWindowType window_type)
         break;
     case ROTWIN_TYPE_DIALOGUE:
         for (index = 0; index < 5; index++) {
-            tig_button_hide(stru_64C4A8[index].button_handle);
+            tig_button_hide(intgame_rotwin_text_buttons[index].button_handle);
         }
         break;
     case ROTWIN_TYPE_MAP_NOTE:
@@ -4330,10 +4334,10 @@ void iso_interface_window_set(RotatingWindowType window_type)
 
     intgame_rotwin_step = MAX_INTERFACE_WINDOW_ROTATION_STEPS;
     if (toggled_off) {
-        dword_64C6AC = ROTWIN_TYPE_MSG;
+        intgame_requested_rotating_window_type = ROTWIN_TYPE_MSG;
         iso_interface_window_swap(ROTWIN_TYPE_MSG);
     } else {
-        dword_64C6AC = window_type;
+        intgame_requested_rotating_window_type = window_type;
         iso_interface_window_swap(window_type);
     }
 
@@ -4379,11 +4383,11 @@ void intgame_message_window_display_msg(UiMessage* ui_message)
 }
 
 // 0x550770
-void intgame_message_window_display_str(int a1, char* str)
+void intgame_message_window_display_str(int unused_message_id, char* str)
 {
     UiMessage ui_message;
 
-    (void)a1;
+    (void)unused_message_id;
 
     if (intgame_message_display_callback != NULL) {
         ui_message.type = UI_MSG_TYPE_FEEDBACK;
@@ -5015,7 +5019,7 @@ void iso_interface_window_enable(RotatingWindowType window_type)
         break;
     case ROTWIN_TYPE_DIALOGUE:
         for (index = 0; index < 5; index++) {
-            tig_button_show(stru_64C4A8[index].button_handle);
+            tig_button_show(intgame_rotwin_text_buttons[index].button_handle);
         }
         break;
     case ROTWIN_TYPE_MAP_NOTE:
@@ -5584,7 +5588,7 @@ void iso_interface_window_set_animated(RotatingWindowType window_type)
             intgame_rotwin_step++;
             anim_ui_event_add(ANIM_UI_EVENT_TYPE_ROTATE_INTERFACE, window_type);
         } else {
-            dword_5C6D58 = intgame_iso_window_type;
+            intgame_saved_rotating_window_type = intgame_iso_window_type;
         }
     }
 }
@@ -5621,7 +5625,7 @@ void iso_interface_window_swap(RotatingWindowType window_type)
     iso_interface_window_disable(intgame_iso_window_type);
     intgame_rotwin_step = MAX_INTERFACE_WINDOW_ROTATION_STEPS;
     iso_interface_window_enable(window_type);
-    dword_5C6D58 = intgame_iso_window_type;
+    intgame_saved_rotating_window_type = intgame_iso_window_type;
     // CE: the bottom-strip clip band is anchored to the active chrome's
     // strip-local y. SKILLS/SPELLS chrome lives 1px higher than other
     // rotwin arts, so a type swap (e.g. MSG -> SKILLS) shifts the band
@@ -5640,7 +5644,7 @@ void intgame_text_edit_refresh(const char* str, tig_font_handle_t font)
 }
 
 // 0x5521B0
-void intgame_text_edit_refresh_color(const char* str, tig_font_handle_t font, tig_color_t color, bool a4)
+void intgame_text_edit_refresh_color(const char* str, tig_font_handle_t font, tig_color_t color, bool scroll_to_end)
 {
     tig_window_handle_t window_handle;
     TigRect rect;
@@ -5658,7 +5662,7 @@ void intgame_text_edit_refresh_color(const char* str, tig_font_handle_t font, ti
         tig_font_measure(&font_desc);
 
         // NOTE: Many jumps, check.
-        if (font_desc.width > rect.width && a4) {
+        if (font_desc.width > rect.width && scroll_to_end) {
             while (font_desc.width > rect.width && *str != '\0') {
                 font_desc.width = 0;
                 font_desc.str = str++;
@@ -5701,7 +5705,7 @@ void intgame_clock_refresh(void)
     TigRect dst_rect;
     TigFont font_desc;
     DateTime datetime;
-    int v1;
+    int strip_offset;
     int cycle;
     int num_cycles;
     int width;
@@ -5731,15 +5735,15 @@ void intgame_clock_refresh(void)
     }
 
     datetime = game_time_get();
-    v1 = (intgame_clock_strip_widths[1] + intgame_clock_strip_widths[0]
+    strip_offset = (intgame_clock_strip_widths[1] + intgame_clock_strip_widths[0]
              + (datetime_seconds_since_reference_date(&datetime) + 73800) % 86400 * (intgame_clock_strip_widths[1] + intgame_clock_strip_widths[0]) / 86400
              - intgame_clock_frame.width / 2)
         % (intgame_clock_strip_widths[1] + intgame_clock_strip_widths[0]);
-    if (intgame_clock_last_strip_offset == v1) {
+    if (intgame_clock_last_strip_offset == strip_offset) {
         return;
     }
 
-    intgame_clock_last_strip_offset = v1;
+    intgame_clock_last_strip_offset = strip_offset;
     tig_window_fill(intgame_interface_windows[0], &intgame_clock_frame, tig_color_make(0, 0, 0));
 
     dst_x = intgame_clock_frame.x;
@@ -5756,13 +5760,13 @@ void intgame_clock_refresh(void)
                 return;
             }
         } else {
-            int v2;
+            int moon_phase_day;
             int idx;
 
-            v2 = ((datetime_seconds_since_reference_date(&datetime) + 43200) / 84600) % 28;
+            moon_phase_day = ((datetime_seconds_since_reference_date(&datetime) + 43200) / 84600) % 28;
 
             for (idx = 0; idx < 8; idx++) {
-                if (v2 <= intgame_moon_phase_day_thresholds[idx]) {
+                if (moon_phase_day <= intgame_moon_phase_day_thresholds[idx]) {
                     break;
                 }
             }
@@ -5774,10 +5778,10 @@ void intgame_clock_refresh(void)
             }
         }
 
-        if (v1 < width) {
-            src_rect.x = v1;
+        if (strip_offset < width) {
+            src_rect.x = strip_offset;
             src_rect.y = 0;
-            src_rect.width = SDL_min(width - v1, dst_width);
+            src_rect.width = SDL_min(width - strip_offset, dst_width);
             src_rect.height = intgame_clock_frame.height;
 
             dst_rect.x = dst_x;
@@ -5793,9 +5797,9 @@ void intgame_clock_refresh(void)
             dst_x += src_rect.width;
             dst_width -= src_rect.width;
 
-            v1 = 0;
+            strip_offset = 0;
         } else {
-            v1 -= width;
+            strip_offset -= width;
         }
 
         cycle = 1 - cycle;
@@ -7049,7 +7053,7 @@ void intgame_message_window_draw_image(tig_window_handle_t window_handle, int nu
 }
 
 // 0x554640
-void intgame_message_percentage_bar_draw(int a1, int a2, TigRect* rect, int value)
+void intgame_message_percentage_bar_draw(int background_art_number, int foreground_art_number, TigRect* rect, int value)
 {
     tig_window_handle_t window_handle;
     tig_art_id_t art_id;
@@ -7070,7 +7074,7 @@ void intgame_message_percentage_bar_draw(int a1, int a2, TigRect* rect, int valu
     }
 
     if (value != 0) {
-        tig_art_interface_id_create(a1, 0, 0, 0, &art_id);
+        tig_art_interface_id_create(background_art_number, 0, 0, 0, &art_id);
         tig_art_frame_data(art_id, &art_frame_data);
 
         src_rect.x = 0;
@@ -7100,7 +7104,7 @@ void intgame_message_percentage_bar_draw(int a1, int a2, TigRect* rect, int valu
     }
 
     if (value != 100) {
-        tig_art_interface_id_create(a2, 0, 0, 0, &art_id);
+        tig_art_interface_id_create(foreground_art_number, 0, 0, 0, &art_id);
         tig_art_frame_data(art_id, &art_frame_data);
 
         src_rect.x = art_frame_data.width - art_frame_data.width * (100 - value) / 100;
@@ -7128,14 +7132,14 @@ void intgame_message_percentage_bar_draw(int a1, int a2, TigRect* rect, int valu
 }
 
 // 0x554830
-void intgame_weapon_skill_summary_draw(int64_t a1, int64_t a2)
+void intgame_weapon_skill_summary_draw(int64_t source_obj, int64_t target_obj)
 {
     tig_window_handle_t window_handle;
     int64_t weapon_obj;
     int skill;
     int effectiveness;
     SkillInvocation skill_invocation;
-    int v3;
+    int aptitude_penalty_percent;
     TigRect rect;
     char str[20];
     int penalty;
@@ -7149,17 +7153,17 @@ void intgame_weapon_skill_summary_draw(int64_t a1, int64_t a2)
 
     intgame_message_icon_draw(window_handle, 582, 207, 57);
 
-    weapon_obj = item_wield_get(a1, ITEM_INV_LOC_WEAPON);
+    weapon_obj = item_wield_get(source_obj, ITEM_INV_LOC_WEAPON);
     skill = item_weapon_skill(weapon_obj);
     if (IS_TECH_SKILL(skill)) {
-        effectiveness = tech_skill_effectiveness(a1, GET_TECH_SKILL(skill), a2);
+        effectiveness = tech_skill_effectiveness(source_obj, GET_TECH_SKILL(skill), target_obj);
     } else {
-        effectiveness = basic_skill_effectiveness(a1, GET_BASIC_SKILL(skill), a2);
+        effectiveness = basic_skill_effectiveness(source_obj, GET_BASIC_SKILL(skill), target_obj);
     }
 
     skill_invocation_init(&skill_invocation);
-    object_handle_reference_init(a1, &(skill_invocation.source));
-    object_handle_reference_init(a2, &(skill_invocation.target));
+    object_handle_reference_init(source_obj, &(skill_invocation.source));
+    object_handle_reference_init(target_obj, &(skill_invocation.target));
     object_handle_reference_init(weapon_obj, &(skill_invocation.item));
     skill_invocation.skill = skill;
 
@@ -7167,12 +7171,12 @@ void intgame_weapon_skill_summary_draw(int64_t a1, int64_t a2)
 
     if (weapon_obj != OBJ_HANDLE_NULL
         && skill != SKILL_THROWING) {
-        v3 = item_target_aptitude_penalty_get(weapon_obj, a1, a2);
-        if (v3 > 0) {
-            if (v3 > 20) {
+        aptitude_penalty_percent = item_target_aptitude_penalty_get(weapon_obj, source_obj, target_obj);
+        if (aptitude_penalty_percent > 0) {
+            if (aptitude_penalty_percent > 20) {
                 skill_invocation.flags |= SKILL_INVOCATION_MAGIC_TECH_PENALTY;
             }
-            effectiveness -= effectiveness * v3 / 100;
+            effectiveness -= effectiveness * aptitude_penalty_percent / 100;
         }
     }
 
@@ -9973,4 +9977,32 @@ void intgame_action_tooltips_tick(void)
     // rather than retaining the previous target or following the pointer.
     intgame_action_info_draw(0, left);
     intgame_action_info_draw(1, right);
+}
+
+void intgame_movement_preview_tick(void)
+{
+    TigMouseState mouse;
+    TargetDescriptor target;
+    int x, y;
+    int64_t pc = player_get_local_pc_obj();
+    if (!intgame_iso_interface_created || gamelib_in_load() || gamelib_in_reset()
+        || gamelib_in_save() || !map_is_valid() || map_is_clearing_objects()
+        || mainmenu_ui_is_active() || intgame_mode_get() != INTGAME_MODE_MAIN
+        || intgame_dialog_process_event_func != NULL || intgame_camera_pan_active
+        || tig_window_is_hidden(intgame_iso_window_handle)
+        || !settings_get_value(&settings, MOVEMENT_PREVIEW_KEY)
+        || pc == OBJ_HANDLE_NULL || !obj_handle_is_valid(pc) || !critter_is_active(pc)
+        || hotkey_ui_is_dragging() || inven_ui_drag_item_obj_get() != OBJ_HANDLE_NULL
+        || (combat_turn_based_is_active() && combat_turn_based_whos_turn_get() != pc)
+        || tig_mouse_get_state(&mouse) != TIG_OK || !intgame_point_is_over_window(mouse.x, mouse.y)) {
+        movement_preview_clear();
+        return;
+    }
+    intgame_adjust_mouse_for_zoom(mouse.x, mouse.y, &x, &y);
+    if (!target_pick_at_screen_xy_ex(x, y, &target, TGT_TILE | TGT_OBJECT, intgame_fullscreen)
+        || !target.is_loc || target.loc == obj_field_int64_get(pc, OBJ_F_LOCATION)) {
+        movement_preview_clear();
+        return;
+    }
+    movement_preview_update(intgame_iso_window_handle, pc, target.loc);
 }

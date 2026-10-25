@@ -1,0 +1,3 @@
+add_library(movie_decoder STATIC src/movie_decoder.c include/movie_decoder.h)
+target_include_directories(movie_decoder PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(movie_decoder PRIVATE arcanum_ffmpeg_avformat arcanum_ffmpeg_avcodec arcanum_ffmpeg_avutil arcanum_ffmpeg_swscale arcanum_ffmpeg_swresample)

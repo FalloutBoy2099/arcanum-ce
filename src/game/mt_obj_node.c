@@ -59,7 +59,7 @@ MagicTechObjectNode* mt_obj_node_create(void)
     node->obj = OBJ_HANDLE_NULL;
     node->type = -1;
     node->aptitude = 0;
-    node->field_30 = 0;
+    node->reserved_serialized_state = 0;
 
     return node;
 }
@@ -168,7 +168,7 @@ bool mt_obj_node_save_list_node(MagicTechObjectNode* node, TigFile* stream)
         return false;
     }
 
-    if (tig_file_fwrite(&(node->field_30), sizeof(node->field_30), 1, stream) != 1) {
+    if (tig_file_fwrite(&(node->reserved_serialized_state), sizeof(node->reserved_serialized_state), 1, stream) != 1) {
         return false;
     }
 
@@ -186,7 +186,7 @@ bool mt_obj_node_load_list(MagicTechObjectNode** head_ptr, TigFile* stream)
     int index;
     MagicTechObjectNode* node;
 
-    if (head_ptr == NULL) {
+    if (head_ptr == NULL || stream == NULL) {
         return false;
     }
 
@@ -194,6 +194,12 @@ bool mt_obj_node_load_list(MagicTechObjectNode** head_ptr, TigFile* stream)
     if (tig_file_fread(&cnt, sizeof(cnt), 1, stream) != 1) {
         return false;
     }
+
+    int position = tig_file_ftell(stream);
+    int length = tig_file_filelength(stream);
+    size_t node_size = sizeof(ObjectID) + sizeof(int64_t) + 3 * sizeof(int);
+    if (cnt < 0 || position < 0 || length < position
+        || (size_t)cnt > (size_t)(length - position) / node_size) return false;
 
     // Load each node.
     for (index = 0; index < cnt; index++) {
@@ -229,7 +235,7 @@ bool mt_obj_node_load_list_node(MagicTechObjectNode* node, TigFile* stream)
         return false;
     }
 
-    if (tig_file_fread(&(node->field_30), sizeof(node->field_30), 1, stream) != 1) {
+    if (tig_file_fread(&(node->reserved_serialized_state), sizeof(node->reserved_serialized_state), 1, stream) != 1) {
         return false;
     }
 
@@ -261,7 +267,7 @@ bool mt_obj_node_save_detached(MagicTechObjectNode* node, TigFile* stream)
         return false;
     }
 
-    if (tig_file_fwrite(&(node->field_30), sizeof(node->field_30), 1, stream) != 1) {
+    if (tig_file_fwrite(&(node->reserved_serialized_state), sizeof(node->reserved_serialized_state), 1, stream) != 1) {
         return false;
     }
 
@@ -291,7 +297,7 @@ bool mt_obj_node_load_detached(MagicTechObjectNode* node, TigFile* stream)
         return false;
     }
 
-    if (tig_file_fread(&(node->field_30), sizeof(node->field_30), 1, stream) != 1) {
+    if (tig_file_fread(&(node->reserved_serialized_state), sizeof(node->reserved_serialized_state), 1, stream) != 1) {
         return false;
     }
 

@@ -7,7 +7,7 @@
 
 typedef struct TownMapInfo {
     /* 0000 */ int version;
-    /* 0004 */ int field_4;
+    /* 0004 */ int reserved_slot_1;
     /* 0008 */ int map;
     /* 000C */ int width;
     /* 0010 */ int height;

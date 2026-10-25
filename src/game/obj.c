@@ -22,7 +22,7 @@ typedef struct Object {
     /* 0008 */ ObjectID oid;
     /* 0020 */ ObjectID prototype_oid;
     /* 0038 */ int64_t prototype_obj;
-    /* 0040 */ int field_40;
+    /* 0040 */ int reserved_runtime_state;
     /* 0044 */ int16_t modified;
     /* 0046 */ int16_t num_fields;
     /* 0048 */ int* stored_field_bitmap;
@@ -64,9 +64,9 @@ static bool obj_proto_read_file(TigFile* stream, int64_t* obj_ptr, ObjectID oid)
 static bool obj_inst_write_file(TigFile* stream, int64_t obj);
 static bool obj_inst_read_file(TigFile* stream, int64_t* obj_ptr, ObjectID oid);
 static void obj_proto_write_mem(WriteBuffer* wb, int64_t obj);
-static bool obj_proto_read_mem(uint8_t* data, int64_t* obj_ptr);
+static bool obj_proto_read_mem(ReadBuffer* data, int64_t* obj_ptr);
 static void obj_inst_write_mem(WriteBuffer* wb, int64_t obj);
-static bool obj_inst_read_mem(uint8_t* data, int64_t* obj_ptr);
+static bool obj_inst_read_mem(ReadBuffer* data, int64_t* obj_ptr);
 static bool obj_proto_field_write_file(Object* object, int fld);
 static bool obj_proto_field_write_mem(Object* object, int fld);
 static bool obj_proto_field_read_file(Object* object, int fld);
@@ -128,8 +128,8 @@ static void object_inst_storage_insert_at(Object* object, int fld);
 static bool obj_version_write_file(TigFile* stream);
 static bool obj_version_read_file(TigFile* stream);
 static void obj_version_write_mem(WriteBuffer* wb);
-static bool obj_version_read_mem(uint8_t** data);
-static bool object_changed_field_debug_print(Object* object, int a2, ObjectFieldInfo* field_info);
+static bool obj_version_read_mem(ReadBuffer* data);
+static bool object_changed_field_debug_print(Object* object, int unused_field, ObjectFieldInfo* field_info);
 static int64_t obj_get_prototype_handle(Object* object);
 
 // 0x59BE00
@@ -529,7 +529,7 @@ static bool obj_editor;
 static int16_t obj_enumerated_field_count;
 
 // 0x5D1100
-static int* dword_5D1100;
+static int* obj_field_group_simple_counts;
 
 // 0x5D1104
 static ObjectFieldInfo* object_fields;
@@ -547,7 +547,7 @@ static Object* obj_copy_destination_object;
 static WriteBuffer* obj_current_write_buffer;
 
 // 0x5D111C
-static uint8_t* obj_current_read_cursor;
+static ReadBuffer* obj_current_read_buffer;
 
 // 0x5D1120
 static int16_t* object_fields_count_per_type;
@@ -575,7 +575,7 @@ bool obj_init(GameInitInfo* init_info)
 
     object_fields = (ObjectFieldInfo*)CALLOC(OBJ_F_MAX, sizeof(ObjectFieldInfo));
     obj_field_group_change_bases = (int*)CALLOC(21, sizeof(int));
-    dword_5D1100 = (int*)CALLOC(21, sizeof(int));
+    obj_field_group_simple_counts = (int*)CALLOC(21, sizeof(int));
     object_fields_count_per_type = (int16_t*)CALLOC(18, sizeof(int16_t));
     obj_editor = init_info->editor;
     bitset_pool_init();
@@ -610,7 +610,7 @@ void obj_exit(void)
 
     FREE(object_fields);
     FREE(obj_field_group_change_bases);
-    FREE(dword_5D1100);
+    FREE(obj_field_group_simple_counts);
     FREE(object_fields_count_per_type);
 
     obj_initialized = false;
@@ -817,7 +817,7 @@ void obj_create_proto(int type, int64_t* obj_ptr)
     obj_pool_perm_oid_set(object->oid, handle);
     object->prototype_oid.type = OID_TYPE_BLOCKED;
     object->prototype_obj = OBJ_HANDLE_NULL;
-    object->field_40 = 0;
+    object->reserved_runtime_state = 0;
     object_proto_change_bitmap_allocate(object);
 
     for (index = 0; index < 19; index++) {
@@ -852,7 +852,7 @@ void obj_create_inst(int64_t proto_obj, int64_t loc, int64_t* obj_ptr)
     prototype = obj_lock(proto_obj);
     object->prototype_oid = prototype->oid;
     object->type = prototype->type;
-    object->field_40 = 0;
+    object->reserved_runtime_state = 0;
     obj_unlock(proto_obj);
 
     object->num_fields = 0;
@@ -1002,7 +1002,7 @@ void obj_deep_copy(int64_t* new_obj_ptr, int64_t obj)
     new_object->oid = object->oid;
     new_object->prototype_oid = object->prototype_oid;
     new_object->prototype_obj = object->prototype_obj;
-    new_object->field_40 = object->field_40;
+    new_object->reserved_runtime_state = object->reserved_runtime_state;
     new_object->modified = object->modified;
     new_object->num_fields = object->num_fields;
     new_object->data = (intptr_t*)CALLOC(object->num_fields, sizeof(*new_object->data));
@@ -1066,7 +1066,7 @@ void obj_perm_dup(int64_t* copy_obj_ptr, int64_t existing_obj)
 
     copy_object->prototype_oid = existing_object->prototype_oid;
     copy_object->prototype_obj = existing_object->prototype_obj;
-    copy_object->field_40 = 0;
+    copy_object->reserved_runtime_state = 0;
     copy_object->num_fields = existing_object->num_fields;
     copy_object->modified = false;
     copy_object->data = (intptr_t*)CALLOC(copy_object->num_fields, sizeof(*copy_object->data));
@@ -1155,7 +1155,11 @@ void obj_collect_oids(int64_t obj, ObjectID** oids_ptr, int* cnt_ptr)
         cnt = obj_field_int32_get(obj, inventory_num_fld);
     }
 
-    oids = *oids_ptr = (ObjectID*)MALLOC(sizeof(*oids) * (cnt + 1));
+    *oids_ptr = NULL;
+    *cnt_ptr = 0;
+    if (cnt < 0 || cnt == INT_MAX || (size_t)cnt + 1 > SIZE_MAX / sizeof(*oids)) return;
+    oids = *oids_ptr = (ObjectID*)MALLOC(sizeof(*oids) * ((size_t)cnt + 1));
+    if (oids == NULL) return;
     *oids++ = obj_get_id(obj);
 
     for (idx = cnt - 1; idx >= 0; idx--) {
@@ -1271,30 +1275,28 @@ void obj_write_mem(uint8_t** data_ptr, int* size_ptr, int64_t obj)
         obj_inst_write_mem(&wb, obj);
     }
 
+    if (wb.failed) {
+        FREE(wb.base);
+        *data_ptr = NULL;
+        *size_ptr = 0;
+        return;
+    }
     *data_ptr = wb.base;
-    *size_ptr = (int)(wb.curr - wb.base);
+    *size_ptr = (int)(wb.size - wb.remaining);
 }
 
 // 0x406730
-bool obj_read_mem(uint8_t* data, int64_t* obj_ptr)
+bool obj_read_mem(const uint8_t* data, size_t size, int64_t* obj_ptr)
 {
-    ObjectID oid;
-    bool ret;
-
-    if (!obj_version_read_mem(&data)) {
-        return false;
-    }
-
-    mem_read_advance(&oid, sizeof(oid), &data);
-    data -= sizeof(oid);
-
-    if (oid.type == OID_TYPE_BLOCKED) {
-        ret = obj_proto_read_mem(data, obj_ptr);
-    } else {
-        ret = obj_inst_read_mem(data, obj_ptr);
-    }
-
-    return ret;
+    ReadBuffer reader = { .cursor = data, .remaining = size };
+    ObjectID prototype;
+    if (obj_ptr == NULL) return false;
+    *obj_ptr = OBJ_HANDLE_NULL;
+    if (!obj_version_read_mem(&reader)) return false;
+    ReadBuffer preview = reader;
+    if (!read_buffer_read(&preview, &prototype, sizeof(prototype))) return false;
+    return prototype.type == OID_TYPE_BLOCKED
+        ? obj_proto_read_mem(&reader, obj_ptr) : obj_inst_read_mem(&reader, obj_ptr);
 }
 
 // 0x4067C0
@@ -2299,7 +2301,7 @@ Object* obj_allocate(int64_t* obj_ptr)
 }
 
 // 0x408020
-ObjectID obj_id_a_replace(int64_t obj, int a2)
+ObjectID obj_id_a_replace(int64_t obj, int allocated_id)
 {
     Object* object;
 
@@ -2308,7 +2310,7 @@ ObjectID obj_id_a_replace(int64_t obj, int a2)
         obj_pool_perm_oid_remove(object->oid);
     }
 
-    object->oid = objid_make_a(a2);
+    object->oid = objid_make_a(allocated_id);
     obj_pool_perm_oid_set(object->oid, obj);
 
     obj_unlock(obj);
@@ -2597,29 +2599,29 @@ void obj_arrayfield_fetch(Object* object, int fld, int index, void* value)
 // 0x408D60
 void object_arrayfield_count_get(Object* object, int fld, int* value_ptr)
 {
-    ObjDataDescriptor v1;
+    ObjDataDescriptor descriptor;
     int64_t proto_handle;
     Object* proto;
 
-    v1.type = object_fields[fld].type;
+    descriptor.type = object_fields[fld].type;
 
     if (object->prototype_oid.type == OID_TYPE_BLOCKED) {
-        v1.ptr = &(object->data[object_proto_field_storage_index(object, fld)]);
-        *value_ptr = obj_data_count_idx(&v1);
+        descriptor.ptr = &(object->data[object_proto_field_storage_index(object, fld)]);
+        *value_ptr = obj_data_count_idx(&descriptor);
     } else {
         if (fld > OBJ_F_TRANSIENT_BEGIN && fld < OBJ_F_TRANSIENT_END) {
-            v1.ptr = &(object->transient_properties[fld - OBJ_F_TRANSIENT_BEGIN - 1]);
-            *value_ptr = obj_data_count_idx(&v1);
+            descriptor.ptr = &(object->transient_properties[fld - OBJ_F_TRANSIENT_BEGIN - 1]);
+            *value_ptr = obj_data_count_idx(&descriptor);
         }
 
         if (object_inst_field_is_overridden(object, fld)) {
-            v1.ptr = &(object->data[object_inst_field_storage_index(object, fld)]);
-            *value_ptr = obj_data_count_idx(&v1);
+            descriptor.ptr = &(object->data[object_inst_field_storage_index(object, fld)]);
+            *value_ptr = obj_data_count_idx(&descriptor);
         } else {
             proto_handle = obj_get_prototype_handle(object);
             proto = obj_lock(proto_handle);
-            v1.ptr = &(proto->data[object_proto_field_storage_index(proto, fld)]);
-            *value_ptr = obj_data_count_idx(&v1);
+            descriptor.ptr = &(proto->data[object_proto_field_storage_index(proto, fld)]);
+            *value_ptr = obj_data_count_idx(&descriptor);
             obj_unlock(proto_handle);
         }
     }
@@ -2629,13 +2631,13 @@ void object_arrayfield_count_get(Object* object, int fld, int* value_ptr)
 // 0x408E70
 void object_arrayfield_remove_index(Object* object, int fld, int value)
 {
-    ObjDataDescriptor v1;
+    ObjDataDescriptor descriptor;
 
     if (object->prototype_oid.type == OID_TYPE_BLOCKED) {
-        v1.ptr = &(object->data[object_proto_field_storage_index(object, fld)]);
+        descriptor.ptr = &(object->data[object_proto_field_storage_index(object, fld)]);
         object_field_change_set(object, fld, true);
     } else if (fld > OBJ_F_TRANSIENT_BEGIN && fld < OBJ_F_TRANSIENT_END) {
-        v1.ptr = &(object->transient_properties[fld - OBJ_F_TRANSIENT_BEGIN - 1]);
+        descriptor.ptr = &(object->transient_properties[fld - OBJ_F_TRANSIENT_BEGIN - 1]);
     } else {
         if (!object_inst_field_has_local_value(object, fld)) {
             if (!object_inst_field_is_overridden(object, fld)) {
@@ -2643,14 +2645,14 @@ void object_arrayfield_remove_index(Object* object, int fld, int value)
             }
         }
 
-        v1.ptr = &(object->data[object_inst_field_storage_index(object, fld)]);
+        descriptor.ptr = &(object->data[object_inst_field_storage_index(object, fld)]);
         object_field_change_set(object, fld, true);
         object->modified = true;
     }
 
-    v1.type = object_fields[fld].type;
-    v1.idx = value;
-    obj_data_remove_idx(&v1);
+    descriptor.type = object_fields[fld].type;
+    descriptor.idx = value;
+    obj_data_remove_idx(&descriptor);
 }
 
 // Returns array storage and whether the caller must unlock the inherited prototype.
@@ -2963,7 +2965,7 @@ bool obj_proto_read_file(TigFile* stream, int64_t* obj_ptr, ObjectID oid)
         return false;
     }
 
-    object->field_40 = 0;
+    object->reserved_runtime_state = 0;
     object->modified = false;
     object->num_fields = object_fields_count_per_type[object->type];
     object->data = (intptr_t*)CALLOC(object->num_fields, sizeof(*object->data));
@@ -3060,7 +3062,7 @@ bool obj_inst_read_file(TigFile* stream, int64_t* obj_ptr, ObjectID oid)
         return false;
     }
 
-    object->field_40 = 0;
+    object->reserved_runtime_state = 0;
     object->modified = false;
     object_inst_field_bitmaps_allocate(object);
 
@@ -3114,44 +3116,45 @@ void obj_proto_write_mem(WriteBuffer* wb, int64_t obj)
 }
 
 // 0x409D30
-bool obj_proto_read_mem(uint8_t* data, int64_t* obj_ptr)
+bool obj_proto_read_mem(ReadBuffer* data, int64_t* obj_ptr)
 {
+    ObjectID prototype;
+    ObjectID oid;
+    int type;
+    if (!read_buffer_read(data, &prototype, sizeof(prototype))
+        || !read_buffer_read(data, &oid, sizeof(oid))
+        || !read_buffer_read(data, &type, sizeof(type))
+        || type < OBJ_TYPE_WALL || type > OBJ_TYPE_TRAP) return false;
+    int bitmap_size = sizeof(int) * object_field_bitmap_word_count(type);
+    const uint8_t* bitmap = read_buffer_take(data, bitmap_size);
+    if (data->failed) return false;
     int64_t obj;
-    Object* object;
-    int size;
-
-    object = obj_allocate(&obj);
-    mem_read_advance(&(object->prototype_oid), sizeof(object->prototype_oid), &data);
+    Object* object = obj_allocate(&obj);
+    object->prototype_oid = prototype;
     object->prototype_obj = OBJ_HANDLE_NULL;
-    mem_read_advance(&(object->oid), sizeof(object->oid), &data);
-    mem_read_advance(&(object->type), sizeof(object->type), &data);
-
-    size = sizeof(*object->modified_field_bitmap) * object_field_bitmap_word_count(object->type);
-    object->modified_field_bitmap = MALLOC(size);
-    mem_read_advance(object->modified_field_bitmap, size, &data);
-
-    object->field_40 = 0;
+    object->oid = oid;
+    object->type = type;
+    object->modified_field_bitmap = MALLOC(bitmap_size);
+    memcpy(object->modified_field_bitmap, bitmap, bitmap_size);
+    object->reserved_runtime_state = 0;
     object->modified = false;
-    object->num_fields = object_fields_count_per_type[object->type];
-    object->data = (intptr_t*)CALLOC(object->num_fields, sizeof(*object->data));
-
+    object->num_fields = object_fields_count_per_type[type];
+    object->data = CALLOC(object->num_fields, sizeof(*object->data));
     obj_current_storage_index = 0;
-    obj_current_read_cursor = data;
+    obj_current_read_buffer = data;
     if (!object_proto_enumerate_fields(object, obj_proto_field_read_mem)) {
+        obj_current_storage_index = 0;
+        object_proto_enumerate_fields(object, object_proto_field_dealloc);
+        object_proto_change_bitmap_free(object);
+        FREE(object->data);
         obj_unlock(obj);
         obj_pool_deallocate(obj);
         return false;
     }
-
     memset(object->transient_properties, -1, sizeof(object->transient_properties));
-
-    if (object->oid.type != OID_TYPE_NULL) {
-        obj_pool_perm_oid_set(object->oid, obj);
-    }
-
+    if (object->oid.type != OID_TYPE_NULL) obj_pool_perm_oid_set(object->oid, obj);
     obj_unlock(obj);
     *obj_ptr = obj;
-
     return true;
 }
 
@@ -3175,56 +3178,68 @@ void obj_inst_write_mem(WriteBuffer* wb, int64_t obj)
 }
 
 // 0x409F10
-bool obj_inst_read_mem(uint8_t* data, int64_t* obj_ptr)
+bool obj_inst_read_mem(ReadBuffer* data, int64_t* obj_ptr)
 {
-    Object* object;
+    ObjectID prototype;
+    ObjectID oid;
+    int type;
+    int16_t num_fields;
+    if (!read_buffer_read(data, &prototype, sizeof(prototype))
+        || !read_buffer_read(data, &oid, sizeof(oid))
+        || !read_buffer_read(data, &type, sizeof(type))
+        || !read_buffer_read(data, &num_fields, sizeof(num_fields))
+        || type < OBJ_TYPE_WALL || type > OBJ_TYPE_TRAP
+        || num_fields < 0 || num_fields > object_fields_count_per_type[type]) return false;
+    int bitmap_words = object_field_bitmap_word_count(type);
+    const uint8_t* bitmap = read_buffer_take(data, sizeof(int) * bitmap_words);
+    if (data->failed) return false;
+    int population = 0;
+    for (int index = 0; index < bitmap_words; index++) {
+        int word;
+        memcpy(&word, bitmap + sizeof(int) * index, sizeof(word));
+        population += bitset_count_bits(word, 32);
+    }
+    if (population != num_fields) return false;
     int64_t obj;
-
-    object = obj_allocate(&obj);
-    mem_read_advance(&(object->prototype_oid), sizeof(object->prototype_oid), &data);
+    Object* object = obj_allocate(&obj);
+    object->prototype_oid = prototype;
     object->prototype_obj = OBJ_HANDLE_NULL;
-    mem_read_advance(&(object->oid), sizeof(object->oid), &data);
-    mem_read_advance(&(object->type), sizeof(object->type), &data);
-    mem_read_advance(&(object->num_fields), sizeof(object->num_fields), &data);
-
-    object->field_40 = 0;
+    object->oid = oid;
+    object->type = type;
+    object->num_fields = num_fields;
+    object->reserved_runtime_state = 0;
     object->modified = false;
     object_inst_field_bitmaps_allocate(object);
-
-    object->data = (intptr_t*)CALLOC(object->num_fields, sizeof(*object->data));
-    mem_read_advance(object->stored_field_bitmap, 4 * object_field_bitmap_word_count(object->type), &data);
-
-    obj_current_read_cursor = data;
-    if (!object_inst_enumerate_overridden_fields(object, obj_inst_field_read_mem)) {
+    object->data = CALLOC(num_fields, sizeof(*object->data));
+    memcpy(object->stored_field_bitmap, bitmap, sizeof(int) * bitmap_words);
+    obj_current_read_buffer = data;
+    obj_current_storage_index = 0;
+    if (!object_inst_enumerate_overridden_fields(object, obj_inst_field_read_mem)
+        || obj_current_storage_index != num_fields) {
+        object_inst_enumerate_overridden_fields(object, object_inst_field_dealloc);
+        object_inst_field_bitmaps_free(object);
+        FREE(object->data);
         obj_unlock(obj);
         obj_pool_deallocate(obj);
         return false;
     }
-
     memset(object->transient_properties, 0, sizeof(object->transient_properties));
-
-    if (object->oid.type != OID_TYPE_NULL) {
-        obj_pool_perm_oid_set(object->oid, obj);
-    }
-
+    if (object->oid.type != OID_TYPE_NULL) obj_pool_perm_oid_set(object->oid, obj);
     obj_unlock(obj);
-
     obj_field_int32_set(obj, OBJ_F_INTERNAL_FLAGS, 0x1);
-
     *obj_ptr = obj;
     obj_find_add(obj);
-
     return true;
 }
 
 // 0x40A070
 bool obj_proto_field_write_file(Object* object, int fld)
 {
-    ObjDataDescriptor v1;
+    ObjDataDescriptor descriptor;
 
-    v1.type = object_fields[fld].type;
-    v1.ptr = &(object->data[obj_current_storage_index]);
-    if (!obj_data_write_file(&v1, obj_current_file_stream)) {
+    descriptor.type = object_fields[fld].type;
+    descriptor.ptr = &(object->data[obj_current_storage_index]);
+    if (!obj_data_write_file(&descriptor, obj_current_file_stream)) {
         return false;
     }
 
@@ -3236,24 +3251,23 @@ bool obj_proto_field_write_file(Object* object, int fld)
 // 0x40A0E0
 bool obj_proto_field_write_mem(Object* object, int fld)
 {
-    ObjDataDescriptor v1;
+    ObjDataDescriptor descriptor;
 
-    v1.type = object_fields[fld].type;
-    v1.ptr = &(object->data[obj_current_storage_index]);
-    obj_data_write_mem(&v1, obj_current_write_buffer);
+    descriptor.type = object_fields[fld].type;
+    descriptor.ptr = &(object->data[obj_current_storage_index]);
+    obj_data_write_mem(&descriptor, obj_current_write_buffer);
     obj_current_storage_index++;
-
-    return true;
+    return !obj_current_write_buffer->failed;
 }
 
 // 0x40A140
 bool obj_proto_field_read_file(Object* object, int fld)
 {
-    ObjDataDescriptor v1;
+    ObjDataDescriptor descriptor;
 
-    v1.type = object_fields[fld].type;
-    v1.ptr = &(object->data[obj_current_storage_index]);
-    if (!obj_data_read_file_slow(&v1, obj_current_file_stream)) {
+    descriptor.type = object_fields[fld].type;
+    descriptor.ptr = &(object->data[obj_current_storage_index]);
+    if (!obj_data_read_file_slow(&descriptor, obj_current_file_stream)) {
         return false;
     }
 
@@ -3265,11 +3279,11 @@ bool obj_proto_field_read_file(Object* object, int fld)
 // 0x40A1B0
 bool obj_proto_field_read_mem(Object* object, int fld)
 {
-    ObjDataDescriptor v1;
+    ObjDataDescriptor descriptor;
 
-    v1.type = object_fields[fld].type;
-    v1.ptr = &(object->data[obj_current_storage_index]);
-    obj_data_read_mem(&v1, &obj_current_read_cursor);
+    descriptor.type = object_fields[fld].type;
+    descriptor.ptr = &(object->data[obj_current_storage_index]);
+    if (!obj_data_read_mem(&descriptor, obj_current_read_buffer)) return false;
     obj_current_storage_index++;
 
     return true;
@@ -3278,11 +3292,11 @@ bool obj_proto_field_read_mem(Object* object, int fld)
 // 0x40A210
 bool object_field_write(Object* object, int idx, ObjectFieldInfo* info)
 {
-    ObjDataDescriptor v1;
+    ObjDataDescriptor descriptor;
 
-    v1.type = info->type;
-    v1.ptr = &(object->data[idx]);
-    if (!obj_data_write_file(&v1, obj_current_file_stream)) {
+    descriptor.type = info->type;
+    descriptor.ptr = &(object->data[idx]);
+    if (!obj_data_write_file(&descriptor, obj_current_file_stream)) {
         return false;
     }
 
@@ -3292,23 +3306,22 @@ bool object_field_write(Object* object, int idx, ObjectFieldInfo* info)
 // 0x40A250
 bool obj_inst_field_write_mem(Object* object, int idx, ObjectFieldInfo* info)
 {
-    ObjDataDescriptor v1;
+    ObjDataDescriptor descriptor;
 
-    v1.type = info->type;
-    v1.ptr = &(object->data[idx]);
-    obj_data_write_mem(&v1, obj_current_write_buffer);
-
-    return true;
+    descriptor.type = info->type;
+    descriptor.ptr = &(object->data[idx]);
+    obj_data_write_mem(&descriptor, obj_current_write_buffer);
+    return !obj_current_write_buffer->failed;
 }
 
 // 0x40A290
 bool object_field_read(Object* object, int idx, ObjectFieldInfo* info)
 {
-    ObjDataDescriptor v1;
+    ObjDataDescriptor descriptor;
 
-    v1.type = info->type;
-    v1.ptr = &(object->data[idx]);
-    if (!obj_data_read_file_fast(&v1, obj_current_file_stream)) {
+    descriptor.type = info->type;
+    descriptor.ptr = &(object->data[idx]);
+    if (!obj_data_read_file_fast(&descriptor, obj_current_file_stream)) {
         return false;
     }
 
@@ -3318,12 +3331,13 @@ bool object_field_read(Object* object, int idx, ObjectFieldInfo* info)
 // 0x40A2D0
 bool obj_inst_field_read_mem(Object* object, int idx, ObjectFieldInfo* info)
 {
-    ObjDataDescriptor v1;
+    ObjDataDescriptor descriptor;
 
-    v1.type = info->type;
-    v1.ptr = &(object->data[idx]);
-    obj_data_read_mem(&v1, &obj_current_read_cursor);
-
+    if (idx < 0 || idx >= object->num_fields) return false;
+    descriptor.type = info->type;
+    descriptor.ptr = &(object->data[idx]);
+    if (!obj_data_read_mem(&descriptor, obj_current_read_buffer)) return false;
+    obj_current_storage_index++;
     return true;
 }
 
@@ -3367,16 +3381,16 @@ void obj_field_layouts_init(void)
 {
     int fld;
     ObjectFieldInfo* info;
-    int v1;
-    int v2;
-    int v3;
+    int complex_field_count;
+    int simple_field_count;
+    int field_group;
     int idx;
-    int v5;
-    int v6;
-    int v7;
-    int v8;
-    int v9;
-    int v10;
+    int base_complex_count;
+    int base_simple_count;
+    int item_complex_count;
+    int item_simple_count;
+    int critter_complex_count;
+    int critter_simple_count;
 
     object_field_types_init();
     object_field_array_counts_init();
@@ -3393,8 +3407,8 @@ void obj_field_layouts_init(void)
 
             switch (fld) {
             case OBJ_F_BEGIN:
-                v1 = 0;
-                v2 = 0;
+                complex_field_count = 0;
+                simple_field_count = 0;
                 break;
             case OBJ_F_WALL_BEGIN:
             case OBJ_F_PORTAL_BEGIN:
@@ -3404,8 +3418,8 @@ void obj_field_layouts_init(void)
             case OBJ_F_ITEM_BEGIN:
             case OBJ_F_CRITTER_BEGIN:
             case OBJ_F_TRAP_BEGIN:
-                v1 = v5;
-                v2 = v6;
+                complex_field_count = base_complex_count;
+                simple_field_count = base_simple_count;
                 break;
             case OBJ_F_WEAPON_BEGIN:
             case OBJ_F_AMMO_BEGIN:
@@ -3417,17 +3431,17 @@ void obj_field_layouts_init(void)
             case OBJ_F_KEY_RING_BEGIN:
             case OBJ_F_WRITTEN_BEGIN:
             case OBJ_F_GENERIC_BEGIN:
-                v1 = v7;
-                v2 = v8;
+                complex_field_count = item_complex_count;
+                simple_field_count = item_simple_count;
                 break;
             case OBJ_F_PC_BEGIN:
             case OBJ_F_NPC_BEGIN:
-                v1 = v9;
-                v2 = v10;
+                complex_field_count = critter_complex_count;
+                simple_field_count = critter_simple_count;
                 break;
             }
 
-            dword_5D1100[obj_field_group_index_get(fld)] = v2;
+            obj_field_group_simple_counts[obj_field_group_index_get(fld)] = simple_field_count;
         } else if (info->type == OD_TYPE_END) {
             info->complex_array_idx = -1;
             info->change_array_idx = -1;
@@ -3437,22 +3451,22 @@ void obj_field_layouts_init(void)
 
             switch (fld) {
             case OBJ_F_END:
-                v5 = v1;
-                v6 = v2;
+                base_complex_count = complex_field_count;
+                base_simple_count = simple_field_count;
                 break;
             case OBJ_F_ITEM_END:
-                v7 = v1;
-                v8 = v2;
+                item_complex_count = complex_field_count;
+                item_simple_count = simple_field_count;
                 break;
             case OBJ_F_CRITTER_END:
-                v9 = v1;
-                v10 = v2;
+                critter_complex_count = complex_field_count;
+                critter_simple_count = simple_field_count;
                 break;
             }
         } else {
-            obj_field_group_prefix_length_get(fld, &v3, &idx);
-            info->simple_array_idx = v2++;
-            info->change_array_idx = idx / 32 + obj_field_group_change_bases[obj_field_group_index_get(v3)];
+            obj_field_group_prefix_length_get(fld, &field_group, &idx);
+            info->simple_array_idx = simple_field_count++;
+            info->change_array_idx = idx / 32 + obj_field_group_change_bases[obj_field_group_index_get(field_group)];
             info->bit = idx % 32;
             info->mask = 1u << info->bit;
 
@@ -3470,7 +3484,7 @@ void obj_field_layouts_init(void)
             case OD_TYPE_SCRIPT_ARRAY:
             case OD_TYPE_QUEST_ARRAY:
             case OD_TYPE_HANDLE_ARRAY:
-                info->complex_array_idx = v1++;
+                info->complex_array_idx = complex_field_count++;
                 break;
             }
         }
@@ -4157,110 +4171,110 @@ bool convert_id_to_handle(void* entry, int index)
 // 0x40C030
 int object_field_bitmap_word_count(ObjectType object_type)
 {
-    int v1;
+    int last_bitmap_word;
 
     switch (object_type) {
     case OBJ_TYPE_WALL:
-        v1 = object_fields[OBJ_F_WALL_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_WALL_PAD_I64AS_1].change_array_idx;
         break;
     case OBJ_TYPE_PORTAL:
-        v1 = object_fields[OBJ_F_PORTAL_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_PORTAL_PAD_I64AS_1].change_array_idx;
         break;
     case OBJ_TYPE_CONTAINER:
-        v1 = object_fields[OBJ_F_CONTAINER_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_CONTAINER_PAD_I64AS_1].change_array_idx;
         break;
     case OBJ_TYPE_SCENERY:
-        v1 = object_fields[OBJ_F_SCENERY_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_SCENERY_PAD_I64AS_1].change_array_idx;
         break;
     case OBJ_TYPE_PROJECTILE:
-        v1 = object_fields[OBJ_F_PROJECTILE_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_PROJECTILE_PAD_I64AS_1].change_array_idx;
         break;
     case OBJ_TYPE_WEAPON:
-        v1 = object_fields[OBJ_F_WEAPON_PAD_I64AS_1].change_array_idx;
-        if (v1 == -1) {
-            v1 = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_WEAPON_PAD_I64AS_1].change_array_idx;
+        if (last_bitmap_word == -1) {
+            last_bitmap_word = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
         }
         break;
     case OBJ_TYPE_AMMO:
-        v1 = object_fields[OBJ_F_AMMO_PAD_I64AS_1].change_array_idx;
-        if (v1 == -1) {
-            v1 = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_AMMO_PAD_I64AS_1].change_array_idx;
+        if (last_bitmap_word == -1) {
+            last_bitmap_word = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
         }
         break;
     case OBJ_TYPE_ARMOR:
-        v1 = object_fields[OBJ_F_ARMOR_PAD_I64AS_1].change_array_idx;
-        if (v1 == -1) {
-            v1 = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_ARMOR_PAD_I64AS_1].change_array_idx;
+        if (last_bitmap_word == -1) {
+            last_bitmap_word = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
         }
         break;
     case OBJ_TYPE_GOLD:
-        v1 = object_fields[OBJ_F_GOLD_PAD_I64AS_1].change_array_idx;
-        if (v1 == -1) {
-            v1 = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_GOLD_PAD_I64AS_1].change_array_idx;
+        if (last_bitmap_word == -1) {
+            last_bitmap_word = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
         }
         break;
     case OBJ_TYPE_FOOD:
-        v1 = object_fields[OBJ_F_FOOD_PAD_I64AS_1].change_array_idx;
-        if (v1 == -1) {
-            v1 = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_FOOD_PAD_I64AS_1].change_array_idx;
+        if (last_bitmap_word == -1) {
+            last_bitmap_word = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
         }
         break;
     case OBJ_TYPE_SCROLL:
-        v1 = object_fields[OBJ_F_SCROLL_PAD_I64AS_1].change_array_idx;
-        if (v1 == -1) {
-            v1 = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_SCROLL_PAD_I64AS_1].change_array_idx;
+        if (last_bitmap_word == -1) {
+            last_bitmap_word = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
         }
         break;
     case OBJ_TYPE_KEY:
-        v1 = object_fields[OBJ_F_KEY_PAD_I64AS_1].change_array_idx;
-        if (v1 == -1) {
-            v1 = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_KEY_PAD_I64AS_1].change_array_idx;
+        if (last_bitmap_word == -1) {
+            last_bitmap_word = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
         }
         break;
     case OBJ_TYPE_KEY_RING:
-        v1 = object_fields[OBJ_F_KEY_RING_PAD_I64AS_1].change_array_idx;
-        if (v1 == -1) {
-            v1 = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_KEY_RING_PAD_I64AS_1].change_array_idx;
+        if (last_bitmap_word == -1) {
+            last_bitmap_word = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
         }
         break;
     case OBJ_TYPE_WRITTEN:
-        v1 = object_fields[OBJ_F_WRITTEN_PAD_I64AS_1].change_array_idx;
-        if (v1 == -1) {
-            v1 = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_WRITTEN_PAD_I64AS_1].change_array_idx;
+        if (last_bitmap_word == -1) {
+            last_bitmap_word = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
         }
         break;
     case OBJ_TYPE_GENERIC:
-        v1 = object_fields[OBJ_F_GENERIC_PAD_I64AS_1].change_array_idx;
-        if (v1 == -1) {
-            v1 = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_GENERIC_PAD_I64AS_1].change_array_idx;
+        if (last_bitmap_word == -1) {
+            last_bitmap_word = object_fields[OBJ_F_ITEM_PAD_I64AS_1].change_array_idx;
         }
         break;
     case OBJ_TYPE_PC:
-        v1 = object_fields[OBJ_F_PC_PAD_I64AS_1].change_array_idx;
-        if (v1 == -1) {
-            v1 = object_fields[OBJ_F_CRITTER_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_PC_PAD_I64AS_1].change_array_idx;
+        if (last_bitmap_word == -1) {
+            last_bitmap_word = object_fields[OBJ_F_CRITTER_PAD_I64AS_1].change_array_idx;
         }
         break;
     case OBJ_TYPE_NPC:
         // NOTE: Probably wrong.
-        v1 = object_fields[OBJ_F_NPC_SHIT_LIST_IDX].change_array_idx;
-        if (v1 == -1) {
-            v1 = object_fields[OBJ_F_CRITTER_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_NPC_SHIT_LIST_IDX].change_array_idx;
+        if (last_bitmap_word == -1) {
+            last_bitmap_word = object_fields[OBJ_F_CRITTER_PAD_I64AS_1].change_array_idx;
         }
         break;
     case OBJ_TYPE_TRAP:
-        v1 = object_fields[OBJ_F_TRAP_PAD_I64AS_1].change_array_idx;
+        last_bitmap_word = object_fields[OBJ_F_TRAP_PAD_I64AS_1].change_array_idx;
         break;
     default:
         // NOTE: Original code returns `object_type`.
         assert(0);
     }
 
-    if (v1 == -1) {
-        v1 = object_fields[OBJ_F_PAD_I64AS_1].change_array_idx;
+    if (last_bitmap_word == -1) {
+        last_bitmap_word = object_fields[OBJ_F_PAD_I64AS_1].change_array_idx;
     }
 
-    return v1 + 1;
+    return last_bitmap_word + 1;
 }
 
 // 0x40C260
@@ -4797,24 +4811,24 @@ bool object_inst_enumerate_overridden_fields(Object* object, ObjectInstEnumerate
 // 0x40CE20
 bool object_inst_enumerate_overridden_fields_func(Object* object, int begin, int end, ObjectInstEnumerateFieldsCallback callback)
 {
-    int v1 = 0;
+    int storage_index = 0;
     int index;
     int fld;
 
     for (index = 0; index < object_fields[begin + 1].change_array_idx; index++) {
-        v1 += bitset_count_bits(object->stored_field_bitmap[index], 32);
+        storage_index += bitset_count_bits(object->stored_field_bitmap[index], 32);
     }
 
-    v1 += bitset_count_bits(object->stored_field_bitmap[index], object_fields[begin + 1].bit);
+    storage_index += bitset_count_bits(object->stored_field_bitmap[index], object_fields[begin + 1].bit);
 
     for (fld = begin + 1; fld < end; fld++) {
         if ((object->stored_field_bitmap[object_fields[fld].change_array_idx] & object_fields[fld].mask) != 0) {
-            if (!callback(object, v1, &(object_fields[fld]))) {
+            if (!callback(object, storage_index, &(object_fields[fld]))) {
                 return false;
             }
 
             if ((object->stored_field_bitmap[object_fields[fld].change_array_idx] & object_fields[fld].mask) != 0) {
-                v1++;
+                storage_index++;
             }
         }
     }
@@ -4964,23 +4978,23 @@ bool object_inst_enumerate_available_fields(Object* object, ObjectInstEnumerateF
 // 0x40D170
 bool object_inst_enumerate_available_fields_func(Object* object, int begin, int end, ObjectInstEnumerateFieldsCallback callback)
 {
-    int v1 = 0;
+    int storage_index = 0;
     int index;
     int fld;
 
     for (index = 0; index < object_fields[begin + 1].change_array_idx; index++) {
-        v1 += bitset_count_bits(object->stored_field_bitmap[index], 32);
+        storage_index += bitset_count_bits(object->stored_field_bitmap[index], 32);
     }
 
-    v1 += bitset_count_bits(object->stored_field_bitmap[index], object_fields[begin + 1].bit);
+    storage_index += bitset_count_bits(object->stored_field_bitmap[index], object_fields[begin + 1].bit);
 
     for (fld = begin + 1; fld < end; fld++) {
-        if (!callback(object, v1, &(object_fields[fld]))) {
+        if (!callback(object, storage_index, &(object_fields[fld]))) {
             return false;
         }
 
         if ((object->stored_field_bitmap[object_fields[fld].change_array_idx] & object_fields[fld].mask) != 0) {
-            v1++;
+            storage_index++;
         }
     }
 
@@ -4991,16 +5005,16 @@ bool object_inst_enumerate_available_fields_func(Object* object, int begin, int 
 // 0x40D230
 int object_inst_field_storage_index(Object* object, int fld)
 {
-    int v1 = 0;
+    int storage_index = 0;
     int index;
 
     for (index = 0; index < object_fields[fld].change_array_idx; index++) {
-        v1 += bitset_count_bits(object->stored_field_bitmap[index], 32);
+        storage_index += bitset_count_bits(object->stored_field_bitmap[index], 32);
     }
 
-    v1 += bitset_count_bits(object->stored_field_bitmap[index], object_fields[fld].bit);
+    storage_index += bitset_count_bits(object->stored_field_bitmap[index], object_fields[fld].bit);
 
-    return v1;
+    return storage_index;
 }
 
 // Adds local storage, sets its override bit and copies the prototype value.
@@ -5008,19 +5022,19 @@ int object_inst_field_storage_index(Object* object, int fld)
 void object_inst_field_copy_from_prototype(Object* object, int fld)
 {
     Object* prototype;
-    ObjDataDescriptor v1;
-    int v2;
-    int v3;
+    ObjDataDescriptor descriptor;
+    int prototype_storage_index;
+    int instance_storage_index;
 
     object_inst_field_storage_insert(object, fld);
     object_inst_field_override_set(object, fld, true);
 
     prototype = obj_lock(obj_get_prototype_handle(object));
-    v2 = object_proto_field_storage_index(prototype, fld);
-    v1.type = object_fields[fld].type;
-    v1.ptr = &(prototype->data[v2]);
-    v3 = object_inst_field_storage_index(object, fld);
-    obj_data_copy(&v1, &(object->data[v3]));
+    prototype_storage_index = object_proto_field_storage_index(prototype, fld);
+    descriptor.type = object_fields[fld].type;
+    descriptor.ptr = &(prototype->data[prototype_storage_index]);
+    instance_storage_index = object_inst_field_storage_index(object, fld);
+    obj_data_copy(&descriptor, &(object->data[instance_storage_index]));
 }
 
 // Tests the instance field override bitmap.
@@ -5100,16 +5114,16 @@ void object_inst_storage_insert_at(Object* object, int fld)
 // 0x40D4D0
 void object_inst_field_storage_remove(Object* object, int fld)
 {
-    int v1;
-    ObjDataDescriptor v2;
+    int storage_index;
+    ObjDataDescriptor descriptor;
     int index;
 
-    v1 = object_inst_field_storage_index(object, fld);
-    v2.type = object_fields[fld].type;
-    v2.ptr = &(object->data[v1]);
-    obj_data_reset(&v2);
+    storage_index = object_inst_field_storage_index(object, fld);
+    descriptor.type = object_fields[fld].type;
+    descriptor.ptr = &(object->data[storage_index]);
+    obj_data_reset(&descriptor);
 
-    for (index = v1; index < object->num_fields - 1; index++) {
+    for (index = storage_index; index < object->num_fields - 1; index++) {
         object->data[index] = object->data[index + 1];
     }
 
@@ -5149,13 +5163,14 @@ void obj_version_write_mem(WriteBuffer* wb)
 }
 
 // 0x40D5F0
-bool obj_version_read_mem(uint8_t** data)
+bool obj_version_read_mem(ReadBuffer* data)
 {
     int version;
 
-    mem_read_advance(&version, sizeof(version), data);
+    if (!read_buffer_read(data, &version, sizeof(version))) return false;
     if (version != OBJ_FILE_VERSION) {
         tig_debug_printf("Object file format version mismatch: (read: %d, expected: %d).\n", version, OBJ_FILE_VERSION);
+        return false;
     }
 
     return true;
@@ -5172,9 +5187,9 @@ int64_t obj_get_prototype_handle(Object* object)
 }
 
 // 0x40D670
-bool object_changed_field_debug_print(Object* object, int a2, ObjectFieldInfo* field_info)
+bool object_changed_field_debug_print(Object* object, int unused_field, ObjectFieldInfo* field_info)
 {
-    (void)a2;
+    (void)unused_field;
 
     if ((object->modified_field_bitmap[field_info->change_array_idx] & field_info->mask) != 0) {
         tig_debug_printf("\t #%d", field_info - object_fields);

@@ -1,3 +1,4 @@
+#include <tig/performance.h>
 #include "game/teleport.h"
 
 #include <stdio.h>
@@ -99,7 +100,9 @@ void teleport_ping(tig_timestamp_t timestamp)
 
     if (teleport_pending) {
         teleport_processing = true;
+        Uint64 start = tig_performance_begin();
         bool moved = teleport_process(&current_teleport_data);
+        tig_performance_end_detail(TIG_PERF_TELEPORT, start, "teleport_process");
         teleport_processing = false;
 
         teleport_pending = false;

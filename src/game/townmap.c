@@ -1,4 +1,5 @@
 #include "game/townmap.h"
+#include "game/townmap_storage.h"
 
 #include <stdio.h>
 
@@ -129,9 +130,10 @@ bool townmap_mod_load(void)
                 // Clean-up townmap name by null-terminate it before the flag
                 // and remove any trailing whitespace.
                 back = pch;
-                do {
-                    *back-- = '\0';
-                } while (SDL_isspace(*back));
+                *back = '\0';
+                while (back > mes_file_entry.str && SDL_isspace((unsigned char)back[-1])) {
+                    *--back = '\0';
+                }
 
                 // Jump to the value of the flag.
                 pch += 3;
@@ -318,11 +320,12 @@ bool townmap_info(int map, TownMapInfo* tmi)
 
     tig_file_fclose(stream);
 
+    if (!townmap_storage_valid(tmi)) return false;
     // Calculate a single tile bounds for rendering.
     townmap_tile_bounds.x = 0;
     townmap_tile_bounds.y = 0;
-    townmap_tile_bounds.width = (int)(tmi->width / tmi->num_hor_tiles * tmi->scale);
-    townmap_tile_bounds.height = (int)(tmi->height / tmi->num_vert_tiles * tmi->scale);
+    townmap_tile_bounds.width = (int)((double)(tmi->width / tmi->num_hor_tiles) * tmi->scale);
+    townmap_tile_bounds.height = (int)((double)(tmi->height / tmi->num_vert_tiles) * tmi->scale);
 
     // Cache the result to speed up future queries.
     townmap_info_cache = *tmi;
@@ -358,8 +361,8 @@ void townmap_loc_to_coords(TownMapInfo* tmi, int64_t loc, int* x_ptr, int* y_ptr
     if (x >= 0 && x < tmi->width
         && y >= 0 && y < tmi->height) {
         // Scale from screen coordinate system to town map coordinate system.
-        *x_ptr = (int)(x * tmi->scale);
-        *y_ptr = (int)(y * tmi->scale);
+        *x_ptr = (int)((double)x * tmi->scale);
+        *y_ptr = (int)((double)y * tmi->scale);
     }
 }
 
@@ -381,8 +384,12 @@ void townmap_coords_to_loc(TownMapInfo* tmi, int x, int y, int64_t* loc_ptr)
     // Scale from town map coordinate system to screen coordinate system and
     // calculate this position as offset from the geometric center of the town
     // map canvas.
-    offset_x = (int)(x / tmi->scale) - tmi->width / 2;
-    offset_y = (int)(y / tmi->scale) - tmi->height / 2;
+    double scaled_x = (double)x / tmi->scale;
+    double scaled_y = (double)y / tmi->scale;
+    if (!isfinite(scaled_x) || !isfinite(scaled_y) || scaled_x < INT_MIN || scaled_x > INT_MAX
+        || scaled_y < INT_MIN || scaled_y > INT_MAX) return;
+    offset_x = (int64_t)scaled_x - tmi->width / 2;
+    offset_y = (int64_t)scaled_y - tmi->height / 2;
 
     // Get the map's center screen coordinates and compute the final location.
     location_xy(tmi->loc, &center_x, &center_y);
@@ -723,6 +730,10 @@ void townmap_kstate_init(int map)
         }
 
         townmap_kstate = (uint8_t*)MALLOC(townmap_kstate_size);
+        if (townmap_kstate == NULL) {
+            townmap_kstate_size = 0;
+            return;
+        }
 
         // Save the map which k-state was initialized for.
         townmap_kstate_map = map;

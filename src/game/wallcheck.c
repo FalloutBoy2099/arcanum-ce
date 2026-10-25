@@ -14,7 +14,7 @@ typedef struct WallVisibilitySample {
 typedef struct FadedRoofReference {
     /* 0000 */ int64_t location;
     /* 0008 */ int reference_count;
-    /* 000C */ int field_C;
+    /* 000C */ int reserved_slot_1;
 } FadedRoofReference;
 
 typedef struct WallTransparencyEntry {
@@ -711,8 +711,8 @@ void wallcheck_ping(tig_timestamp_t timestamp)
 // 0x437E50
 void wallcheck_recalc(int64_t loc)
 {
-    int v1;
-    int v2;
+    int quadrant_x;
+    int quadrant_y;
     ObjectList walls;
     ObjectNode* node;
     tig_art_id_t art_id;
@@ -721,7 +721,7 @@ void wallcheck_recalc(int64_t loc)
     int64_t y;
     int64_t tmp_x;
     int64_t tmp_y;
-    unsigned int v3;
+    unsigned int viewer_quadrant_mask;
 
     if (!wallcheck_enabled) {
         return;
@@ -729,26 +729,26 @@ void wallcheck_recalc(int64_t loc)
 
     x = LOCATION_GET_X(loc);
     y = LOCATION_GET_Y(loc);
-    v1 = (int)((LOCATION_GET_X(loc) - 2) % 4);
-    v2 = (int)((LOCATION_GET_Y(loc) - 2) % 4);
+    quadrant_x = (int)((LOCATION_GET_X(loc) - 2) % 4);
+    quadrant_y = (int)((LOCATION_GET_Y(loc) - 2) % 4);
 
-    if (v1 == 0) {
+    if (quadrant_x == 0) {
         object_list_location(loc, OBJ_TM_WALL, &walls);
         node = walls.head;
         while (node != NULL) {
             art_id = obj_field_int32_get(node->obj, OBJ_F_CURRENT_AID);
             rot = tig_art_id_rotation_get(art_id);
             if (rot == 4 || rot == 5) {
-                v1 = 3;
+                quadrant_x = 3;
                 x--;
             } else if (rot == 2 || rot == 3) {
-                v2 = 3;
+                quadrant_y = 3;
                 y--;
             }
             node = node->next;
         }
         object_list_destroy(&walls);
-    } else if (v2 == 0) {
+    } else if (quadrant_y == 0) {
         object_list_location(loc, OBJ_TM_WALL, &walls);
         node = walls.head;
         while (node != NULL) {
@@ -756,24 +756,24 @@ void wallcheck_recalc(int64_t loc)
             rot = tig_art_id_rotation_get(art_id);
             if (rot == 2 || rot == 3) {
                 y--;
-                v2 = 3;
+                quadrant_y = 3;
             }
             node = node->next;
         }
         object_list_destroy(&walls);
     }
 
-    x -= v1;
-    y -= v2;
-    v3 = wallcheck_viewer_quadrant_masks[v2][v1];
+    x -= quadrant_x;
+    y -= quadrant_y;
+    viewer_quadrant_mask = wallcheck_viewer_quadrant_masks[quadrant_y][quadrant_x];
 
     if (wallcheck_previous_sample_location == LOCATION_MAKE(x, y)
-        && (wallcheck_previous_quadrant_mask & v3) != 0) {
+        && (wallcheck_previous_quadrant_mask & viewer_quadrant_mask) != 0) {
         return;
     }
 
     wallcheck_previous_sample_location = LOCATION_MAKE(x, y);
-    wallcheck_previous_quadrant_mask = v3;
+    wallcheck_previous_quadrant_mask = viewer_quadrant_mask;
 
     for (int i = 0; i < wallcheck_transparency_entry_count; i++) {
         wallcheck_transparency_entries[i].flags &= ~0x02;
@@ -853,16 +853,16 @@ void wallcheck_recalc(int64_t loc)
     for (int i = 0; i < 34; i++) {
         if ((wallcheck_visibility_profiles[i].flags & 0x10000) == 0
             && (wallcheck_visibility_profiles[i].flags & 0x01) != 0) {
-            bool v1 = false;
+            bool sample_has_wall = false;
             for (int j = 0; j < 3; j++) {
                 if (wallcheck_sample_wall_lists[i][j].head != NULL) {
-                    v1 = true;
+                    sample_has_wall = true;
                     wallcheck_object_transparency_track(wallcheck_sample_wall_lists[i][j].head->obj,
                         wallcheck_sample_wall_lists[i][j].sectors[0],
                         0);
                 }
             }
-            if (v1) {
+            if (sample_has_wall) {
                 wallcheck_visibility_samples[wallcheck_visibility_profiles[i].primary_sample_index].flags |= wallcheck_visibility_profiles[i].primary_sample_flags;
                 wallcheck_visibility_samples[wallcheck_visibility_profiles[i].secondary_sample_index].flags |= wallcheck_visibility_profiles[i].secondary_sample_flags;
             }
@@ -996,26 +996,26 @@ bool wallcheck_object_index_find(int64_t obj, int* index_ptr)
 }
 
 // 0x438720
-void wallcheck_roof_fade_acquire(int64_t a1)
+void wallcheck_roof_fade_acquire(int64_t roof_location)
 {
     int index;
 
-    if (!wallcheck_roof_index_find(a1, &index)) {
+    if (!wallcheck_roof_index_find(roof_location, &index)) {
         memmove(&(wallcheck_faded_roofs[index + 1]),
             &(wallcheck_faded_roofs[index]),
             sizeof(*wallcheck_faded_roofs) * (wallcheck_faded_roof_count - index));
-        wallcheck_faded_roofs[index].location = a1;
+        wallcheck_faded_roofs[index].location = roof_location;
         wallcheck_faded_roofs[index].reference_count = 0;
         wallcheck_faded_roof_count++;
     }
 
     if (++wallcheck_faded_roofs[index].reference_count == 1) {
-        roof_fade_on(a1);
+        roof_fade_on(roof_location);
     }
 }
 
 // 0x4387C0
-bool wallcheck_roof_index_find(int64_t a1, int* index_ptr)
+bool wallcheck_roof_index_find(int64_t roof_location, int* index_ptr)
 {
     int l;
     int r;
@@ -1028,9 +1028,9 @@ bool wallcheck_roof_index_find(int64_t a1, int* index_ptr)
         m = (l + r) / 2;
         curr = wallcheck_faded_roofs[m].location;
 
-        if (curr < a1) {
+        if (curr < roof_location) {
             l = m + 1;
-        } else if (curr > a1) {
+        } else if (curr > roof_location) {
             r = m - 1;
         } else {
             *index_ptr = m;

@@ -24,7 +24,7 @@ bool a_name_tile_is_natural(tig_art_id_t aid);
 bool a_name_tile_is_soundproof(tig_art_id_t aid);
 int a_name_tile_sound(tig_art_id_t aid);
 void a_name_tile_variant_counts_init(void);
-int a_name_tile_variant_count_get(int a1, int a2, int a3, int a4, int a5, int a6);
+int a_name_tile_variant_count_get(int first_tile_index, int second_tile_index, int transition_mask, int outdoor, int first_flippable, int second_flippable);
 bool a_name_item_init(void);
 void a_name_item_exit(void);
 bool a_name_item_aid_to_fname(tig_art_id_t aid, char* fname, size_t maxlen);

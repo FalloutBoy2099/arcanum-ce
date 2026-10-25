@@ -113,16 +113,16 @@ static void test_legacy_sequences(void)
 static void test_menu_history(void)
 {
     MainMenuHistory history = { 0 };
-    CHECK(mainmenu_history_back(&history) == MM_WINDOW_0 && history.count == 0);
+    CHECK(mainmenu_history_back(&history) == MM_WINDOW_RESERVED_PRIMARY && history.count == 0);
     CHECK(mainmenu_history_push(&history, MM_WINDOW_MAINMENU_IN_PLAY));
     CHECK(mainmenu_history_push(&history, MM_WINDOW_OPTIONS));
     CHECK(mainmenu_history_back(&history) == MM_WINDOW_MAINMENU_IN_PLAY);
     CHECK(history.count == 0);
     // Reopening the parent records it again, exactly as mainmenu_ui_open does.
     CHECK(mainmenu_history_push(&history, MM_WINDOW_MAINMENU_IN_PLAY));
-    CHECK(mainmenu_history_back(&history) == MM_WINDOW_0 && history.count == 0);
+    CHECK(mainmenu_history_back(&history) == MM_WINDOW_RESERVED_PRIMARY && history.count == 0);
     CHECK(mainmenu_history_push(&history, MM_WINDOW_OPTIONS));
-    CHECK(mainmenu_history_back(&history) == MM_WINDOW_0); // Direct O shortcut.
+    CHECK(mainmenu_history_back(&history) == MM_WINDOW_RESERVED_PRIMARY); // Direct O shortcut.
 
     for (int count = 0; count <= MAINMENU_HISTORY_CAPACITY; count++) {
         mainmenu_history_reset(&history);
@@ -150,7 +150,7 @@ static void test_menu_history(void)
     CHECK(!mainmenu_history_seed(&history, invalid, 2));
     CHECK(memcmp(&history, &snapshot, sizeof(history)) == 0);
     CHECK(mainmenu_history_seed(&history, NULL, 0) && history.count == 1);
-    CHECK(mainmenu_history_back(&history) == MM_WINDOW_0 && history.count == 0);
+    CHECK(mainmenu_history_back(&history) == MM_WINDOW_RESERVED_PRIMARY && history.count == 0);
 
     for (int a = 0; a < MM_WINDOW_COUNT; a++) {
         for (int b = 0; b < MM_WINDOW_COUNT; b++) {

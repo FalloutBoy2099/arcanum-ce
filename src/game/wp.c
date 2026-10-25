@@ -7,7 +7,7 @@
 typedef struct WaypointDrawEntry {
     /* 0000 */ int64_t obj;
     /* 0008 */ tig_color_t color;
-    /* 000C */ int field_C;
+    /* 000C */ int reserved_slot_1;
 } WaypointDrawEntry;
 
 static void wp_all_waypoint_rects_invalidate(void);

@@ -22,6 +22,8 @@ typedef struct MagicTechAiActionListEntry {
     /* 0008 */ int64_t item_obj;
 } MagicTechAiActionListEntry;
 
+#define MT_AI_UTILITY_RESOURCE_LIMIT 32
+
 typedef struct MagicTechAiActionList {
     /* 0000 */ int cnt;
     /* 0004 */ MagicTechAiActionListEntry* entries;
@@ -33,9 +35,9 @@ typedef struct MagicTechAi {
     /* 0010 */ int action;
     /* 0018 */ int64_t target_obj;
     /* 0020 */ int preferred_spell;
-    /* 0024 */ int field_24;
+    /* 0024 */ int reserved_slot_1;
     /* 0028 */ int cached_preferred_spell;
-    /* 002C */ int field_2C;
+    /* 002C */ int reserved_slot_2;
     /* 0030 */ MagicTechAiActionList actions[MAGICTECH_AI_ACTION_COUNT];
 } MagicTechAi;
 
@@ -44,6 +46,7 @@ void mt_ai_reset(void);
 void mt_ai_exit(void);
 int mt_ai_secondary_defense_score_get(int spl);
 void mt_ai_create(MagicTechAi* magictech_ai, int64_t obj, int action);
+int mt_ai_utility_actions_collect(int64_t obj, int action, MagicTechAiActionListEntry* entries, int capacity);
 void mt_ai_destroy(MagicTechAi* magictech_ai);
 void mt_ai_notify_inventory_changed(int64_t obj);
 void mt_ai_notify_item_exhausted(int64_t obj, int64_t item_obj);

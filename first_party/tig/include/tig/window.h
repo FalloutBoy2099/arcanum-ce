@@ -52,7 +52,7 @@ typedef struct TigWindowBlitInfo {
     /* 000C */ TigVideoBuffer* src_video_buffer;
     /* 0010 */ TigRect* src_rect;
     /* 0014 */ uint8_t alpha[4];
-    /* 0018 */ int field_18;
+    /* 0018 */ int reserved_slot_1;
     /* 001C */ tig_window_handle_t dst_window_handle;
     /* 0020 */ TigVideoBuffer* dst_video_buffer;
     /* 0024 */ TigRect* dst_rect;
@@ -107,7 +107,7 @@ int tig_window_scroll_rect(tig_window_handle_t window_handle, TigRect* rect, int
 int tig_window_copy(tig_window_handle_t dst_window_handle, TigRect* dst_rect, tig_window_handle_t src_window_handle, TigRect* src_rect);
 int tig_window_copy_from_vbuffer(tig_window_handle_t dst_window_handle, TigRect* dst_rect, TigVideoBuffer* src_video_buffer, TigRect* src_rect);
 int tig_window_copy_to_vbuffer(tig_window_handle_t src_window_handle, TigRect* src_rect, TigVideoBuffer* dst_video_buffer, TigRect* dst_rect);
-int tig_window_tint(tig_window_handle_t window_handle, TigRect* rect, int a3, int a4);
+int tig_window_tint(tig_window_handle_t window_handle, TigRect* rect, int tint_mode, int color);
 int tig_window_text_write(tig_window_handle_t window_handle, const char* text, TigRect* rect);
 int tig_window_text_underline(tig_window_handle_t window_handle, const char* text, TigRect* rect,
     const TigTextRange* ranges, int count);

@@ -12,12 +12,12 @@ void tile_draw(GameDrawInfo* draw_info);
 void tile_water_tick(bool allowed);
 int tile_id_from_loc(int64_t loc);
 tig_art_id_t tile_art_id_at(int64_t loc);
-bool tile_is_blocking(int64_t loc, bool a2);
+bool tile_is_blocking(int64_t loc, bool ignore_art_blocking);
 bool tile_is_soundproof(int64_t loc);
 bool tile_is_sinkable(int64_t loc);
 bool tile_is_slippery(int64_t loc);
 void tile_cycle_variant(int64_t loc);
-tig_art_id_t tile_transition_art_id_create_random(tig_art_id_t art_id, int num2, bool flippable2, int a4);
+tig_art_id_t tile_transition_art_id_create_random(tig_art_id_t art_id, int num2, bool flippable2, int transition_mask);
 void tile_render_topdown_buffer(tig_art_id_t art_id, TigVideoBuffer* video_buffer);
 void tile_set_render_target(TigVideoBuffer* vb);
 

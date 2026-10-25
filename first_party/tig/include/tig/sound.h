@@ -30,6 +30,10 @@ typedef enum TigSoundPositionalSize {
 // Signature of a callback used by `tig_sound_enumerate_positional`.
 typedef void (*TigSoundEnumerateFunc)(tig_sound_handle_t sound_handle);
 
+typedef bool (*TigSoundMuteFilter)(const char* path);
+
+void tig_sound_set_effect_mute_filter(TigSoundMuteFilter filter);
+
 // Initializes the sound subsystem.
 int tig_sound_init(TigInitInfo* init_info);
 

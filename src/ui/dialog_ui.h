@@ -9,7 +9,7 @@ void dialog_ui_exit(void);
 void dialog_ui_reset(void);
 bool dialog_ui_is_in_dialog(int64_t obj);
 void dialog_ui_start_dialog(int64_t pc_obj, int64_t npc_obj, int script_num, int script_line, int num);
-void dialog_ui_end_dialog(int64_t obj, int a2);
+void dialog_ui_end_dialog(int64_t obj, int end_reason);
 bool dialog_ui_is_local_pc_in_dialog(void);
 void dialog_ui_notify_dialog_ended(int64_t obj);
 void dialog_ui_notify_dialog_started(int64_t obj);

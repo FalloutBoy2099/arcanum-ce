@@ -1,6 +1,7 @@
 #include "game/anim.h"
 
 #include <stdio.h>
+#include <tig/performance.h>
 
 #include "game/ai.h"
 #include "game/animfx.h"
@@ -22,6 +23,7 @@
 #include "game/movement_turn.h"
 #include "game/movement_route.h"
 #include "game/object.h"
+#include "game/obj_pool.h"
 #include "game/path.h"
 #include "game/player.h"
 #include "game/portal.h"
@@ -57,10 +59,11 @@ static bool anim_goal_data_save(AnimGoalData* goal_data, TigFile* stream);
 static bool anim_run_info_param_save(AnimRunInfoParam* param, ObjectReference* reference, int type, TigFile* stream);
 static bool anim_load_internal(GameLoadInfo* load_info);
 static bool anim_run_info_load(AnimRunInfo* run_info, TigFile* stream);
+static bool anim_run_info_load_data(AnimRunInfo* run_info, TigFile* stream);
 static bool anim_goal_data_load(AnimGoalData* goal_data, TigFile* stream);
 static bool anim_run_info_param_load(AnimRunInfoParam* param, ObjectReference* reference, int type, TigFile* stream);
-static bool anim_event_schedule(AnimRunInfo* run_info, DateTime* a2, int delay);
-static void anim_goal_stack_pop_with_cleanup(AnimRunInfo* run_info, unsigned int* flags_ptr, AnimGoalNode** goal_node_ptr, AnimGoalData** goal_data_ptr, bool* a5);
+static bool anim_event_schedule(AnimRunInfo* run_info, DateTime* base_time, int delay);
+static void anim_goal_stack_pop_with_cleanup(AnimRunInfo* run_info, unsigned int* flags_ptr, AnimGoalNode** goal_node_ptr, AnimGoalData** goal_data_ptr, bool* goal_changed_ptr);
 static int anim_goal_pending_active_goals_count(void);
 static bool anim_pick_locks_goal_start(int64_t obj, int64_t target_obj, int64_t item_obj);
 static bool anim_overlapping_idle_pair_find(int64_t* source_obj_ptr, int64_t* block_obj_ptr);
@@ -86,12 +89,12 @@ static bool anim_goal_combat_path_invalidation_process(AnimRunInfo* run_info);
 static bool anim_goal_path_is_valid(AnimRunInfo* run_info);
 static bool anim_step_is_blocked(int64_t obj, int64_t loc, int64_t adjacent_loc, int rot);
 static void anim_traversal_flags_adjust(int64_t obj, unsigned int* flags_ptr);
-static bool anim_destination_traversal_is_blocked(int64_t a1, int64_t a2, int64_t a3, int a4, int64_t a5);
+static bool anim_destination_traversal_is_blocked(int64_t moving_obj, int64_t from_location, int64_t destination_location, int rotation, int64_t ignored_obj);
 static bool anim_goal_wander_path_build(AnimRunInfo* run_info);
-static bool anim_path_critter_capabilities_apply(PathCreateInfo* path_create_info, bool a2);
+static bool anim_path_critter_capabilities_apply(PathCreateInfo* path_create_info, bool ignore_noncombat_critters);
 static bool anim_goal_wander_darkness_path_build(AnimRunInfo* run_info);
 static bool anim_goal_tile_path_build(AnimRunInfo* run_info);
-static void anim_create_path_max_length(int64_t a1, const char* msg, int value);
+static void anim_path_length_error_log(int64_t obj, const char* msg, int value);
 static int anim_path_search_length_prepare(AnimPath* anim_path, int64_t from, int64_t to, int64_t obj);
 static int anim_path_build_from_object(int64_t obj, int64_t to, AnimPath* path, unsigned int flags);
 static bool anim_goal_straight_path_to_tile_build(AnimRunInfo* run_info);
@@ -104,7 +107,7 @@ static bool AGendAnimStunAnim(AnimRunInfo* run_info);
 static bool anim_goal_next_step_requires_pause(AnimRunInfo* run_info);
 static bool anim_next_step_obstacles_and_traps_check(AnimRunInfo* run_info, int64_t obj, int64_t loc);
 static bool anim_goal_next_step_door_find(AnimRunInfo* run_info);
-static bool anim_window_in_direction_find(int64_t obj, int64_t loc, int rotation, int a4, int64_t* obj_ptr);
+static bool anim_window_in_direction_find(int64_t obj, int64_t loc, int rotation, int reserved_flags, int64_t* obj_ptr);
 static bool anim_goal_next_step_window_find(AnimRunInfo* run_info);
 static bool anim_goal_move_pause_step_2_stub(AnimRunInfo* run_info);
 static bool anim_goal_move_pause_step_3_stub(AnimRunInfo* run_info);
@@ -231,9 +234,9 @@ static bool anim_goal_active_object_art_store(AnimRunInfo* run_info);
 static bool AGbeginAnimAnimReverse(AnimRunInfo* run_info);
 static bool AGupdateAnimAnimReverse(AnimRunInfo* run_info);
 static bool anim_goal_movement_begin(AnimRunInfo* run_info);
-static void anim_movement_art_select(AnimRunInfo* run_info, int64_t obj, tig_art_id_t* art_id_ptr, bool a4, int* a5);
+static void anim_movement_art_select(AnimRunInfo* run_info, int64_t obj, tig_art_id_t* art_id_ptr, bool running, int* action_point_cost_ptr);
 static void anim_movement_pause_time_calculate(int64_t obj, DateTime* pause_time);
-static bool anim_offset_is_within_direction_halfplane(int a1, int a2, int a3);
+static bool anim_offset_is_within_direction_halfplane(int rotation, int offset_x, int offset_y);
 static bool anim_goal_adjacent_tile_enter_preserving_position(AnimRunInfo* run_info);
 static bool anim_goal_path_step_advance(AnimRunInfo* run_info);
 static bool AGbeginAnimMoveStraight(AnimRunInfo* run_info);
@@ -2669,52 +2672,52 @@ AnimGoalNode* anim_goal_nodes[] = {
 };
 
 // 0x5DE608
-static int dword_5DE608;
+static int anim_serialized_reserved_slot_05;
 
 // 0x5DE610
 static AnimFxList weapon_eye_candies;
 
 // 0x5DE640
-static int dword_5DE640;
+static int anim_serialized_reserved_slot_06;
 
 // 0x5DE648
-static int dword_5DE648;
+static int anim_serialized_reserved_slot_07;
 
 // 0x5DE650
-static int dword_5DE650;
+static int anim_serialized_reserved_slot_03;
 
 // 0x5DE658
-static int dword_5DE658;
+static int anim_serialized_reserved_slot_04;
 
 // 0x5DE660
-static int dword_5DE660;
+static int anim_serialized_reserved_slot_08;
 
 // 0x5DE668
-static int dword_5DE668;
+static int anim_serialized_reserved_slot_09;
 
 // 0x5DE670
 static AnimFxList anim_eye_candies;
 
 // 0x5DE69C
-static int dword_5DE69C;
+static int anim_serialized_reserved_slot_13;
 
 // 0x5DE6A0
-static int dword_5DE6A0;
+static int anim_serialized_reserved_slot_12;
 
 // 0x5DE6A4
 static int violence_filter;
 
 // 0x5DE6B0
-static int dword_5DE6B0;
+static int anim_serialized_reserved_slot_11;
 
 // 0x5DE6B8
-static int dword_5DE6B8;
+static int anim_serialized_reserved_slot_10;
 
 // 0x5DE6C0
-static int dword_5DE6C0;
+static int anim_serialized_reserved_slot_15;
 
 // 0x5DE6C4
-static int dword_5DE6C4;
+static int anim_serialized_reserved_slot_14;
 
 // 0x5DE6CC
 static int anim_custom_pause_milliseconds;
@@ -2862,7 +2865,7 @@ void anim_id_init(AnimID* anim_id)
 
     anim_id->slot_num = -1;
     anim_id->unique_id = -1;
-    anim_id->field_8 = 0;
+    anim_id->reserved_id = 0;
 }
 
 // 0x421E20
@@ -2875,7 +2878,7 @@ void anim_id_to_str(AnimID* anim_id, char* buffer)
         "[%d:%dr%d]",
         anim_id->slot_num,
         anim_id->unique_id,
-        anim_id->field_8);
+        anim_id->reserved_id);
 }
 
 // 0x421EA0
@@ -2889,21 +2892,21 @@ bool anim_save(TigFile* stream)
     if (tig_file_fwrite(&anim_next_unique_id, 4, 1, stream) != 1) return false;
     if (tig_file_fwrite(&anim_active_goal_count, 4, 1, stream) != 1) return false;
     if (tig_file_fwrite(&anim_catch_up, 4, 1, stream) != 1) return false;
-    if (tig_file_fwrite(&dword_739E44, 4, 1, stream) != 1) return false;
-    if (tig_file_fwrite(&dword_739E40, 4, 1, stream) != 1) return false;
-    if (tig_file_fwrite(&dword_5DE650, 4, 1, stream) != 1) return false;
-    if (tig_file_fwrite(&dword_5DE658, 4, 1, stream) != 1) return false;
-    if (tig_file_fwrite(&dword_5DE608, 4, 1, stream) != 1) return false;
-    if (tig_file_fwrite(&dword_5DE640, 4, 1, stream) != 1) return false;
-    if (tig_file_fwrite(&dword_5DE648, 4, 1, stream) != 1) return false;
-    if (tig_file_fwrite(&dword_5DE660, 4, 1, stream) != 1) return false;
-    if (tig_file_fwrite(&dword_5DE668, 4, 1, stream) != 1) return false;
-    if (tig_file_fwrite(&dword_5DE6B8, 4, 1, stream) != 1) return false;
-    if (tig_file_fwrite(&dword_5DE6B0, 4, 1, stream) != 1) return false;
-    if (tig_file_fwrite(&dword_5DE6A0, 4, 1, stream) != 1) return false;
-    if (tig_file_fwrite(&dword_5DE69C, 4, 1, stream) != 1) return false;
-    if (tig_file_fwrite(&dword_5DE6C4, 4, 1, stream) != 1) return false;
-    if (tig_file_fwrite(&dword_5DE6C0, 4, 1, stream) != 1) return false;
+    if (tig_file_fwrite(&anim_serialized_reserved_slot_01, 4, 1, stream) != 1) return false;
+    if (tig_file_fwrite(&anim_serialized_reserved_slot_02, 4, 1, stream) != 1) return false;
+    if (tig_file_fwrite(&anim_serialized_reserved_slot_03, 4, 1, stream) != 1) return false;
+    if (tig_file_fwrite(&anim_serialized_reserved_slot_04, 4, 1, stream) != 1) return false;
+    if (tig_file_fwrite(&anim_serialized_reserved_slot_05, 4, 1, stream) != 1) return false;
+    if (tig_file_fwrite(&anim_serialized_reserved_slot_06, 4, 1, stream) != 1) return false;
+    if (tig_file_fwrite(&anim_serialized_reserved_slot_07, 4, 1, stream) != 1) return false;
+    if (tig_file_fwrite(&anim_serialized_reserved_slot_08, 4, 1, stream) != 1) return false;
+    if (tig_file_fwrite(&anim_serialized_reserved_slot_09, 4, 1, stream) != 1) return false;
+    if (tig_file_fwrite(&anim_serialized_reserved_slot_10, 4, 1, stream) != 1) return false;
+    if (tig_file_fwrite(&anim_serialized_reserved_slot_11, 4, 1, stream) != 1) return false;
+    if (tig_file_fwrite(&anim_serialized_reserved_slot_12, 4, 1, stream) != 1) return false;
+    if (tig_file_fwrite(&anim_serialized_reserved_slot_13, 4, 1, stream) != 1) return false;
+    if (tig_file_fwrite(&anim_serialized_reserved_slot_14, 4, 1, stream) != 1) return false;
+    if (tig_file_fwrite(&anim_serialized_reserved_slot_15, 4, 1, stream) != 1) return false;
 
     cnt = 216;
     if (tig_file_fwrite(&cnt, 4, 1, stream) != 1) return false;
@@ -2969,7 +2972,7 @@ bool anim_run_info_save(AnimRunInfo* run_info, TigFile* stream)
 
     if (tig_file_fwrite(&(run_info->id.slot_num), 4, 1, stream) != 1) return false;
     if (tig_file_fwrite(&(run_info->id.unique_id), 4, 1, stream) != 1) return false;
-    if (tig_file_fwrite(&(run_info->id.field_8), 4, 1, stream) != 1) return false;
+    if (tig_file_fwrite(&(run_info->id.reserved_id), 4, 1, stream) != 1) return false;
     if (tig_file_fwrite(&(run_info->flags), 4, 1, stream) != 1) return false;
     if (tig_file_fwrite(&(run_info->current_state), 4, 1, stream) != 1) return false;
     if (tig_file_fwrite(&(run_info->path_attached_to_stack_index), 4, 1, stream) != 1) return false;
@@ -3070,7 +3073,7 @@ bool anim_load(GameLoadInfo* load_info)
     loaded = anim_load_internal(load_info);
     in_anim_load = false;
 
-    anim_validate_active_goals("Anim Load");
+    if (loaded) anim_validate_active_goals("Anim Load");
 
     return loaded;
 }
@@ -3089,22 +3092,26 @@ bool anim_load_internal(GameLoadInfo* load_info)
     if (tig_file_fread(&anim_next_unique_id, 4, 1, load_info->stream) != 1) return false;
     if (tig_file_fread(&anim_active_goal_count, 4, 1, load_info->stream) != 1) return false;
     if (tig_file_fread(&anim_catch_up, 4, 1, load_info->stream) != 1) return false;
-    if (tig_file_fread(&dword_739E44, 4, 1, load_info->stream) != 1) return false;
-    if (tig_file_fread(&dword_739E40, 4, 1, load_info->stream) != 1) return false;
-    if (tig_file_fread(&dword_5DE650, 4, 1, load_info->stream) != 1) return false;
-    if (tig_file_fread(&dword_5DE658, 4, 1, load_info->stream) != 1) return false;
-    if (tig_file_fread(&dword_5DE608, 4, 1, load_info->stream) != 1) return false;
-    if (tig_file_fread(&dword_5DE640, 4, 1, load_info->stream) != 1) return false;
-    if (tig_file_fread(&dword_5DE648, 4, 1, load_info->stream) != 1) return false;
-    if (tig_file_fread(&dword_5DE660, 4, 1, load_info->stream) != 1) return false;
-    if (tig_file_fread(&dword_5DE668, 4, 1, load_info->stream) != 1) return false;
-    if (tig_file_fread(&dword_5DE6B8, 4, 1, load_info->stream) != 1) return false;
-    if (tig_file_fread(&dword_5DE6B0, 4, 1, load_info->stream) != 1) return false;
-    if (tig_file_fread(&dword_5DE6A0, 4, 1, load_info->stream) != 1) return false;
-    if (tig_file_fread(&dword_5DE69C, 4, 1, load_info->stream) != 1) return false;
-    if (tig_file_fread(&dword_5DE6C4, 4, 1, load_info->stream) != 1) return false;
-    if (tig_file_fread(&dword_5DE6C0, 4, 1, load_info->stream) != 1) return false;
+    if (tig_file_fread(&anim_serialized_reserved_slot_01, 4, 1, load_info->stream) != 1) return false;
+    if (tig_file_fread(&anim_serialized_reserved_slot_02, 4, 1, load_info->stream) != 1) return false;
+    if (tig_file_fread(&anim_serialized_reserved_slot_03, 4, 1, load_info->stream) != 1) return false;
+    if (tig_file_fread(&anim_serialized_reserved_slot_04, 4, 1, load_info->stream) != 1) return false;
+    if (tig_file_fread(&anim_serialized_reserved_slot_05, 4, 1, load_info->stream) != 1) return false;
+    if (tig_file_fread(&anim_serialized_reserved_slot_06, 4, 1, load_info->stream) != 1) return false;
+    if (tig_file_fread(&anim_serialized_reserved_slot_07, 4, 1, load_info->stream) != 1) return false;
+    if (tig_file_fread(&anim_serialized_reserved_slot_08, 4, 1, load_info->stream) != 1) return false;
+    if (tig_file_fread(&anim_serialized_reserved_slot_09, 4, 1, load_info->stream) != 1) return false;
+    if (tig_file_fread(&anim_serialized_reserved_slot_10, 4, 1, load_info->stream) != 1) return false;
+    if (tig_file_fread(&anim_serialized_reserved_slot_11, 4, 1, load_info->stream) != 1) return false;
+    if (tig_file_fread(&anim_serialized_reserved_slot_12, 4, 1, load_info->stream) != 1) return false;
+    if (tig_file_fread(&anim_serialized_reserved_slot_13, 4, 1, load_info->stream) != 1) return false;
+    if (tig_file_fread(&anim_serialized_reserved_slot_14, 4, 1, load_info->stream) != 1) return false;
+    if (tig_file_fread(&anim_serialized_reserved_slot_15, 4, 1, load_info->stream) != 1) return false;
     if (tig_file_fread(&cnt, 4, 1, load_info->stream) != 1) return false;
+    if (cnt < 0 || cnt > (int)SDL_arraysize(anim_run_info)) {
+        tig_debug_printf("Anim: invalid stored run count %d.\n", cnt);
+        return false;
+    }
 
     idx = 0;
     while (idx < cnt) {
@@ -3112,6 +3119,10 @@ bool anim_load_internal(GameLoadInfo* load_info)
             return false;
         }
 
+        if (extent_size == 0 || extent_size > cnt - idx || extent_size < -(cnt - idx)) {
+            tig_debug_printf("Anim: invalid extent %d at %d of %d.\n", extent_size, idx, cnt);
+            return false;
+        }
         if (extent_size > 0) {
             while (extent_size > 0) {
                 if (!anim_run_info_load(&(anim_run_info[idx]), load_info->stream)) {
@@ -3131,6 +3142,15 @@ bool anim_load_internal(GameLoadInfo* load_info)
 // 0x4227F0
 bool anim_run_info_load(AnimRunInfo* run_info, TigFile* stream)
 {
+    AnimRunInfo loaded = { 0 };
+    if (run_info == NULL || !anim_run_info_load_data(&loaded, stream)) return false;
+    *run_info = loaded;
+    run_info->cur_stack_data = run_info->current_goal >= 0 ? &run_info->goals[run_info->current_goal] : NULL;
+    return true;
+}
+
+bool anim_run_info_load_data(AnimRunInfo* run_info, TigFile* stream)
+{
     int index;
 
     if (stream == NULL) {
@@ -3139,13 +3159,18 @@ bool anim_run_info_load(AnimRunInfo* run_info, TigFile* stream)
 
     if (tig_file_fread(&(run_info->id.slot_num), 4, 1, stream) != 1) return false;
     if (tig_file_fread(&(run_info->id.unique_id), 4, 1, stream) != 1) return false;
-    if (tig_file_fread(&(run_info->id.field_8), 4, 1, stream) != 1) return false;
+    if (tig_file_fread(&(run_info->id.reserved_id), 4, 1, stream) != 1) return false;
     if (tig_file_fread(&(run_info->flags), 4, 1, stream) != 1) return false;
     if (tig_file_fread(&(run_info->current_state), 4, 1, stream) != 1) return false;
     if (tig_file_fread(&(run_info->path_attached_to_stack_index), 4, 1, stream) != 1) return false;
     if (!object_load_obj_handle_safe(&(run_info->anim_obj), 0, stream)) return false;
     if (tig_file_fread(&(run_info->extra_target_tile), 8, 1, stream) != 1) return false;
     if (tig_file_fread(&(run_info->current_goal), 4, 1, stream) != 1) return false;
+    if (run_info->current_goal < -1 || run_info->current_goal >= (int)SDL_arraysize(run_info->goals)
+        || run_info->id.slot_num < 0 || run_info->id.slot_num >= (int)SDL_arraysize(anim_run_info)) {
+        tig_debug_printf("Anim: invalid stored slot %d or goal index %d.\n", run_info->id.slot_num, run_info->current_goal);
+        return false;
+    }
 
     for (index = 0; index <= run_info->current_goal; index++) {
         if (!anim_goal_data_load(&(run_info->goals[index]), stream)) {
@@ -3154,6 +3179,14 @@ bool anim_run_info_load(AnimRunInfo* run_info, TigFile* stream)
     }
 
     if (tig_file_fread(&(run_info->path), sizeof(run_info->path), 1, stream) != 1) return false;
+    if (run_info->current_state < 0 || run_info->current_state >= (int)SDL_arraysize(anim_goal_nodes[0]->subnodes)
+        || run_info->path.max < -1 || run_info->path.max > (int)sizeof(run_info->path.rotations)
+        || run_info->path.curr < 0 || run_info->path.curr > (int)sizeof(run_info->path.rotations)
+        || run_info->path.rotation_capacity < 0 || run_info->path.rotation_capacity > (int)sizeof(run_info->path.rotations)) {
+        tig_debug_printf("Anim: invalid state %d or path curr=%d max=%d capacity=%d.\n", run_info->current_state,
+            run_info->path.curr, run_info->path.max, run_info->path.rotation_capacity);
+        return false;
+    }
     if (tig_file_fread(&(run_info->pause_time), sizeof(run_info->pause_time), 1, stream) != 1) return false;
     if (tig_file_fread(&(run_info->next_ping_time), sizeof(run_info->next_ping_time), 1, stream) != 1) return false;
 
@@ -3174,6 +3207,11 @@ bool anim_goal_data_load(AnimGoalData* goal_data, TigFile* stream)
     }
 
     if (tig_file_fread(&(goal_data->type), sizeof(goal_data->type), 1, stream) != 1) {
+        return false;
+    }
+
+    if (goal_data->type < 0 || goal_data->type >= (int)SDL_arraysize(anim_goal_nodes)) {
+        tig_debug_printf("Anim: invalid stored goal type %d.\n", goal_data->type);
         return false;
     }
 
@@ -3267,7 +3305,7 @@ void anim_break_nodes_to_map(const char* map)
             return;
         }
 
-        if (tig_file_fread(&cnt, sizeof(cnt), 1, stream) != 1) {
+        if (tig_file_fread(&cnt, sizeof(cnt), 1, stream) != 1 || cnt < 0 || cnt > INT_MAX - 216) {
             tig_debug_printf("Anim: anim_break_nodes_to_map: ERROR: Reading Header to data file for map!\n");
             tig_file_fclose(stream);
             ASSERT(0); // 1025, "0"
@@ -3365,7 +3403,7 @@ void anim_save_nodes_to_map(const char* map)
             return;
         }
 
-        if (tig_file_fread(&cnt, sizeof(cnt), 1, stream) != 1) {
+        if (tig_file_fread(&cnt, sizeof(cnt), 1, stream) != 1 || cnt < 0 || cnt > INT_MAX - 216) {
             tig_debug_printf("Anim: anim_save_nodes_to_map: ERROR: Reading Header to data file for map!\n");
             tig_file_fclose(stream);
             ASSERT(0); // 1162, "0"
@@ -3447,6 +3485,10 @@ void anim_load_nodes_from_map(const char* map)
         return;
     }
 
+    if (!tig_file_count_fits(stream, cnt, INT_MAX, 4)) {
+        tig_file_fclose(stream);
+        return;
+    }
     for (idx = 0; idx < cnt; idx++) {
         if (!anim_run_info_load(&run_info, stream)) {
             break;
@@ -3464,7 +3506,8 @@ void anim_load_nodes_from_map(const char* map)
 
         anim_run_info[anim_id.slot_num] = run_info;
         anim_run_info[anim_id.slot_num].id = anim_id;
-        anim_run_info[anim_id.slot_num].cur_stack_data = &(anim_run_info[anim_id.slot_num].goals[anim_run_info[anim_id.slot_num].current_goal]);
+        anim_run_info[anim_id.slot_num].cur_stack_data = run_info.current_goal < 0 ? NULL
+            : &anim_run_info[anim_id.slot_num].goals[run_info.current_goal];
         anim_goal_restart(&anim_id);
     }
 
@@ -3586,10 +3629,10 @@ void anim_goal_step_before_hook_stub(AnimRunInfo* run_info)
 }
 
 // 0x423550
-void anim_goal_step_after_hook_stub(AnimRunInfo* run_info, int a2)
+void anim_goal_step_after_hook_stub(AnimRunInfo* run_info, int step_result)
 {
     (void)run_info;
-    (void)a2;
+    (void)step_result;
 }
 
 // 0x423560
@@ -3870,11 +3913,16 @@ bool anim_timeevent_process(TimeEvent* timeevent)
 }
 
 // 0x423C80
-bool anim_event_schedule(AnimRunInfo* run_info, DateTime* a2, int delay)
+bool anim_event_schedule(AnimRunInfo* run_info, DateTime* base_time, int delay)
 {
     TimeEvent timeevent;
     DateTime datetime;
 
+    if (tig_performance_is_enabled() && run_info->cur_stack_data != NULL
+        && run_info->cur_stack_data->type == AG_ATTEMPT_ATTACK) {
+        tig_performance_trace(TIG_PERF_EVENT_ATTACK_SCHEDULE, (Uint64)run_info->anim_obj,
+            ((Uint64)run_info->id.unique_id << 32) | (unsigned int)run_info->id.slot_num, delay, combat_turn_based_is_active());
+    }
     datetime_init(&datetime, delay);
     datetime.milliseconds *= 8;
 
@@ -3884,14 +3932,14 @@ bool anim_event_schedule(AnimRunInfo* run_info, DateTime* a2, int delay)
     timeevent.params[2].integer_value = 1111;
 
     if (anim_catch_up) {
-        return timeevent_add_delay_base_at(&timeevent, &datetime, a2, &(run_info->next_ping_time));
+        return timeevent_add_delay_base_at(&timeevent, &datetime, base_time, &(run_info->next_ping_time));
     } else {
         return timeevent_add_delay_at(&timeevent, &datetime, &(run_info->next_ping_time));
     }
 }
 
 // 0x423D10
-void anim_goal_stack_pop_with_cleanup(AnimRunInfo* run_info, unsigned int* flags_ptr, AnimGoalNode** goal_node_ptr, AnimGoalData** goal_data_ptr, bool* a5)
+void anim_goal_stack_pop_with_cleanup(AnimRunInfo* run_info, unsigned int* flags_ptr, AnimGoalNode** goal_node_ptr, AnimGoalData** goal_data_ptr, bool* goal_changed_ptr)
 {
     if (run_info->current_goal == 0
         && (*flags_ptr & 0x40000000) == 0) {
@@ -3921,7 +3969,7 @@ void anim_goal_stack_pop_with_cleanup(AnimRunInfo* run_info, unsigned int* flags
     if (run_info->current_goal >= 0) {
         run_info->cur_stack_data = *goal_data_ptr = &(run_info->goals[run_info->current_goal]);
         *goal_node_ptr = anim_goal_nodes[(*goal_data_ptr)->type];
-        *a5 = false;
+        *goal_changed_ptr = false;
     } else {
         if ((*flags_ptr & 0x40000000) == 0) {
             run_info->flags |= ANIM_RUN_TERMINATE_REQUESTED;
@@ -4029,33 +4077,33 @@ bool anim_object_force_interrupt_all(int64_t obj)
 }
 
 // 0x424070
-bool anim_object_interrupt_by_priority(int64_t obj, int priority_level, bool a3, bool a4)
+bool anim_object_interrupt_by_priority(int64_t obj, int priority_level, bool use_lowest_priority, bool suppress_network)
 {
     int prev = -1;
     int slot;
 
     ASSERT(priority_level >= PRIORITY_NONE && priority_level < PRIORITY_HIGHEST); // (priorityLevel >= priorityNone)&&(priorityLevel <= priorityHighest)
 
-    if (!a4) {
+    if (!suppress_network) {
         if (tig_net_is_active() && player_is_pc_obj(obj)) {
             Packet9 pkt;
 
             pkt.type = 9;
-            pkt.field_4 = 0;
+            pkt.reserved_mode = 0;
 
             if (tig_net_is_host()) {
-                object_handle_reference_init(obj, &(pkt.field_18));
+                object_handle_reference_init(obj, &(pkt.object_reference));
                 pkt.priority_level = priority_level;
-                pkt.field_48 = a3;
+                pkt.use_lowest_priority = use_lowest_priority;
                 pkt.loc = obj_field_int64_get(obj, OBJ_F_LOCATION);
                 pkt.art_id = obj_field_int32_get(obj, OBJ_F_CURRENT_AID);
                 pkt.offset_x = obj_field_int32_get(obj, OBJ_F_OFFSET_X);
                 pkt.offset_y = obj_field_int32_get(obj, OBJ_F_OFFSET_Y);
                 tig_net_send_app_all(&pkt, sizeof(pkt));
             } else {
-                object_handle_reference_init(obj, &(pkt.field_18));
+                object_handle_reference_init(obj, &(pkt.object_reference));
                 pkt.priority_level = priority_level;
-                pkt.field_48 = a3;
+                pkt.use_lowest_priority = use_lowest_priority;
                 pkt.loc = 0;
                 pkt.art_id = TIG_ART_ID_INVALID;
                 pkt.offset_x = 0;
@@ -4065,7 +4113,7 @@ bool anim_object_interrupt_by_priority(int64_t obj, int priority_level, bool a3,
         }
     }
 
-    if (a3) {
+    if (use_lowest_priority) {
         priority_level = PRIORITY_NONE;
     }
 
@@ -4868,7 +4916,7 @@ bool anim_goal_combat_path_invalidation_process(AnimRunInfo* run_info)
     int64_t source_obj;
     int64_t target_obj;
     int64_t target_loc = 0;
-    int64_t v1;
+    int64_t blocking_obj;
     int64_t weapon_obj;
     int range;
     int goal;
@@ -4888,8 +4936,8 @@ bool anim_goal_combat_path_invalidation_process(AnimRunInfo* run_info)
             return false;
         }
 
-        if (ai_straight_path_cost_to_location(source_obj, target_loc, &v1) < 26
-            && (v1 == OBJ_HANDLE_NULL || v1 == target_obj)) {
+        if (ai_straight_path_cost_to_location(source_obj, target_loc, &blocking_obj) < 26
+            && (blocking_obj == OBJ_HANDLE_NULL || blocking_obj == target_obj)) {
             weapon_obj = combat_critter_weapon(source_obj);
             if (weapon_obj != OBJ_HANDLE_NULL) {
                 range = item_weapon_range(weapon_obj, source_obj);
@@ -4963,34 +5011,34 @@ void anim_traversal_flags_adjust(int64_t obj, unsigned int* flags_ptr)
 }
 
 // 0x425840
-bool anim_destination_traversal_is_blocked(int64_t a1, int64_t a2, int64_t a3, int a4, int64_t a5)
+bool anim_destination_traversal_is_blocked(int64_t moving_obj, int64_t from_location, int64_t destination_location, int rotation, int64_t ignored_obj)
 {
     unsigned int flags = 0;
-    bool v1 = true;
-    bool v2 = false;
-    int64_t v3;
-    int v4;
+    bool original_no_block = true;
+    bool blocked = false;
+    int64_t blocking_obj;
+    int traversal_flags;
 
-    anim_traversal_flags_adjust(a1, &flags);
+    anim_traversal_flags_adjust(moving_obj, &flags);
 
-    if (tile_is_blocking(a3, false)) {
+    if (tile_is_blocking(destination_location, false)) {
         return true;
     }
 
-    if ((obj_field_int32_get(a5, OBJ_F_FLAGS) & OF_NO_BLOCK) == 0) {
-        object_flags_set(a5, OF_NO_BLOCK);
-        v1 = false;
+    if ((obj_field_int32_get(ignored_obj, OBJ_F_FLAGS) & OF_NO_BLOCK) == 0) {
+        object_flags_set(ignored_obj, OF_NO_BLOCK);
+        original_no_block = false;
     }
 
-    if ((object_calc_traversal_cost(a1, a2, a4, flags, &v3, &v4, NULL) || v3) && !v4) {
-        v2 = true;
+    if ((object_calc_traversal_cost(moving_obj, from_location, rotation, flags, &blocking_obj, &traversal_flags, NULL) || blocking_obj) && !traversal_flags) {
+        blocked = true;
     }
 
-    if (!v1) {
-        object_flags_unset(a5, OF_NO_BLOCK);
+    if (!original_no_block) {
+        object_flags_unset(ignored_obj, OF_NO_BLOCK);
     }
 
-    return v2;
+    return blocked;
 }
 
 // 0x425930
@@ -5076,7 +5124,7 @@ bool anim_goal_wander_path_build(AnimRunInfo* run_info)
 }
 
 // 0x425BF0
-bool anim_path_critter_capabilities_apply(PathCreateInfo* path_create_info, bool a2)
+bool anim_path_critter_capabilities_apply(PathCreateInfo* path_create_info, bool ignore_noncombat_critters)
 {
     ASSERT(path_create_info != NULL); // 3923, "pPathData != NULL"
     ASSERT(path_create_info->obj != OBJ_HANDLE_NULL); // 3924, "pPathData->movingObj != OBJ_HANDLE_NULL"
@@ -5104,7 +5152,7 @@ bool anim_path_critter_capabilities_apply(PathCreateInfo* path_create_info, bool
             path_create_info->flags |= PATH_FLAG_AVOID_FIRE;
         }
 
-        if (a2) {
+        if (ignore_noncombat_critters) {
             if (!combat_critter_is_combat_mode_active(path_create_info->obj)) {
                 path_create_info->flags |= PATH_FLAG_IGNORE_CRITTERS;
             }
@@ -5266,6 +5314,22 @@ int anim_path_length_to_location(int64_t obj, int64_t destination)
     return path.max;
 }
 
+int anim_path_preview(int64_t obj, int64_t destination, int8_t* rotations, int capacity)
+{
+    if (obj == OBJ_HANDLE_NULL || !obj_handle_is_valid(obj) || rotations == NULL || capacity <= 0) return 0;
+    PathCreateInfo query = { 0 };
+    query.obj = obj;
+    query.from = obj_field_int64_get(obj, OBJ_F_LOCATION);
+    query.to = destination;
+    query.rotations = rotations;
+    query.max_rotations = capacity;
+    if ((obj_field_int32_get(obj, OBJ_F_SPELL_FLAGS) & OSF_POLYMORPHED) != 0) {
+        query.flags |= PATH_FLAG_WINDOWS_BLOCK | PATH_FLAG_PORTALS_BLOCK;
+    }
+    if (!anim_path_critter_capabilities_apply(&query, true)) return 0;
+    return path_make_preview(&query);
+}
+
 // 0x426250
 int anim_path_length_to_location_alternate(int64_t obj, int64_t destination)
 {
@@ -5287,11 +5351,11 @@ int anim_path_length_to_location_alternate(int64_t obj, int64_t destination)
 }
 
 // 0x4262D0
-void anim_create_path_max_length(int64_t a1, const char* msg, int value)
+void anim_path_length_error_log(int64_t obj, const char* msg, int value)
 {
     char str[MAX_STRING];
 
-    object_examine(a1, a1, str);
+    object_examine(obj, obj, str);
     tig_debug_printf("Anim: anim_create_path_max_length: Error: %s: %d!  [%s]\n", msg, value, str);
 }
 
@@ -5314,7 +5378,7 @@ int anim_path_search_length_prepare(AnimPath* anim_path, int64_t from, int64_t t
             } else {
                 estimate = (int)location_dist(from, to);
                 if (estimate > anim_path->rotation_capacity) {
-                    anim_create_path_max_length(obj, "Estimated Distance is too large", estimate);
+                    anim_path_length_error_log(obj, "Estimated Distance is too large", estimate);
                 }
 
                 anim_path->absolute_length_limit = 4 * estimate + 5;
@@ -5334,7 +5398,7 @@ int anim_path_search_length_prepare(AnimPath* anim_path, int64_t from, int64_t t
     } else {
         estimate = (int)location_dist(from, to);
         if (estimate > anim_path->rotation_capacity) {
-            anim_create_path_max_length(obj, "Estimated Distance is too large", estimate);
+            anim_path_length_error_log(obj, "Estimated Distance is too large", estimate);
             tig_debug_printf("   SrcLocAxis: (%d x %d)", (int)location_get_x(from), (int)location_get_y(from));
             tig_debug_printf(", DstLocAxis: (%d x %d)\n", (int)location_get_x(to), (int)location_get_y(to));
         }
@@ -5346,9 +5410,9 @@ int anim_path_search_length_prepare(AnimPath* anim_path, int64_t from, int64_t t
     }
 
     if (anim_path->search_length_limit == 0) {
-        anim_create_path_max_length(obj, "Path Length is 0", anim_path->search_length_limit);
+        anim_path_length_error_log(obj, "Path Length is 0", anim_path->search_length_limit);
     } else if (anim_path->search_length_limit > anim_path->rotation_capacity) {
-        anim_create_path_max_length(obj, "Path Length is out of range", anim_path->search_length_limit);
+        anim_path_length_error_log(obj, "Path Length is out of range", anim_path->search_length_limit);
     }
 
     if (anim_path->search_length_limit > anim_path->rotation_capacity) {
@@ -5369,22 +5433,22 @@ int anim_path_build_from_object(int64_t obj, int64_t to, AnimPath* path, unsigne
 // 0x426560
 bool anim_path_build_between_locations(int64_t obj, int64_t from, int64_t to, AnimPath* path, unsigned int flags)
 {
-    int v1;
+    int max_rotations;
     int8_t* rotations;
     tig_art_id_t art_id;
     int rot;
     int offset_x;
     int offset_y;
-    bool v2 = true;
+    bool starts_at_tile_center = true;
     int64_t adjacent_loc;
     PathCreateInfo path_create_info;
 
     ASSERT(obj != OBJ_HANDLE_NULL); // 4511, "obj != OBJ_HANDLE_NULL"
 
-    v1 = anim_path_search_length_prepare(path, from, to, obj);
+    max_rotations = anim_path_search_length_prepare(path, from, to, obj);
 
     if ((flags & PATH_FLAG_LONG_RANGE_FALLBACK) != 0) {
-        v1 = 200;
+        max_rotations = 200;
     }
 
     if ((obj_field_int32_get(obj, OBJ_F_SPELL_FLAGS) & OSF_POLYMORPHED) != 0) {
@@ -5411,9 +5475,9 @@ bool anim_path_build_between_locations(int64_t obj, int64_t from, int64_t to, An
     offset_y = obj_field_int32_get(obj, OBJ_F_OFFSET_Y);
 
     if (offset_x != 0 || offset_y != 0) {
-        v1--;
+        max_rotations--;
         rotations++;
-        v2 = false;
+        starts_at_tile_center = false;
 
         if (!location_in_dir(from, rot, &adjacent_loc)) {
             return false;
@@ -5432,7 +5496,7 @@ bool anim_path_build_between_locations(int64_t obj, int64_t from, int64_t to, An
     path_create_info.to = to;
     path_create_info.obj = obj;
     path_create_info.from = from;
-    path_create_info.max_rotations = v1;
+    path_create_info.max_rotations = max_rotations;
     path_create_info.rotations = rotations;
     path_create_info.flags = flags;
 
@@ -5454,7 +5518,7 @@ bool anim_path_build_between_locations(int64_t obj, int64_t from, int64_t to, An
     path->from_location = from;
     path->to_location = to;
 
-    if (!v2) {
+    if (!starts_at_tile_center) {
         path->rotations[0] = rot;
     }
 
@@ -5577,14 +5641,14 @@ bool anim_goal_path_away_from_object_build(AnimRunInfo* run_info)
     int64_t target_loc;
     int rot;
     int dist;
-    int v1;
+    int max_rotations;
     unsigned int path_create_flags;
     int8_t* rotations;
     int offset_x;
     int offset_y;
     PathCreateInfo path_create_info;
     tig_art_id_t art_id;
-    bool v2 = true;
+    bool starts_at_tile_center = true;
 
     source_obj = run_info->params[0].obj;
     target_obj = run_info->params[1].obj;
@@ -5625,7 +5689,7 @@ bool anim_goal_path_away_from_object_build(AnimRunInfo* run_info)
     run_info->cur_stack_data->params[AGDATA_TARGET_TILE].loc = target_loc;
     run_info->path_attached_to_stack_index = run_info->current_goal;
 
-    v1 = anim_path_search_length_prepare(&(run_info->path), source_loc, target_loc, source_obj);
+    max_rotations = anim_path_search_length_prepare(&(run_info->path), source_loc, target_loc, source_obj);
 
     path_create_flags = 0;
     if ((obj_field_int32_get(source_obj, OBJ_F_SPELL_FLAGS) & OSF_POLYMORPHED) != 0) {
@@ -5640,14 +5704,14 @@ bool anim_goal_path_away_from_object_build(AnimRunInfo* run_info)
     offset_x = obj_field_int32_get(source_obj, OBJ_F_OFFSET_X);
     offset_y = obj_field_int32_get(source_obj, OBJ_F_OFFSET_Y);
     if (offset_x != 0 || offset_y != 0) {
-        v1--;
+        max_rotations--;
         rotations++;
-        v2 = false;
+        starts_at_tile_center = false;
     }
 
     path_create_info.obj = source_obj;
     path_create_info.from = obj_field_int64_get(source_obj, OBJ_F_LOCATION);
-    path_create_info.max_rotations = v1;
+    path_create_info.max_rotations = max_rotations;
     path_create_info.to = target_loc;
     path_create_info.rotations = rotations;
     path_create_info.flags = path_create_flags;
@@ -5678,7 +5742,7 @@ bool anim_goal_path_away_from_object_build(AnimRunInfo* run_info)
     run_info->path.curr = 0;
     run_info->path.flags &= ~0x03;
 
-    if (!v2) {
+    if (!starts_at_tile_center) {
         art_id = obj_field_int32_get(source_obj, OBJ_F_CURRENT_AID);
         rot = tig_art_id_rotation_get(art_id);
         if (rot == run_info->path.rotations[1]) {
@@ -5913,19 +5977,19 @@ bool anim_goal_next_step_door_find(AnimRunInfo* run_info)
 }
 
 // 0x4273B0
-bool anim_window_in_direction_find(int64_t obj, int64_t loc, int rotation, int a4, int64_t* obj_ptr)
+bool anim_window_in_direction_find(int64_t obj, int64_t loc, int rotation, int reserved_flags, int64_t* obj_ptr)
 {
     ObjectList objects;
     ObjectNode* node;
     tig_art_id_t art_id;
     int obj_rot;
-    bool v1;
+    bool window_piece_found;
 
     if ((rotation & 1) == 0) {
         return false;
     }
 
-    v1 = false;
+    window_piece_found = false;
     if (obj_ptr != NULL) {
         *obj_ptr = OBJ_HANDLE_NULL;
     }
@@ -5954,7 +6018,7 @@ bool anim_window_in_direction_find(int64_t obj, int64_t loc, int rotation, int a
             case 17:
             case 18:
             case 19:
-                v1 = true;
+                window_piece_found = true;
                 break;
             }
         }
@@ -5962,7 +6026,7 @@ bool anim_window_in_direction_find(int64_t obj, int64_t loc, int rotation, int a
     }
     object_list_destroy(&objects);
 
-    if (v1) {
+    if (window_piece_found) {
         object_list_location(loc, OBJ_TM_PORTAL, &objects);
         if (objects.head != NULL) {
             if (obj_ptr != NULL) {
@@ -6001,7 +6065,7 @@ bool anim_window_in_direction_find(int64_t obj, int64_t loc, int rotation, int a
             case 17:
             case 18:
             case 19:
-                v1 = true;
+                window_piece_found = true;
                 break;
             }
         }
@@ -6009,7 +6073,7 @@ bool anim_window_in_direction_find(int64_t obj, int64_t loc, int rotation, int a
     }
     object_list_destroy(&objects);
 
-    if (v1) {
+    if (window_piece_found) {
         object_list_location(loc, OBJ_TM_PORTAL, &objects);
         if (objects.head != NULL) {
             if (obj_ptr != NULL) {
@@ -6030,7 +6094,7 @@ bool anim_goal_next_step_window_find(AnimRunInfo* run_info)
     tig_art_id_t art_id;
     int64_t loc;
     int rotation;
-    int64_t v1;
+    int64_t window_obj;
 
     obj = run_info->params[0].obj;
 
@@ -6049,11 +6113,11 @@ bool anim_goal_next_step_window_find(AnimRunInfo* run_info)
         rotation = run_info->path.rotations[run_info->path.curr];
     }
 
-    if (!anim_window_in_direction_find(obj, loc, rotation, 0, &v1)) {
+    if (!anim_window_in_direction_find(obj, loc, rotation, 0, &window_obj)) {
         return false;
     }
 
-    run_info->cur_stack_data->params[AGDATA_SCRATCH_OBJ].obj = v1;
+    run_info->cur_stack_data->params[AGDATA_SCRATCH_OBJ].obj = window_obj;
 
     return true;
 }
@@ -6158,8 +6222,8 @@ bool anim_goal_path_near_object_build(AnimRunInfo* run_info)
     unsigned int path_create_flags;
     PathCreateInfo path_create_info;
     int max_rotations;
-    bool v1 = false;
-    int v2 = 0;
+    bool target_hidden_for_path = false;
+    int excluded_target_steps = 0;
 
     source_obj = run_info->params[0].obj;
     target_obj = run_info->params[1].obj;
@@ -6218,8 +6282,8 @@ bool anim_goal_path_near_object_build(AnimRunInfo* run_info)
     case OBJ_TYPE_SCENERY:
     case OBJ_TYPE_PC:
     case OBJ_TYPE_NPC:
-        v1 = true;
-        v2 = 1;
+        target_hidden_for_path = true;
+        excluded_target_steps = 1;
         range = 0;
         object_flags_set(target_obj, OF_OFF);
         break;
@@ -6256,11 +6320,11 @@ bool anim_goal_path_near_object_build(AnimRunInfo* run_info)
     run_info->path.from_location = source_loc;
     run_info->path.to_location = target_loc;
 
-    if (run_info->path.max > v2) {
+    if (run_info->path.max > excluded_target_steps) {
         run_info->path.curr = 0;
         run_info->path.flags &= ~0x03;
 
-        if (v1) {
+        if (target_hidden_for_path) {
             object_flags_unset(target_obj, OF_OFF);
             run_info->path.max--;
         }
@@ -6283,7 +6347,7 @@ bool anim_goal_path_near_object_build(AnimRunInfo* run_info)
         run_info->path.from_location = path_create_info.from;
         run_info->path.to_location = path_create_info.to;
 
-        if (run_info->path.max > v2) {
+        if (run_info->path.max > excluded_target_steps) {
             run_info->path.curr = 0;
             run_info->path.flags &= ~0x03;
 
@@ -6298,7 +6362,7 @@ bool anim_goal_path_near_object_build(AnimRunInfo* run_info)
             }
         }
 
-        if (v1) {
+        if (target_hidden_for_path) {
             object_flags_unset(target_obj, OF_OFF);
             run_info->path.max--;
         }
@@ -6306,7 +6370,7 @@ bool anim_goal_path_near_object_build(AnimRunInfo* run_info)
         return true;
     }
 
-    if (v1) {
+    if (target_hidden_for_path) {
         object_flags_unset(target_obj, OF_OFF);
     }
 
@@ -7171,7 +7235,7 @@ bool anim_goal_attack_target_reachability_check(AnimRunInfo* run_info)
 bool anim_attack_target_is_reachable(int64_t source_obj, int64_t target_obj)
 {
     int64_t target_loc;
-    int64_t v1;
+    int64_t blocking_obj;
     AnimPath path;
 
     ASSERT(source_obj != OBJ_HANDLE_NULL); // 6747, "sourceObj != OBJ_HANDLE_NULL"
@@ -7201,9 +7265,9 @@ bool anim_attack_target_is_reachable(int64_t source_obj, int64_t target_obj)
 
     target_loc = obj_field_int64_get(target_obj, OBJ_F_LOCATION);
 
-    ai_straight_path_cost_to_location(source_obj, target_loc, &v1);
+    ai_straight_path_cost_to_location(source_obj, target_loc, &blocking_obj);
 
-    if (v1 != OBJ_HANDLE_NULL && v1 != target_obj) {
+    if (blocking_obj != OBJ_HANDLE_NULL && blocking_obj != target_obj) {
         path.flags = 0;
         path.search_length_limit = 0;
         path.absolute_length_limit = 0;
@@ -7345,7 +7409,7 @@ bool anim_goal_target_in_weapon_range_check(AnimRunInfo* run_info)
     int64_t target_loc;
     int64_t weapon_obj;
     int range;
-    int64_t v1;
+    int64_t blocking_obj;
 
     source_obj = run_info->params[0].obj;
     target_obj = run_info->params[1].obj;
@@ -7376,11 +7440,11 @@ bool anim_goal_target_in_weapon_range_check(AnimRunInfo* run_info)
         return false;
     }
 
-    if (ai_straight_path_cost_to_location(source_obj, target_loc, &v1) >= 26) {
+    if (ai_straight_path_cost_to_location(source_obj, target_loc, &blocking_obj) >= 26) {
         return false;
     }
 
-    if (v1 != OBJ_HANDLE_NULL && v1 != target_obj) {
+    if (blocking_obj != OBJ_HANDLE_NULL && blocking_obj != target_obj) {
         return false;
     }
 
@@ -7943,6 +8007,9 @@ bool anim_goal_weapon_wear_attack(AnimRunInfo* run_info)
     }
 
     if ((obj_field_int32_get(target_obj, OBJ_F_FLAGS) & (OF_DESTROYED | OF_OFF)) == 0) {
+        tig_performance_trace(TIG_PERF_EVENT_ATTACK_RELEASE, (Uint64)source_obj,
+            ((Uint64)run_info->id.unique_id << 32) | (unsigned int)run_info->id.slot_num,
+            hit_loc, combat_turn_based_is_active());
         combat_weapon_wear_attack(source_obj, target_obj, hit_loc);
     }
 
@@ -8958,7 +9025,7 @@ bool anim_goal_is_too_close_for_formation(AnimRunInfo* run_info)
     int64_t source_obj;
     int64_t target_obj;
     unsigned int flags;
-    int v2;
+    int minimum_distance;
     int64_t source_loc;
     int64_t target_loc;
 
@@ -8981,11 +9048,11 @@ bool anim_goal_is_too_close_for_formation(AnimRunInfo* run_info)
         flags = obj_field_int32_get(source_obj, OBJ_F_NPC_FLAGS);
     }
 
-    v2 = (flags & ONF_AI_SPREAD_OUT) != 0 ? 3 : 1;
+    minimum_distance = (flags & ONF_AI_SPREAD_OUT) != 0 ? 3 : 1;
 
     source_loc = obj_field_int64_get(source_obj, OBJ_F_LOCATION);
     target_loc = obj_field_int64_get(target_obj, OBJ_F_LOCATION);
-    return location_dist(source_loc, target_loc) < v2;
+    return location_dist(source_loc, target_loc) < minimum_distance;
 }
 
 // 0x42C0F0
@@ -10603,7 +10670,7 @@ bool anim_goal_movement_begin(AnimRunInfo* run_info)
     int obj_type;
     tig_art_id_t art_id;
     int anim;
-    int v2;
+    int action_point_cost;
     TigArtAnimData art_anim_data;
     int64_t loc;
     int64_t next_loc;
@@ -10645,10 +10712,10 @@ bool anim_goal_movement_begin(AnimRunInfo* run_info)
         run_info->cur_stack_data->params[AGDATA_ANIM_ID_PREVIOUS].data = tig_art_id_anim_set(run_info->cur_stack_data->params[AGDATA_ANIM_ID_PREVIOUS].data, 0);
     }
 
-    v2 = 2;
-    anim_movement_art_select(run_info, obj, &art_id, (run_info->flags & ANIM_RUN_RUNNING) != 0, &v2);
+    action_point_cost = 2;
+    anim_movement_art_select(run_info, obj, &art_id, (run_info->flags & ANIM_RUN_RUNNING) != 0, &action_point_cost);
 
-    if (!combat_check_action_points(obj, v2)) {
+    if (!combat_check_action_points(obj, action_point_cost)) {
         anim_interrupt(&(run_info->id), PRIORITY_HIGHEST);
         return false;
     }
@@ -10741,7 +10808,7 @@ bool anim_goal_movement_begin(AnimRunInfo* run_info)
 }
 
 // 0x42EDC0
-void anim_movement_art_select(AnimRunInfo* run_info, int64_t obj, tig_art_id_t* art_id_ptr, bool a4, int* a5)
+void anim_movement_art_select(AnimRunInfo* run_info, int64_t obj, tig_art_id_t* art_id_ptr, bool running, int* action_point_cost_ptr)
 {
     tig_art_id_t art_id;
     bool concealed;
@@ -10756,7 +10823,7 @@ void anim_movement_art_select(AnimRunInfo* run_info, int64_t obj, tig_art_id_t* 
 
     art_id = tig_art_id_anim_set(art_id, TIG_ART_ANIM_WALK);
     if (run_info->current_goal <= 0
-        || !a4
+        || !running
         || (concealed
             && basic_skill_training_get(obj, BASIC_SKILL_PROWLING) < TRAINING_MASTER)) {
         *art_id_ptr = art_id;
@@ -10770,8 +10837,8 @@ void anim_movement_art_select(AnimRunInfo* run_info, int64_t obj, tig_art_id_t* 
     }
 
     art_id = tig_art_id_anim_set(art_id, TIG_ART_ANIM_RUN);
-    if (a5 != NULL) {
-        *a5 = 1;
+    if (action_point_cost_ptr != NULL) {
+        *action_point_cost_ptr = 1;
     }
     *art_id_ptr = art_id;
 }
@@ -10798,36 +10865,36 @@ void anim_movement_pause_time_calculate(int64_t obj, DateTime* pause_time)
 }
 
 // 0x42EF60
-bool anim_offset_is_within_direction_halfplane(int a1, int a2, int a3)
+bool anim_offset_is_within_direction_halfplane(int rotation, int offset_x, int offset_y)
 {
-    switch (a1) {
+    switch (rotation) {
     case 0:
-        return a3 > 0 ? false : true;
+        return offset_y > 0 ? false : true;
     case 1:
-        if (a3 > 0) {
+        if (offset_y > 0) {
             return false;
         } else {
-            return a2 < 0 ? false : true;
+            return offset_x < 0 ? false : true;
         }
     case 2:
-        return a2 < 0 ? false : true;
+        return offset_x < 0 ? false : true;
     case 3:
-        return a3 < 0 || a2 < 0 ? false : true;
+        return offset_y < 0 || offset_x < 0 ? false : true;
     case 4:
-        return a3 < 0 ? false : true;
+        return offset_y < 0 ? false : true;
     case 5:
-        if (a3 < 0) {
+        if (offset_y < 0) {
             return false;
         } else {
-            return a2 > 0 ? false : true;
+            return offset_x > 0 ? false : true;
         }
     case 6:
-        return a2 > 0 ? false : true;
+        return offset_x > 0 ? false : true;
     case 7:
-        if (a3 > 0) {
+        if (offset_y > 0) {
             return false;
         } else {
-            return a2 > 0 ? false : true;
+            return offset_x > 0 ? false : true;
         }
     }
 
@@ -10978,7 +11045,7 @@ bool AGbeginAnimMoveStraight(AnimRunInfo* run_info)
 bool AGupdateAnimMoveStraight(AnimRunInfo* run_info)
 {
     int64_t obj;
-    int v1;
+    int steps_per_update;
     int idx;
     int offset_x;
     int offset_y;
@@ -10994,11 +11061,11 @@ bool AGupdateAnimMoveStraight(AnimRunInfo* run_info)
 
     ASSERT(obj != OBJ_HANDLE_NULL); // 11385, "obj != OBJ_HANDLE_NULL"
 
-    v1 = run_info->cur_stack_data->params[AGDATA_SCRATCH_VAL5].data;
+    steps_per_update = run_info->cur_stack_data->params[AGDATA_SCRATCH_VAL5].data;
     anim_custom_pause_milliseconds = 35;
 
-    if (v1 == 0) {
-        v1 = 4;
+    if (steps_per_update == 0) {
+        steps_per_update = 4;
         anim_custom_pause_milliseconds = 35;
     }
 
@@ -11006,7 +11073,7 @@ bool AGupdateAnimMoveStraight(AnimRunInfo* run_info)
         return false;
     }
 
-    for (idx = 0; idx < v1; idx++) {
+    for (idx = 0; idx < steps_per_update; idx++) {
         offset_x = obj_field_int32_get(obj, OBJ_F_OFFSET_X);
         offset_y = obj_field_int32_get(obj, OBJ_F_OFFSET_Y);
         loc = obj_field_int64_get(obj, OBJ_F_LOCATION);
@@ -11082,7 +11149,7 @@ bool anim_goal_projectile_movement_step(AnimRunInfo* run_info)
     int cnt;
     int64_t parent_obj;
     int64_t target_loc;
-    int64_t v1;
+    int64_t original_target_obj;
     int offset_x;
     int offset_y;
     int64_t projectile_loc;
@@ -11113,7 +11180,7 @@ bool anim_goal_projectile_movement_step(AnimRunInfo* run_info)
 
     parent_obj = run_info->cur_stack_data->params[AGDATA_PARENT_OBJ].obj;
     target_loc = run_info->cur_stack_data->params[AGDATA_TARGET_TILE].loc;
-    v1 = run_info->cur_stack_data->params[AGDATA_SCRATCH_OBJ].obj;
+    original_target_obj = run_info->cur_stack_data->params[AGDATA_SCRATCH_OBJ].obj;
 
     if ((run_info->path.flags & 0x01) != 0) {
         return true;
@@ -11147,7 +11214,7 @@ bool anim_goal_projectile_movement_step(AnimRunInfo* run_info)
         if (new_loc != projectile_loc) {
             int range = (int)location_dist(run_info->cur_stack_data->params[AGDATA_ORIGINAL_TILE].loc,
                 obj_field_int64_get(projectile_obj, OBJ_F_LOCATION));
-            combat_projectile_step_resolve(parent_obj, target_obj, target_loc, projectile_obj, range, new_loc, v1);
+            combat_projectile_step_resolve(parent_obj, target_obj, target_loc, projectile_obj, range, new_loc, original_target_obj);
 
             if ((run_info->flags & ANIM_RUN_TERMINATE_REQUESTED) != 0) {
                 return false;
@@ -11410,7 +11477,7 @@ bool anim_goal_death_last_frame_set_or_destroy(AnimRunInfo* run_info)
 // 0x4300D0
 bool anim_fidget_timeevent_process(TimeEvent* timeevent)
 {
-    bool v1 = false;
+    bool stunned_animation_override = false;
     TigRect rect;
     TimeEvent next_timeevent;
     DateTime datetime;
@@ -11470,14 +11537,14 @@ bool anim_fidget_timeevent_process(TimeEvent* timeevent)
                 art_id = tig_art_id_frame_set(art_id, 0);
                 if (magictech_is_under_influence_of(anim_previous_fidget_obj, 172)) {
                     art_id = tig_art_id_anim_set(art_id, TIG_ART_ANIM_STUNNED);
-                    v1 = true;
+                    stunned_animation_override = true;
                 }
 
                 object_set_current_aid(anim_previous_fidget_obj, art_id);
 
                 anim_goal_data_init_with_interrupt(&goal_data, anim_previous_fidget_obj, AG_ANIM_FIDGET);
                 if (!anim_goal_add(&goal_data, NULL)) {
-                    if (v1) {
+                    if (stunned_animation_override) {
                         art_id = tig_art_id_anim_set(art_id, TIG_ART_ANIM_STAND);
                         object_set_current_aid(anim_previous_fidget_obj, art_id);
                     }
@@ -11612,7 +11679,7 @@ void set_always_run(bool value)
 bool anim_goal_movement_update(AnimRunInfo* run_info)
 {
     int64_t obj;
-    bool v1;
+    bool running;
     int64_t loc;
     tig_art_id_t art_id;
     int anim;
@@ -11625,8 +11692,8 @@ bool anim_goal_movement_update(AnimRunInfo* run_info)
     TigArtAnimData art_anim_data;
     int frame;
     int sound_id;
-    int v2;
-    int v3;
+    int jump_phase;
+    int step_state_or_ap_cost;
 
     obj = run_info->params[0].obj;
 
@@ -11656,7 +11723,7 @@ bool anim_goal_movement_update(AnimRunInfo* run_info)
     // FIXME: Useless.
     player_is_local_pc_obj(obj);
 
-    v1 = (run_info->flags & ANIM_RUN_RUNNING) != 0;
+    running = (run_info->flags & ANIM_RUN_RUNNING) != 0;
     run_info->flags |= 0x100000;
 
     loc = obj_field_int64_get(obj, OBJ_F_LOCATION);
@@ -11708,7 +11775,7 @@ bool anim_goal_movement_update(AnimRunInfo* run_info)
         }
     }
 
-    if (v1) {
+    if (running) {
         if (tig_art_id_anim_get(art_id) != TIG_ART_ANIM_RUN) {
             anim_movement_art_select(run_info, obj, &art_id, true, NULL);
         }
@@ -11721,8 +11788,8 @@ bool anim_goal_movement_update(AnimRunInfo* run_info)
             exit(EXIT_FAILURE);
         }
 
-        v2 = anim_run_info[anim_id.slot_num].cur_stack_data->params[AGDATA_SCRATCH_VAL1].data;
-        anim_jump_vertical_offset = 15 - 2 * v2;
+        jump_phase = anim_run_info[anim_id.slot_num].cur_stack_data->params[AGDATA_SCRATCH_VAL1].data;
+        anim_jump_vertical_offset = 15 - 2 * jump_phase;
     }
 
     new_loc = loc;
@@ -11755,7 +11822,7 @@ bool anim_goal_movement_update(AnimRunInfo* run_info)
                 run_info->path.flags &= ~0x02;
                 run_info->path.curr++;
 
-                v3 = false;
+                step_state_or_ap_cost = false;
 
                 if (run_info->path.curr < run_info->path.max) {
                     rot = run_info->path.rotations[run_info->path.curr];
@@ -11767,7 +11834,7 @@ bool anim_goal_movement_update(AnimRunInfo* run_info)
                 }
 
                 if ((spell_flags & OSF_FLOATING) != 0) {
-                    offset_y = 15 - 2 * v2;
+                    offset_y = 15 - 2 * jump_phase;
                 } else {
                     offset_y = 0;
                 }
@@ -11791,7 +11858,7 @@ bool anim_goal_movement_update(AnimRunInfo* run_info)
                     if (tile_is_slippery(new_loc)) {
                         int dexterity = stat_level_get(obj, STAT_DEXTERITY);
                         if (dexterity < 20 && random_between(1, 20) > dexterity + 6) {
-                            v3 = true;
+                            step_state_or_ap_cost = true;
                             run_info->path.curr = run_info->path.max;
                         }
                     }
@@ -11799,7 +11866,7 @@ bool anim_goal_movement_update(AnimRunInfo* run_info)
 
                 if (run_info->path.curr >= run_info->path.max) {
                     int64_t leader = run_info->cur_stack_data->params[AGDATA_TARGET_OBJ].obj;
-                    bool continuing_follow = !v3 && (run_info->path.flags & 0x08) == 0
+                    bool continuing_follow = !step_state_or_ap_cost && (run_info->path.flags & 0x08) == 0
                         && leader != OBJ_HANDLE_NULL && anim_following_leader(run_info, leader)
                         && location_dist(new_loc, obj_field_int64_get(leader, OBJ_F_LOCATION))
                             > run_info->cur_stack_data->params[AGDATA_RANGE_DATA].data;
@@ -11817,7 +11884,7 @@ bool anim_goal_movement_update(AnimRunInfo* run_info)
 
                     anim_jump_vertical_offset = 0;
 
-                    if (v3) {
+                    if (step_state_or_ap_cost) {
                         anim_goal_knockdown(obj);
                     }
 
@@ -11838,14 +11905,14 @@ bool anim_goal_movement_update(AnimRunInfo* run_info)
 
                 follower_navigation_turn_flags(run_info, companion_turns[run_info->id.slot_num].turn.active);
 
-                v3 = 2;
+                step_state_or_ap_cost = 2;
                 if (run_info->current_goal > 0
                     && (run_info->flags & ANIM_RUN_RUNNING) != 0
                     && critter_fatigue_current(obj) > 0) {
-                    v3 = 1;
+                    step_state_or_ap_cost = 1;
                 }
 
-                if (!combat_check_action_points(obj, v3)) {
+                if (!combat_check_action_points(obj, step_state_or_ap_cost)) {
                     anim_interrupt(&(run_info->id), PRIORITY_HIGHEST);
                     return false;
                 }
@@ -11877,7 +11944,7 @@ bool anim_goal_movement_update(AnimRunInfo* run_info)
             }
             follower_navigation_clear_wait(&companion_waits[run_info->id.slot_num], run_info);
             if ((spell_flags & OSF_FLOATING) != 0) {
-                offset_y += 2 * v2 - 15;
+                offset_y += 2 * jump_phase - 15;
             }
 
             object_move_to_location(obj, new_loc, offset_x, offset_y);
@@ -11972,7 +12039,7 @@ int anim_movement_action_points_consume(AnimRunInfo* run_info)
     int64_t obj;
     int action_points;
     tig_art_id_t art_id;
-    int v1;
+    int movement_cost_threshold;
     unsigned int critter_flags;
     unsigned int critter_flags2;
     int fatigue_dam;
@@ -11990,7 +12057,7 @@ int anim_movement_action_points_consume(AnimRunInfo* run_info)
     if (run_info->current_goal > 0 && (run_info->flags & ANIM_RUN_RUNNING) != 0) {
         if (critter_fatigue_current(obj) > 0) {
             if (combat_critter_is_combat_mode_active(obj)) {
-                v1 = 5;
+                movement_cost_threshold = 5;
 
                 run_info->cur_stack_data->params[AGDATA_SCRATCH_VAL4].data++;
 
@@ -11998,17 +12065,17 @@ int anim_movement_action_points_consume(AnimRunInfo* run_info)
                 critter_flags2 = obj_field_int32_get(obj, OBJ_F_CRITTER_FLAGS2);
 
                 if ((critter_flags & OCF_FATIGUE_LIMITING) != 0) {
-                    v1 *= 4;
+                    movement_cost_threshold *= 4;
                 }
 
                 if ((critter_flags2 & OCF2_FATIGUE_DRAINING) != 0) {
-                    v1 /= 4;
-                    if (v1 == 0) {
-                        v1 = 1;
+                    movement_cost_threshold /= 4;
+                    if (movement_cost_threshold == 0) {
+                        movement_cost_threshold = 1;
                     }
                 }
 
-                if (run_info->cur_stack_data->params[AGDATA_SCRATCH_VAL4].data >= v1) {
+                if (run_info->cur_stack_data->params[AGDATA_SCRATCH_VAL4].data >= movement_cost_threshold) {
                     run_info->cur_stack_data->params[AGDATA_SCRATCH_VAL4].data = 0;
 
                     fatigue_dam = critter_fatigue_damage_get(obj);
@@ -12048,7 +12115,7 @@ bool anim_goal_floating_is_inactive(AnimRunInfo* run_info)
 bool anim_goal_floating_offset_update(AnimRunInfo* run_info)
 {
     int64_t obj;
-    int v1;
+    int bobbing_phase;
     int dy;
     int offset_x;
     int offset_y;
@@ -12061,22 +12128,22 @@ bool anim_goal_floating_offset_update(AnimRunInfo* run_info)
         return false;
     }
 
-    v1 = run_info->cur_stack_data->params[AGDATA_SCRATCH_VAL1].data;
-    if (v1 > 0) {
+    bobbing_phase = run_info->cur_stack_data->params[AGDATA_SCRATCH_VAL1].data;
+    if (bobbing_phase > 0) {
         dy = 2;
-        v1++;
-        if (v1 > 5) {
-            v1 = -1;
+        bobbing_phase++;
+        if (bobbing_phase > 5) {
+            bobbing_phase = -1;
         }
     } else {
         dy = -2;
-        v1--;
-        if (v1 < -5) {
-            v1 = 1;
+        bobbing_phase--;
+        if (bobbing_phase < -5) {
+            bobbing_phase = 1;
         }
     }
 
-    run_info->cur_stack_data->params[AGDATA_SCRATCH_VAL1].data = v1;
+    run_info->cur_stack_data->params[AGDATA_SCRATCH_VAL1].data = bobbing_phase;
     offset_x = obj_field_int32_get(obj, OBJ_F_OFFSET_X);
     offset_y = obj_field_int32_get(obj, OBJ_F_OFFSET_Y);
     object_set_offset(obj, offset_x, offset_y + dy);
@@ -13092,6 +13159,18 @@ bool AGbeginAnimAttack(AnimRunInfo* run_info)
         delay = 800;
     }
     run_info->pause_time.milliseconds = delay;
+    tig_performance_trace(TIG_PERF_EVENT_ATTACK_BEGIN, (Uint64)source_obj,
+        ((Uint64)run_info->id.unique_id << 32) | (unsigned int)run_info->id.slot_num,
+        delay, combat_turn_based_is_active());
+    if (tig_performance_is_enabled()) {
+        Uint64 correlation = ((Uint64)run_info->id.unique_id << 32) | (unsigned int)run_info->id.slot_num;
+        tig_performance_trace(TIG_PERF_EVENT_ATTACK_STATS, (Uint64)source_obj, correlation,
+            stat_level_get(source_obj, STAT_SPEED), item_weapon_magic_speed(weapon_obj, source_obj));
+        if (tig_art_anim_data(art_id, &art_anim_data) == TIG_OK) {
+            tig_performance_trace(TIG_PERF_EVENT_ATTACK_ART, (Uint64)source_obj, correlation,
+                art_anim_data.num_frames, art_anim_data.action_frame);
+        }
+    }
 
     if ((obj_field_int32_get(source_obj, OBJ_F_SPELL_FLAGS) & OSF_INVISIBLE) != 0
         && player_is_local_pc_obj(source_obj)) {
@@ -13156,6 +13235,9 @@ bool AGupdateAnimAttack(AnimRunInfo* run_info)
 
     frame = tig_art_id_frame_get(art_id);
     if (frame == art_anim_data.num_frames - 1) {
+        tig_performance_trace(TIG_PERF_EVENT_ATTACK_END, (Uint64)obj,
+            ((Uint64)run_info->id.unique_id << 32) | (unsigned int)run_info->id.slot_num,
+            frame, combat_turn_based_is_active());
         // FIXME: Useless.
         tig_art_type(art_id);
 
@@ -13679,7 +13761,7 @@ bool anim_goal_move_to_tile(int64_t obj, int64_t loc)
         pkt.modify_data.id = anim_current_request_id;
         pkt.modify_data.flags = run_info->flags;
         pkt.modify_data.path_flags = run_info->path.flags;
-        pkt.modify_data.field_14 = 5;
+        pkt.modify_data.reserved_movement_code = 5;
         pkt.modify_data.loc = loc;
         pkt.modify_data.path_curr = run_info->path.curr;
         pkt.modify_data.location = obj_field_int64_get(self_obj, OBJ_F_LOCATION);
@@ -13688,7 +13770,7 @@ bool anim_goal_move_to_tile(int64_t obj, int64_t loc)
         pkt.offset_y = obj_field_int32_get(self_obj, OBJ_F_OFFSET_Y);
 
         if (tig_net_is_host()) {
-            run_info->id.field_8++;
+            run_info->id.reserved_id++;
         }
 
         tig_net_send_app_all(&pkt, sizeof(pkt));
@@ -13740,7 +13822,7 @@ void anim_movement_route_interrupt(const AnimID* id)
 }
 
 // 0x433A00
-bool anim_move_to_tile_request(int64_t obj, int64_t loc, bool a3)
+bool anim_move_to_tile_request(int64_t obj, int64_t loc, bool force_new_goal)
 {
     if (player_movement_route.actor == obj) movement_route_clear(&player_movement_route);
     AnimID anim_id;
@@ -13776,7 +13858,7 @@ bool anim_move_to_tile_request(int64_t obj, int64_t loc, bool a3)
         return anim_run_to_tile_request(obj, loc);
     }
 
-    if (anim_is_current_goal_type(obj, AG_MOVE_TO_TILE, &anim_current_request_id) || a3) {
+    if (anim_is_current_goal_type(obj, AG_MOVE_TO_TILE, &anim_current_request_id) || force_new_goal) {
         run_info = &(anim_run_info[anim_current_request_id.slot_num]);
         if (run_info->goals[0].params[AGDATA_TARGET_TILE].loc == loc) {
             return true;
@@ -13886,17 +13968,17 @@ bool anim_goal_run_to_tile(int64_t obj, int64_t loc)
         pkt.modify_data.id = anim_current_request_id;
         pkt.modify_data.flags = run_info->flags;
         pkt.modify_data.path_flags = run_info->path.flags;
-        pkt.modify_data.field_14 = 5;
+        pkt.modify_data.reserved_movement_code = 5;
         pkt.modify_data.loc = loc;
         pkt.modify_data.path_curr = run_info->path.curr;
-        pkt.field_40 = run_info->extra_target_tile;
+        pkt.extra_target_location = run_info->extra_target_tile;
         pkt.modify_data.location = obj_field_int64_get(self_obj, OBJ_F_LOCATION);
         pkt.modify_data.current_aid = obj_field_int32_get(obj, OBJ_F_CURRENT_AID);
         pkt.offset_x = obj_field_int32_get(self_obj, OBJ_F_OFFSET_X);
         pkt.offset_y = obj_field_int32_get(self_obj, OBJ_F_OFFSET_Y);
 
         if (tig_net_is_host()) {
-            run_info->id.field_8++;
+            run_info->id.reserved_id++;
         }
 
         tig_net_send_app_all(&pkt, sizeof(pkt));
@@ -14001,9 +14083,9 @@ bool anim_goal_move_near_tile(int64_t source_obj, int64_t target_loc, int range)
         pkt.modify_data.path_flags = run_info->path.flags;
 
         pkt.type = 8;
-        pkt.modify_data.field_14 = 5;
+        pkt.modify_data.reserved_movement_code = 5;
         pkt.modify_data.loc = target_loc;
-        pkt.field_40 = run_info->extra_target_tile;
+        pkt.extra_target_location = run_info->extra_target_tile;
         pkt.modify_data.path_curr = run_info->path.curr;
         pkt.modify_data.location = obj_field_int64_get(obj, OBJ_F_LOCATION);
         pkt.modify_data.current_aid = obj_field_int32_get(obj, OBJ_F_CURRENT_AID);
@@ -14011,7 +14093,7 @@ bool anim_goal_move_near_tile(int64_t source_obj, int64_t target_loc, int range)
         pkt.offset_y = obj_field_int32_get(obj, OBJ_F_OFFSET_Y);
 
         if (tig_net_is_host()) {
-            run_info->id.field_8++;
+            run_info->id.reserved_id++;
         }
 
         tig_net_send_app_all(&pkt, sizeof(pkt));
@@ -14080,9 +14162,9 @@ bool anim_goal_run_near_tile(int64_t source_obj, int64_t target_loc, int range)
         pkt.modify_data.path_flags = run_info->path.flags;
 
         pkt.type = 8;
-        pkt.modify_data.field_14 = 5;
+        pkt.modify_data.reserved_movement_code = 5;
         pkt.modify_data.loc = target_loc;
-        pkt.field_40 = run_info->extra_target_tile;
+        pkt.extra_target_location = run_info->extra_target_tile;
         pkt.modify_data.path_curr = run_info->path.curr;
         pkt.modify_data.location = obj_field_int64_get(obj, OBJ_F_LOCATION);
         pkt.modify_data.current_aid = obj_field_int32_get(obj, OBJ_F_CURRENT_AID);
@@ -14090,7 +14172,7 @@ bool anim_goal_run_near_tile(int64_t source_obj, int64_t target_loc, int range)
         pkt.offset_y = obj_field_int32_get(obj, OBJ_F_OFFSET_Y);
 
         if (tig_net_is_host()) {
-            run_info->id.field_8++;
+            run_info->id.reserved_id++;
         }
 
         tig_net_send_app_all(&pkt, sizeof(pkt));
@@ -14109,7 +14191,7 @@ bool anim_goal_follow_obj(int64_t source_obj, int64_t target_obj)
 {
     AnimID anim_id;
     AnimRunInfo* run_info;
-    bool v1 = false;
+    bool replace_existing_follow = false;
     AnimGoalData goal_data;
     int range;
     int64_t source_loc;
@@ -14131,7 +14213,7 @@ bool anim_goal_follow_obj(int64_t source_obj, int64_t target_obj)
                 return false;
             }
 
-            v1 = true;
+            replace_existing_follow = true;
         }
     }
 
@@ -14179,7 +14261,7 @@ bool anim_goal_follow_obj(int64_t source_obj, int64_t target_obj)
         }
     }
 
-    if (v1) {
+    if (replace_existing_follow) {
         anim_interrupt(&anim_id, PRIORITY_HIGHEST);
     }
 
@@ -14701,12 +14783,12 @@ bool anim_goal_animate_stunned(int64_t obj)
 }
 
 // 0x435870
-bool anim_goal_projectile(int64_t source_obj, int64_t missile_obj, tig_art_id_t missile_art_id, int a4, int a5, int64_t target_obj, int64_t target_loc, int64_t weapon_obj)
+bool anim_goal_projectile(int64_t source_obj, int64_t missile_obj, tig_art_id_t missile_art_id, int offset_x, int offset_y, int64_t target_obj, int64_t target_loc, int64_t weapon_obj)
 {
     AnimGoalData goal_data;
     int64_t loc;
     int rotation;
-    AnimFxListEntry* v1;
+    AnimFxListEntry* weapon_fx;
     int projectile_speed;
 
     if (missile_obj == OBJ_HANDLE_NULL) {
@@ -14737,8 +14819,8 @@ bool anim_goal_projectile(int64_t source_obj, int64_t missile_obj, tig_art_id_t 
 
     if (weapon_obj != OBJ_HANDLE_NULL
         && obj_field_int32_get(weapon_obj, OBJ_F_TYPE) == OBJ_TYPE_WEAPON
-        && animfx_id_get(&weapon_eye_candies, 5 * proto_number_from_instance(weapon_obj) - 30143, &v1)) {
-        projectile_speed = v1->projectile_speed;
+        && animfx_id_get(&weapon_eye_candies, 5 * proto_number_from_instance(weapon_obj) - 30143, &weapon_fx)) {
+        projectile_speed = weapon_fx->projectile_speed;
     } else {
         projectile_speed = 0;
     }
@@ -14752,7 +14834,7 @@ bool anim_goal_projectile(int64_t source_obj, int64_t missile_obj, tig_art_id_t 
 }
 
 // 0x435A00
-bool anim_projectile_return_to_parent(int64_t proj_obj, int64_t a2, int64_t a3)
+bool anim_projectile_return_to_parent(int64_t proj_obj, int64_t target_location, int64_t scratch_obj)
 {
     AnimID anim_id;
     AnimRunInfo* run_info;
@@ -14766,8 +14848,8 @@ bool anim_projectile_return_to_parent(int64_t proj_obj, int64_t a2, int64_t a3)
     }
 
     run_info = &(anim_run_info[anim_id.slot_num]);
-    run_info->goals[0].params[AGDATA_TARGET_TILE].loc = a2;
-    run_info->goals[0].params[AGDATA_SCRATCH_OBJ].obj = a3;
+    run_info->goals[0].params[AGDATA_TARGET_TILE].loc = target_location;
+    run_info->goals[0].params[AGDATA_SCRATCH_OBJ].obj = scratch_obj;
     run_info->goals[0].params[AGDATA_TARGET_OBJ].obj = run_info->goals[0].params[AGDATA_PARENT_OBJ].obj;
     run_info->path.flags = 1;
     run_info->flags &= ~ANIM_RUN_ANIMATION_ACTIVE;
@@ -15033,7 +15115,7 @@ bool anim_pick_locks_goal_start(int64_t obj, int64_t target_obj, int64_t item_ob
     TigArtAnimData art_anim_data;
     tig_art_id_t art_id;
     int frame;
-    int v1;
+    int lockpick_duration;
 
     if (!anim_action_points_or_fatigue_check(obj, 4)) {
         return false;
@@ -15060,12 +15142,12 @@ bool anim_pick_locks_goal_start(int64_t obj, int64_t target_obj, int64_t item_ob
         frame = 1;
     }
 
-    v1 = 10 * art_anim_data.fps / frame + 1;
+    lockpick_duration = 10 * art_anim_data.fps / frame + 1;
     if (tech_skill_training_get(obj, TECH_SKILL_PICK_LOCKS) >= TRAINING_APPRENTICE) {
-        v1 /= 2;
+        lockpick_duration /= 2;
     }
 
-    goal_data.params[AGDATA_SCRATCH_VAL3].data = v1;
+    goal_data.params[AGDATA_SCRATCH_VAL3].data = lockpick_duration;
 
     if (!anim_goal_add(&goal_data, &anim_current_request_id)) {
         return false;
@@ -15129,8 +15211,8 @@ void anim_overlapping_critters_spread_out(int64_t obj)
     ObjectNode* new_node;
     ObjectNode* npc_head = NULL;
     ObjectNode* pc_head = NULL;
-    int64_t v1 = OBJ_HANDLE_NULL;
-    int64_t v2 = OBJ_HANDLE_NULL;
+    int64_t stationary_anchor = OBJ_HANDLE_NULL;
+    int64_t moving_anchor = OBJ_HANDLE_NULL;
     int cnt = 0;
 
     ASSERT(obj != OBJ_HANDLE_NULL); // 16752, "sourceObj != OBJ_HANDLE_NULL"
@@ -15164,20 +15246,20 @@ void anim_overlapping_critters_spread_out(int64_t obj)
                         new_node->next = npc_head;
                         npc_head = new_node;
 
-                        if (v1 == OBJ_HANDLE_NULL) {
-                            if (v2 == OBJ_HANDLE_NULL || v2 > obj_node->obj) {
-                                v2 = obj_node->obj;
+                        if (stationary_anchor == OBJ_HANDLE_NULL) {
+                            if (moving_anchor == OBJ_HANDLE_NULL || moving_anchor > obj_node->obj) {
+                                moving_anchor = obj_node->obj;
                             }
                         }
                     } else {
                         new_node->next = pc_head;
                         pc_head = new_node;
 
-                        if (v1 == OBJ_HANDLE_NULL) {
-                            v1 = obj_node->obj;
+                        if (stationary_anchor == OBJ_HANDLE_NULL) {
+                            stationary_anchor = obj_node->obj;
                         } else {
-                            if (v1 > obj_node->obj) {
-                                v1 = obj_node->obj;
+                            if (stationary_anchor > obj_node->obj) {
+                                stationary_anchor = obj_node->obj;
                             }
                         }
                     }
@@ -15185,14 +15267,14 @@ void anim_overlapping_critters_spread_out(int64_t obj)
                 obj_node = obj_node->next;
             }
 
-            if (v1 == OBJ_HANDLE_NULL) {
-                v1 = v2;
+            if (stationary_anchor == OBJ_HANDLE_NULL) {
+                stationary_anchor = moving_anchor;
             }
 
             obj_node = npc_head;
             while (obj_node != NULL) {
-                if (v1 != obj_node->obj) {
-                    anim_goal_please_move(v1, obj_node->obj);
+                if (stationary_anchor != obj_node->obj) {
+                    anim_goal_please_move(stationary_anchor, obj_node->obj);
                 }
                 obj_node = obj_node->next;
             }
@@ -15202,7 +15284,7 @@ void anim_overlapping_critters_spread_out(int64_t obj)
                 && tig_net_is_host()) {
                 obj_node = pc_head;
                 while (obj_node != NULL) {
-                    anim_goal_please_move(v1, obj_node->obj);
+                    anim_goal_please_move(stationary_anchor, obj_node->obj);
                     obj_node = obj_node->next;
                 }
             }
@@ -15372,16 +15454,16 @@ void turn_on_running(AnimID anim_id)
             pkt.type = 8;
             pkt.modify_data.flags = run_info->flags;
             pkt.modify_data.path_flags = run_info->path.flags;
-            pkt.modify_data.field_14 = -1;
+            pkt.modify_data.reserved_movement_code = -1;
             pkt.modify_data.path_curr = run_info->path.curr;
             pkt.modify_data.location = obj_field_int64_get(obj, OBJ_F_LOCATION);
             pkt.modify_data.current_aid = obj_field_int32_get(obj, OBJ_F_CURRENT_AID);
             pkt.offset_x = obj_field_int32_get(obj, OBJ_F_OFFSET_X);
             pkt.offset_y = obj_field_int32_get(obj, OBJ_F_OFFSET_Y);
-            pkt.field_40 = run_info->extra_target_tile;
+            pkt.extra_target_location = run_info->extra_target_tile;
 
             if (tig_net_is_host()) {
-                run_info->id.field_8++;
+                run_info->id.reserved_id++;
             }
 
             tig_net_send_app_all(&pkt, sizeof(pkt));
@@ -15462,16 +15544,16 @@ void turn_on_flags(AnimID anim_id, unsigned int flags1, unsigned int flags2)
         pkt.type = 8;
         pkt.modify_data.flags = run_info->flags;
         pkt.modify_data.path_flags = run_info->path.flags;
-        pkt.modify_data.field_14 = -1;
+        pkt.modify_data.reserved_movement_code = -1;
         pkt.modify_data.path_curr = run_info->path.curr;
         pkt.modify_data.location = obj_field_int64_get(obj, OBJ_F_LOCATION);
         pkt.modify_data.current_aid = obj_field_int32_get(obj, OBJ_F_CURRENT_AID);
         pkt.offset_x = obj_field_int32_get(obj, OBJ_F_OFFSET_X);
         pkt.offset_y = obj_field_int32_get(obj, OBJ_F_OFFSET_Y);
-        pkt.field_40 = run_info->extra_target_tile;
+        pkt.extra_target_location = run_info->extra_target_tile;
 
         if (tig_net_is_host()) {
-            run_info->id.field_8++;
+            run_info->id.reserved_id++;
         }
 
         tig_net_send_app_all(&pkt, sizeof(pkt));
@@ -15517,13 +15599,13 @@ void anim_speed_recalc(int64_t obj)
 }
 
 // 0x4372B0
-bool anim_root_goal_parent_set_legacy(int64_t a1, int64_t parent_obj)
+bool anim_root_goal_parent_set_legacy(int64_t obj, int64_t parent_obj)
 {
     int index;
     AnimRunInfo* run_info;
     int goal_index;
 
-    index = anim_find_first(a1);
+    index = anim_find_first(obj);
     if (index == -1) {
         return false;
     }
@@ -15540,7 +15622,7 @@ bool anim_root_goal_parent_set_legacy(int64_t a1, int64_t parent_obj)
             } while (goal_index != 0);
         }
 
-        index = anim_find_next(index, a1);
+        index = anim_find_next(index, obj);
     }
 
     return true;
@@ -15587,7 +15669,7 @@ void anim_modify_data_init(AGModifyData* modify_data)
     modify_data->location = 0;
     modify_data->flags = 0;
     modify_data->path_flags = 0;
-    modify_data->field_14 = -1;
+    modify_data->reserved_movement_code = -1;
     modify_data->current_aid = TIG_ART_ID_INVALID;
     modify_data->path_curr = -1;
 }
@@ -15671,13 +15753,13 @@ int anim_attack_fps_calculate(int64_t obj, tig_art_id_t art_id, int speed)
     TigArtAnimData art_anim_data;
     int fps;
     int art_type;
-    int v1;
+    int weapon_animation_bias;
     int body_type;
     int anim;
     int weapon_type;
-    int v12;
-    int v13;
-    int v14;
+    int normal_fps;
+    int minimum_fps;
+    int maximum_fps;
 
     if (tig_art_anim_data(art_id, &art_anim_data) == TIG_OK) {
         fps = art_anim_data.fps;
@@ -15696,12 +15778,12 @@ int anim_attack_fps_calculate(int64_t obj, tig_art_id_t art_id, int speed)
         return fps;
     }
 
-    v1 = 0;
+    weapon_animation_bias = 0;
     if (art_type == TIG_ART_TYPE_CRITTER) {
         body_type = tig_art_critter_id_body_type_get(art_id);
         if (body_type == TIG_ART_CRITTER_BODY_TYPE_DWARF
             || body_type == TIG_ART_CRITTER_BODY_TYPE_HALFLING) {
-            v1 = 4;
+            weapon_animation_bias = 4;
         }
     }
 
@@ -15709,115 +15791,115 @@ int anim_attack_fps_calculate(int64_t obj, tig_art_id_t art_id, int speed)
     weapon_type = tig_art_critter_id_weapon_get(art_id);
     switch (anim) {
     case TIG_ART_ANIM_WALK:
-        v12 = v1 + 17;
-        v13 = v1 + 6;
-        v14 = v1 + 30;
+        normal_fps = weapon_animation_bias + 17;
+        minimum_fps = weapon_animation_bias + 6;
+        maximum_fps = weapon_animation_bias + 30;
         break;
     case TIG_ART_ANIM_STEALTH_WALK:
-        v12 = v1 + 10;
-        v13 = v1 + 4;
-        v14 = v1 + 16;
+        normal_fps = weapon_animation_bias + 10;
+        minimum_fps = weapon_animation_bias + 4;
+        maximum_fps = weapon_animation_bias + 16;
         break;
     case TIG_ART_ANIM_RUN:
-        v12 = v1 + 20;
-        v13 = v1 + 8;
-        v14 = v1 + 30;
+        normal_fps = weapon_animation_bias + 20;
+        minimum_fps = weapon_animation_bias + 8;
+        maximum_fps = weapon_animation_bias + 30;
         break;
     case TIG_ART_ANIM_ATTACK:
         switch (weapon_type) {
         case TIG_ART_WEAPON_TYPE_UNARMED:
         case TIG_ART_WEAPON_TYPE_SWORD:
-            v12 = 15;
-            v13 = 7;
-            v14 = 23;
+            normal_fps = 15;
+            minimum_fps = 7;
+            maximum_fps = 23;
             break;
         case TIG_ART_WEAPON_TYPE_DAGGER:
         case TIG_ART_WEAPON_TYPE_BOW:
-            v12 = 10;
-            v13 = 6;
-            v14 = 14;
+            normal_fps = 10;
+            minimum_fps = 6;
+            maximum_fps = 14;
             break;
         case TIG_ART_WEAPON_TYPE_AXE:
         case TIG_ART_WEAPON_TYPE_MACE:
         case TIG_ART_WEAPON_TYPE_TWO_HANDED_SWORD:
-            v12 = 14;
-            v13 = 8;
-            v14 = 20;
+            normal_fps = 14;
+            minimum_fps = 8;
+            maximum_fps = 20;
             break;
         case TIG_ART_WEAPON_TYPE_PISTOL:
-            v12 = 8;
-            v13 = 3;
-            v14 = 12;
+            normal_fps = 8;
+            minimum_fps = 3;
+            maximum_fps = 12;
             break;
         case TIG_ART_WEAPON_TYPE_RIFLE:
-            v12 = 6;
-            v13 = 3;
-            v14 = 10;
+            normal_fps = 6;
+            minimum_fps = 3;
+            maximum_fps = 10;
             break;
         case TIG_ART_WEAPON_TYPE_STAFF:
-            v12 = 12;
-            v13 = 8;
-            v14 = 16;
+            normal_fps = 12;
+            minimum_fps = 8;
+            maximum_fps = 16;
             break;
         default:
-            v12 = -1;
+            normal_fps = -1;
             break;
         }
         break;
     case TIG_ART_ANIM_ATTACK_LOW:
         switch (weapon_type) {
         case TIG_ART_WEAPON_TYPE_UNARMED:
-            v12 = 13;
-            v13 = 8;
-            v14 = 18;
+            normal_fps = 13;
+            minimum_fps = 8;
+            maximum_fps = 18;
             break;
         case TIG_ART_WEAPON_TYPE_DAGGER:
         case TIG_ART_WEAPON_TYPE_BOW:
         case TIG_ART_WEAPON_TYPE_STAFF:
-            v12 = 10;
-            v13 = 6;
-            v14 = 14;
+            normal_fps = 10;
+            minimum_fps = 6;
+            maximum_fps = 14;
             break;
         case TIG_ART_WEAPON_TYPE_SWORD:
-            v12 = 14;
-            v13 = 8;
-            v14 = 20;
+            normal_fps = 14;
+            minimum_fps = 8;
+            maximum_fps = 20;
             break;
         case TIG_ART_WEAPON_TYPE_AXE:
         case TIG_ART_WEAPON_TYPE_MACE:
-            v12 = 11;
-            v13 = 7;
-            v14 = 15;
+            normal_fps = 11;
+            minimum_fps = 7;
+            maximum_fps = 15;
             break;
         case TIG_ART_WEAPON_TYPE_PISTOL:
         case TIG_ART_WEAPON_TYPE_RIFLE:
-            v12 = 6;
-            v13 = 3;
-            v14 = 10;
+            normal_fps = 6;
+            minimum_fps = 3;
+            maximum_fps = 10;
             break;
         case TIG_ART_WEAPON_TYPE_TWO_HANDED_SWORD:
-            v12 = 13;
-            v13 = 9;
-            v14 = 17;
+            normal_fps = 13;
+            minimum_fps = 9;
+            maximum_fps = 17;
             break;
         default:
-            v12 = -1;
+            normal_fps = -1;
             break;
         }
         break;
     default:
-        v12 = -1;
+        normal_fps = -1;
         break;
     }
 
-    if (v12 != -1) {
+    if (normal_fps != -1) {
         if (speed < 8) {
-            fps = v13 + speed * (v12 - v13) / 8;
+            fps = minimum_fps + speed * (normal_fps - minimum_fps) / 8;
         } else if (speed > 8) {
             if (speed < 30) {
-                fps = v12 + speed * (v14 - v12) / 30;
+                fps = normal_fps + speed * (maximum_fps - normal_fps) / 30;
             } else {
-                fps = v14;
+                fps = maximum_fps;
             }
         }
     }
@@ -15849,11 +15931,11 @@ bool anim_path_step_coordinates_get(AnimRunInfo* run_info, int end, int64_t* x, 
 }
 
 // 0x437CF0
-bool anim_reserved_predicate_stub(int a1, int a2, int a3)
+bool anim_reserved_predicate_stub(int reserved_first, int reserved_second, int reserved_third)
 {
-    (void)a1;
-    (void)a2;
-    (void)a3;
+    (void)reserved_first;
+    (void)reserved_second;
+    (void)reserved_third;
 
     return true;
 }

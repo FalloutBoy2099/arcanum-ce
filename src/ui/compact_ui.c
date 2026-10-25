@@ -17,13 +17,13 @@
 typedef struct CompactUiComponent CompactUiComponent;
 
 typedef bool (*CompactUiComponentInit)(CompactUiComponent* comp);
-typedef void (*CompactUiComponentDraw)(int a1);
+typedef void (*CompactUiComponentDraw)(int refresh_flags);
 
 typedef struct CompactUiComponent {
     /* 0000 */ const char* name;
     /* 0004 */ tig_window_handle_t window_handle;
     /* 0008 */ CompactUiComponentInit init;
-    /* 000C */ void (*field_C)(void);
+    /* 000C */ void (*reserved_slot_1)(void);
     /* 0010 */ TigWindowMessageFilterFunc message_filter;
     /* 0014 */ CompactUiComponentDraw draw;
     /* 0018 */ TigRect rect;
@@ -37,12 +37,12 @@ typedef struct CompactUiComponent {
 static bool compact_ui_health_bar_init(CompactUiComponent* comp);
 static void compact_ui_health_bar_exit_stub(void);
 static bool compact_ui_health_bar_message_filter(TigMessage* msg);
-static void compact_ui_health_bar_draw(int a1);
+static void compact_ui_health_bar_draw(int refresh_flags);
 static void compact_ui_rect_fill(tig_window_handle_t window_handle, TigRect* rect, int color);
 static bool compact_ui_hotkey_bar_init(CompactUiComponent* comp);
 static void compact_ui_hotkey_bar_exit_stub(void);
 static bool compact_ui_hotkey_bar_message_filter(TigMessage* msg);
-static void compact_ui_hotkey_bar_draw(int a1);
+static void compact_ui_hotkey_bar_draw(int refresh_flags);
 
 // 0x5CA198
 static tig_window_handle_t compact_ui_message_window_handle = TIG_WINDOW_HANDLE_INVALID;
@@ -316,7 +316,7 @@ bool compact_ui_health_bar_message_filter(TigMessage* msg)
 }
 
 // 0x569070
-void compact_ui_health_bar_draw(int a1)
+void compact_ui_health_bar_draw(int refresh_flags)
 {
     TigRect rect1;
     TigRect rect2;
@@ -326,7 +326,7 @@ void compact_ui_health_bar_draw(int a1)
     int64_t pc_obj;
     int poison;
 
-    (void)a1;
+    (void)refresh_flags;
 
     rect1.x = 0;
     rect1.y = 0;
@@ -450,7 +450,7 @@ bool compact_ui_hotkey_bar_message_filter(TigMessage* msg)
 }
 
 // 0x5695A0
-void compact_ui_hotkey_bar_draw(int a1)
+void compact_ui_hotkey_bar_draw(int refresh_flags)
 {
-    (void)a1;
+    (void)refresh_flags;
 }

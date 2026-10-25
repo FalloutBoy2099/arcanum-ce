@@ -1,4 +1,5 @@
 #include "game/gfade.h"
+#include <tig/performance.h>
 
 #include "game/li.h"
 
@@ -55,10 +56,12 @@ void gfade_resize(GameResizeInfo* resize_info)
  */
 void gfade_run(FadeData* fade_data)
 {
+    Uint64 start = tig_performance_begin();
     tig_video_fade(fade_data->color,
         fade_data->steps,
         fade_data->duration,
         fade_data->flags);
+    tig_performance_end_detail(TIG_PERF_VISUAL_FADE, start, (fade_data->flags & FADE_IN) != 0 ? "fade_in" : "fade_out");
 }
 
 /**

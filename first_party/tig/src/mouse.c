@@ -14,6 +14,9 @@ static void tig_mouse_cursor_fallback(void);
 static bool tig_mouse_cursor_create_video_buffers(tig_art_id_t art_id, int dx, int dy);
 static bool tig_mouse_cursor_destroy_video_buffers(void);
 static bool tig_mouse_cursor_set_art_frame(tig_art_id_t art_id, int x, int y);
+static void tig_mouse_cursor_revision_update(void);
+static Uint64 tig_mouse_cursor_revision;
+static bool tig_mouse_cursor_revision_dirty = true;
 static void tig_mouse_cursor_animate(void);
 
 // 0x5BE840
@@ -205,6 +208,8 @@ void tig_mouse_device_exit(void)
 // 0x4FF350
 void tig_mouse_set_active(bool active)
 {
+    if (tig_mouse_active != active) tig_window_invalidate_rect(&tig_mouse_state.frame);
+    if (!active) tig_video_gpu_cursor_clear();
     tig_mouse_active = active;
 }
 
@@ -349,6 +354,7 @@ int tig_mouse_get_state(TigMouseState* mouse_state)
 // 0x4FFA30
 int tig_mouse_hide(void)
 {
+    tig_video_gpu_cursor_clear();
     if ((tig_mouse_state.flags & TIG_MOUSE_STATE_HIDDEN) == 0) {
         tig_mouse_state.flags |= TIG_MOUSE_STATE_HIDDEN;
         tig_window_invalidate_rect(&(tig_mouse_state.frame));
@@ -404,6 +410,9 @@ void tig_mouse_display(void)
     // This isn't needed in CE because the mouse cursor is composited directly
     // over the separate offscreen surface, which the window system has already
     // updated by the time this function is called.
+    if (tig_mouse_cursor_revision_dirty && tig_video_gpu_cursor_is_enabled()) tig_mouse_cursor_revision_update();
+    if (tig_video_gpu_cursor_prepare(tig_mouse_cursor_video_buffer, tig_mouse_cursor_art_id,
+            tig_mouse_cursor_revision, &src_rect, &dst_rect)) return;
     tig_video_blit(tig_mouse_cursor_video_buffer,
         &src_rect,
         &dst_rect);
@@ -443,6 +452,30 @@ void tig_mouse_cursor_refresh(void)
         // white dot.
         tig_mouse_cursor_fallback();
     }
+    tig_mouse_cursor_revision_update();
+}
+
+static void tig_mouse_cursor_revision_update(void)
+{
+    tig_mouse_cursor_revision_dirty = true;
+    if (!tig_video_gpu_cursor_is_enabled()) return;
+    TigVideoBufferData data;
+    if (tig_video_buffer_lock(tig_mouse_cursor_video_buffer) != TIG_OK) return;
+    if (tig_video_buffer_data(tig_mouse_cursor_video_buffer, &data) != TIG_OK || data.bpp != 32) {
+        tig_video_buffer_unlock(tig_mouse_cursor_video_buffer);
+        return;
+    }
+    Uint64 hash = 14695981039346656037ULL;
+    for (int y = 0; y < data.height; y++) {
+        const Uint32* row = (const Uint32*)((const Uint8*)data.pixels + y * data.pitch);
+        for (int x = 0; x < data.width; x++) {
+            hash ^= row[x] & 0xFFFFFF;
+            hash *= 1099511628211ULL;
+        }
+    }
+    tig_mouse_cursor_revision = hash;
+    tig_mouse_cursor_revision_dirty = false;
+    tig_video_buffer_unlock(tig_mouse_cursor_video_buffer);
 }
 
 // 0x4FFBF0
@@ -454,6 +487,7 @@ void tig_mouse_cursor_fallback(void)
             *(uint32_t*)video_buffer_data.pixels = (uint32_t)tig_color_make(255, 255, 255);
         }
         tig_video_buffer_unlock(tig_mouse_cursor_video_buffer);
+        tig_mouse_cursor_revision_update();
     }
 }
 
@@ -496,6 +530,7 @@ bool tig_mouse_cursor_create_video_buffers(tig_art_id_t art_id, int dx, int dy)
 // 0x4FFEA0
 bool tig_mouse_cursor_destroy_video_buffers(void)
 {
+    tig_video_gpu_cursor_clear();
     tig_video_buffer_destroy(tig_mouse_cursor_video_buffer);
     return true;
 }
@@ -799,6 +834,7 @@ int tig_mouse_cursor_overlay(tig_art_id_t art_id, int x, int y)
         tig_mouse_state.frame.width += width;
         tig_mouse_state.frame.height += height;
     }
+    tig_mouse_cursor_revision_update();
 
     if (!hidden) {
         tig_mouse_show();

@@ -19,6 +19,7 @@ typedef struct TigBmp {
 
 int tig_bmp_create(TigBmp* bmp);
 int tig_bmp_destroy(TigBmp* bmp);
+int tig_bmp_save_surface(SDL_Surface* surface, const TigRect* rect, const char* file_name);
 
 #ifdef __cplusplus
 }

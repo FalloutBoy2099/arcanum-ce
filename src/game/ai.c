@@ -1,9 +1,12 @@
 #include "game/ai.h"
+#include <tig/performance.h>
 
 #include "game/anim.h"
 #include "game/anim_private.h"
 #include "game/combat.h"
 #include "game/critter.h"
+#include "game/gamelib.h"
+#include "game/ai_utility_adapter.h"
 #include "game/descriptions.h"
 #include "game/dialog.h"
 #include "game/highres_config.h"
@@ -34,43 +37,6 @@
 
 #define CLOCKWORK_DECOY 6719
 
-#define AI_PARAMS_MAX 17
-
-typedef union AiParams {
-    struct {
-        /* 0000 */ int flee_hit_points_percent; // Percentage of NPC hit points below which NPC will flee.
-        /* 0004 */ int flee_party_size_threshold; // Number of people besides PC beyond which NPC will flee.
-        /* 0008 */ int flee_level_difference; // Number of levels above NPC beyond which NPC will flee.
-        /* 000C */ int leader_hit_points_prevent_flee_percent; // Percentage of PC hit points below which NPC will never flee.
-        /* 0010 */ int flee_distance_tiles; // How far to flee, in tiles.
-        /* 0014 */ int minimum_follow_reaction; // The reaction level at which the NPC will not follow the PC.
-        /* 0018 */ int maximum_good_alignment_difference; // How far PC align is above NPC align before NPC wont follow.
-        /* 001C */ int maximum_evil_alignment_difference; // How far PC align is below NPC align before NPC wont follow.
-        /* 0020 */ int maximum_follower_level_difference; // How many levels the NPC can be above the PC and still join.
-        /* 0024 */ int friendly_hit_reaction_penalty; // How much a non-accidental hit will lower a follower's reaction.
-        /* 0028 */ int attack_reaction_threshold; // NPC will attack if his reaction is below this.
-        /* 002C */ int attack_alignment_difference; // How different alignments can be before non-follower NPC attacks.
-        /* 0030 */ int protected_good_alignment_threshold; // Alignment of target at (or above) which the good-aligned follower NPC will not attack.
-        /* 0034 */ int defensive_spell_chance; // Chance of throwing defensive spell (as opposed to offensive).
-        /* 0038 */ int healing_spell_chance; // Chance of throwing a healing spell in combat.
-        /* 003C */ int minimum_combat_distance; // Minimum distance in combat.
-        /* 0040 */ int can_open_portals; // The NPC can open portals if this is nonzero and cannot if it is zero.
-    };
-    int values[AI_PARAMS_MAX];
-} AiParams;
-
-typedef struct Ai {
-    /* 0000 */ int64_t obj;
-    /* 0008 */ int64_t danger_source;
-    /* 0010 */ int danger_type;
-    /* 0014 */ int action_type;
-    /* 0018 */ int spell;
-    /* 001C */ int skill;
-    /* 0020 */ int64_t item_obj;
-    /* 0028 */ int64_t leader_obj;
-    /* 0030 */ int sound_id;
-} Ai;
-
 typedef struct AiMagicTechCandidates {
     /* 0000 */ unsigned int flags;
     /* 0004 */ MagicTechAiActionListEntry* entries;
@@ -81,28 +47,26 @@ typedef struct AiMagicTechCandidates {
 static bool ai_context_prepare_for_processing(Ai* ai);
 static void ai_context_init(Ai* ai, int64_t obj);
 static bool ai_heal(Ai* ai);
-static bool ai_heal_func(Ai* ai, int64_t obj, bool a3);
+static bool ai_heal_func(Ai* ai, int64_t obj, bool allow_noncritical_healing);
 static bool ai_look_for_item(Ai* ai);
 static bool ai_look_for_item_func(int64_t obj, unsigned int flags);
 static void ai_danger_state_update(Ai* ai);
 static void ai_redirect_func(int64_t source_obj, int64_t target_obj);
-static void ai_followers_notify_attack(int64_t a1, int64_t a2, int a3, int a4);
-static void ai_follower_attack_react(int64_t a1, int64_t a2, int64_t a3, int a4, int a5, int a6);
-static void ai_nearby_attack_witnesses_notify(int64_t a1, int64_t a2, int loudness);
-static void ai_attack_witness_process(int64_t a1, int64_t a2, int64_t a3, int loudness);
+static void ai_followers_notify_attack(int64_t leader_obj, int64_t target_obj, int notify_upset, int passive_notify_only);
+static void ai_follower_attack_react(int64_t source_obj, int64_t leader_obj, int64_t target_obj, int notify_upset, int passive_notify_only, int lock_target);
+static void ai_nearby_attack_witnesses_notify(int64_t victim_obj, int64_t attacker_obj, int loudness);
+static void ai_attack_witness_process(int64_t witness_obj, int64_t attacker_obj, int64_t victim_obj, int loudness);
 static void ai_forget_combat_target(int64_t obj, int64_t target_obj);
-static void ai_engage_or_flee_from_target(int64_t a1, int64_t a2);
+static void ai_engage_or_flee_from_target(int64_t critter_obj, int64_t threat_obj);
 static bool ai_npc_wait_here_timeevent_check(TimeEvent* timeevent);
-static void ai_copy_params(int64_t obj, AiParams* params);
-static void ai_danger_source(int64_t obj, int* type_ptr, int64_t* danger_source_ptr);
 static int ai_danger_state_set(int64_t source_obj, int danger_type, int64_t target_obj, int* sound_id_ptr);
 static bool ai_flee_spell_select(Ai* ai);
-static bool ai_flee_distance_reached_or_mind_controlled(int64_t a1, int64_t a2);
+static bool ai_flee_distance_reached_or_mind_controlled(int64_t fleeing_obj, int64_t threat_obj);
 static int64_t ai_choose_target(int64_t attacker_obj, int64_t candidate1_obj, int64_t candidate2_obj);
-static void ai_select_flee_or_combat_danger(int64_t a1, int64_t a2);
+static void ai_select_flee_or_combat_danger(int64_t source_obj, int64_t target_obj);
 static bool ai_should_flee(int64_t source_obj, int64_t target_obj);
-static int64_t ai_find_target(int64_t a1);
-static bool ai_combat_target_is_valid(int64_t a1, int64_t a2);
+static int64_t ai_find_target(int64_t critter_obj);
+static bool ai_combat_target_is_valid(int64_t source_obj, int64_t target_obj);
 static void ai_combat_spell_action_prepare(Ai* ai);
 static bool ai_combat_spell_select(Ai* ai);
 static int ai_combat_spell_attempt_chance(Ai* ai);
@@ -117,10 +81,10 @@ static void ai_action_perform_fleeing(Ai* ai);
 static void ai_action_perform_surrender(Ai* ai);
 static void ai_action_perform_combat(Ai* ai);
 static void ai_action_perform_baking_off(Ai* ai);
-static bool ai_use_grenade(Ai* ai, int64_t a2);
-static bool ai_waypoints_process(int64_t obj, bool a2);
+static bool ai_use_grenade(Ai* ai, int64_t distance);
+static bool ai_waypoints_process(int64_t obj, bool teleport_to_waypoint);
 static bool ai_is_day(void);
-static bool ai_standpoints_process(int64_t obj, bool a2);
+static bool ai_standpoints_process(int64_t obj, bool teleport_to_standpoint);
 static bool ai_get_standpoint(int64_t obj, int64_t* standpoint_ptr);
 static void ai_wake_up(int64_t npc_obj);
 static int64_t ai_find_nearest_bed(int64_t obj);
@@ -136,13 +100,12 @@ static int ai_check_leader(int64_t npc_obj, int64_t pc_obj);
 static int ai_check_upset_attacking(int64_t source_obj, int64_t target_obj, int64_t leader_obj);
 static void ai_calc_party_size_and_level_internal(int64_t obj, int* cnt_ptr, int* lvl_ptr);
 static int ai_check_protect(int64_t source_obj, int64_t target_obj);
-static int64_t ai_dead_ally_attacker_find(int64_t a1, int64_t a2);
-static int ai_magictech_action_check(int64_t attacker_obj, int64_t item_obj, int64_t target_obj, int spell);
+static int64_t ai_dead_ally_attacker_find(int64_t observer_obj, int64_t ally_obj);
 static bool ai_is_indoor_to_outdoor_transition(int64_t portal_obj, int dir);
 static int ai_perception_distance(int value);
 static int ai_straight_path_cost_to_object(int64_t source_obj, int64_t target_obj);
 static bool ai_check_decoy(int64_t source_obj, int64_t target_obj);
-static void ai_add_team_to_hostility_list(int64_t a1, int64_t a2);
+static void ai_add_team_to_hostility_list(int64_t source_obj, int64_t target_obj);
 static void ai_shitlist_add(int64_t npc_obj, int64_t shit_obj);
 static void ai_shitlist_remove(int64_t npc_obj, int64_t shit_obj);
 static int64_t ai_shitlist_get(int64_t obj);
@@ -203,6 +166,7 @@ bool ai_init(GameInitInfo* init_info)
 
     ai_end_dialog_callback = NULL;
     ai_float_line_func = NULL;
+    ai_utility_reset();
 
     if (!mes_load("rules\\ai_params.mes", &mes_file)) {
         return false;
@@ -276,6 +240,7 @@ bool ai_mod_load(void)
 // 0x4A84C0
 void ai_mod_unload(void)
 {
+    ai_utility_reset();
 }
 
 // 0x4A84D0
@@ -286,7 +251,16 @@ void ai_set_callbacks(AiEndDialogCallback end_dialog_callback, AiFloatLineFunc f
 }
 
 // 0x4A84F0
+static void ai_process_measured(int64_t obj);
+
 void ai_process(int64_t obj)
+{
+    Uint64 start = tig_performance_begin();
+    ai_process_measured(obj);
+    tig_performance_end(TIG_PERF_AI_DECISION, start);
+}
+
+static void ai_process_measured(int64_t obj)
 {
     Ai ai;
 
@@ -300,10 +274,17 @@ void ai_process(int64_t obj)
         return;
     }
 
-    if (!ai_heal(&ai) && !ai_look_for_item(&ai)) {
+    if (ai_npc_fighting_enabled && ai_utility_mode(&ai) >= 2
+        && ai.danger_type == AI_DANGER_SOURCE_TYPE_COMBAT_FOCUS && ai_utility_retreat_pending(&ai)) return;
+
+    if (ai_npc_fighting_enabled && ai_utility_mode(&ai) >= 2
+        && ai.danger_type == AI_DANGER_SOURCE_TYPE_COMBAT_FOCUS) {
+        ai_danger_state_update(&ai);
+    } else if (!ai_heal(&ai) && !ai_look_for_item(&ai)) {
         ai_danger_state_update(&ai);
     }
 
+    tig_performance_trace(TIG_PERF_EVENT_AI_ACTION, (Uint64)obj, (Uint64)ai.danger_source, ai.action_type, ai.spell);
     ai_action_perform(&ai);
 }
 
@@ -311,7 +292,7 @@ void ai_process(int64_t obj)
 bool ai_context_prepare_for_processing(Ai* ai)
 {
     int64_t pc_obj;
-    int64_t v1;
+    int64_t conversation_pc;
     unsigned int critter_flags;
     unsigned int npc_flags;
     int64_t leader_obj;
@@ -337,9 +318,9 @@ bool ai_context_prepare_for_processing(Ai* ai)
 
     critter_flags = obj_field_int32_get(ai->obj, OBJ_F_CRITTER_FLAGS);
 
-    v1 = reaction_conversation_pc_get(ai->obj);
-    if (v1) {
-        if (pc_obj == v1
+    conversation_pc = reaction_conversation_pc_get(ai->obj);
+    if (conversation_pc) {
+        if (pc_obj == conversation_pc
             && ai_end_dialog_callback != NULL
             && ai->danger_type != AI_DANGER_SOURCE_TYPE_NONE
             && ai->danger_type != AI_DANGER_SOURCE_TYPE_SURRENDER) {
@@ -433,6 +414,9 @@ void ai_context_init(Ai* ai, int64_t obj)
     ai->leader_obj = critter_leader_get(obj);
     ai_danger_source(obj, &(ai->danger_type), &(ai->danger_source));
     ai->sound_id = -1;
+    ai->move_destination = 0;
+    ai->maintenance_id = -1;
+    ai->utility_selected = false;
 }
 
 // 0x4A8940
@@ -497,9 +481,9 @@ bool ai_heal(Ai* ai)
 }
 
 // 0x4A8AA0
-bool ai_heal_func(Ai* ai, int64_t obj, bool a3)
+bool ai_heal_func(Ai* ai, int64_t obj, bool allow_noncritical_healing)
 {
-    AiMagicTechCandidates v1;
+    AiMagicTechCandidates spell_candidates;
     MagicTechAi magictech_ai;
     int hp_ratio;
     int64_t item_obj;
@@ -510,11 +494,11 @@ bool ai_heal_func(Ai* ai, int64_t obj, bool a3)
 
     if (critter_is_dead(obj)) {
         mt_ai_create(&magictech_ai, ai->obj, MAGICTECH_AI_ACTION_RESURRECT);
-        v1.flags = 0x8;
-        v1.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_RESURRECT].entries;
-        v1.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_RESURRECT].cnt;
-        v1.obj = obj;
-        if (ai_magictech_candidate_select(ai, &v1)) {
+        spell_candidates.flags = 0x8;
+        spell_candidates.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_RESURRECT].entries;
+        spell_candidates.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_RESURRECT].cnt;
+        spell_candidates.obj = obj;
+        if (ai_magictech_candidate_select(ai, &spell_candidates)) {
             mt_ai_destroy(&magictech_ai);
             return true;
         } else {
@@ -524,18 +508,18 @@ bool ai_heal_func(Ai* ai, int64_t obj, bool a3)
     }
 
     hp_ratio = ai_object_hp_ratio(obj);
-    if (hp_ratio > 30 && !a3) {
+    if (hp_ratio > 30 && !allow_noncritical_healing) {
         return false;
     }
 
     if (ai->danger_type != AI_DANGER_SOURCE_TYPE_NONE) {
         if (ai_critter_fatigue_ratio(ai->obj) < 20) {
             mt_ai_create(&magictech_ai, ai->obj, MAGICTECH_AI_ACTION_FATIGUE_RECOVER);
-            v1.flags = 0x8;
-            v1.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_FATIGUE_RECOVER].entries;
-            v1.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_FATIGUE_RECOVER].cnt;
-            v1.obj = obj;
-            if (ai_magictech_candidate_select(ai, &v1)) {
+            spell_candidates.flags = 0x8;
+            spell_candidates.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_FATIGUE_RECOVER].entries;
+            spell_candidates.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_FATIGUE_RECOVER].cnt;
+            spell_candidates.obj = obj;
+            if (ai_magictech_candidate_select(ai, &spell_candidates)) {
                 mt_ai_destroy(&magictech_ai);
                 return true;
             }
@@ -557,11 +541,11 @@ bool ai_heal_func(Ai* ai, int64_t obj, bool a3)
 
     if (hp_ratio < 40) {
         mt_ai_create(&magictech_ai, ai->obj, MAGICTECH_AI_ACTION_HEAL_HEAVY);
-        v1.flags = 0x8;
-        v1.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_HEAL_HEAVY].entries;
-        v1.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_HEAL_HEAVY].cnt;
-        v1.obj = obj;
-        if (ai_magictech_candidate_select(ai, &v1)) {
+        spell_candidates.flags = 0x8;
+        spell_candidates.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_HEAL_HEAVY].entries;
+        spell_candidates.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_HEAL_HEAVY].cnt;
+        spell_candidates.obj = obj;
+        if (ai_magictech_candidate_select(ai, &spell_candidates)) {
             mt_ai_destroy(&magictech_ai);
             return true;
         }
@@ -571,11 +555,11 @@ bool ai_heal_func(Ai* ai, int64_t obj, bool a3)
 
     if (hp_ratio < 55) {
         mt_ai_create(&magictech_ai, ai->obj, MAGICTECH_AI_ACTION_HEAL_MEDIUM);
-        v1.flags = 0x8;
-        v1.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_HEAL_MEDIUM].entries;
-        v1.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_HEAL_MEDIUM].cnt;
-        v1.obj = obj;
-        if (ai_magictech_candidate_select(ai, &v1)) {
+        spell_candidates.flags = 0x8;
+        spell_candidates.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_HEAL_MEDIUM].entries;
+        spell_candidates.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_HEAL_MEDIUM].cnt;
+        spell_candidates.obj = obj;
+        if (ai_magictech_candidate_select(ai, &spell_candidates)) {
             mt_ai_destroy(&magictech_ai);
             return true;
         }
@@ -585,11 +569,11 @@ bool ai_heal_func(Ai* ai, int64_t obj, bool a3)
 
     if (stat_level_get(obj, STAT_POISON_LEVEL) > 0) {
         mt_ai_create(&magictech_ai, ai->obj, MAGICTECH_AI_ACTION_CURE_POISON);
-        v1.flags = 0x8;
-        v1.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_CURE_POISON].entries;
-        v1.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_CURE_POISON].cnt;
-        v1.obj = obj;
-        if (ai_magictech_candidate_select(ai, &v1)) {
+        spell_candidates.flags = 0x8;
+        spell_candidates.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_CURE_POISON].entries;
+        spell_candidates.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_CURE_POISON].cnt;
+        spell_candidates.obj = obj;
+        if (ai_magictech_candidate_select(ai, &spell_candidates)) {
             mt_ai_destroy(&magictech_ai);
             return true;
         }
@@ -601,11 +585,11 @@ bool ai_heal_func(Ai* ai, int64_t obj, bool a3)
         || (ai->danger_type == AI_DANGER_SOURCE_TYPE_NONE
             && hp_ratio < 90)) {
         mt_ai_create(&magictech_ai, ai->obj, MAGICTECH_AI_ACTION_HEAL_LIGHT);
-        v1.flags = 0x8;
-        v1.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_HEAL_LIGHT].entries;
-        v1.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_HEAL_LIGHT].cnt;
-        v1.obj = obj;
-        if (ai_magictech_candidate_select(ai, &v1)) {
+        spell_candidates.flags = 0x8;
+        spell_candidates.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_HEAL_LIGHT].entries;
+        spell_candidates.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_HEAL_LIGHT].cnt;
+        spell_candidates.obj = obj;
+        if (ai_magictech_candidate_select(ai, &spell_candidates)) {
             mt_ai_destroy(&magictech_ai);
             return true;
         }
@@ -899,13 +883,13 @@ void ai_attack(int64_t source_obj, int64_t target_obj, int loudness, unsigned in
     int target_obj_type;
     int source_obj_type;
     int64_t leader_obj;
-    int64_t v1;
+    int64_t target_group_leader;
     unsigned int npc_flags;
     AiParams ai_params;
     int rc;
     char str[1000];
     int speech_id;
-    int v3;
+    int current_reaction;
 
     if (source_obj == OBJ_HANDLE_NULL
         || target_obj == OBJ_HANDLE_NULL) {
@@ -955,13 +939,13 @@ void ai_attack(int64_t source_obj, int64_t target_obj, int loudness, unsigned in
         }
 
         if (obj_type_is_critter(target_obj_type)) {
-            v1 = critter_pc_leader_get(target_obj);
-            if (v1 == OBJ_HANDLE_NULL) {
-                v1 = target_obj;
+            target_group_leader = critter_pc_leader_get(target_obj);
+            if (target_group_leader == OBJ_HANDLE_NULL) {
+                target_group_leader = target_obj;
             }
 
-            if (critter_is_concealed(v1)) {
-                critter_set_concealed(v1, false);
+            if (critter_is_concealed(target_group_leader)) {
+                critter_set_concealed(target_group_leader, false);
             }
 
             if (target_obj_type == OBJ_TYPE_NPC) {
@@ -1029,9 +1013,9 @@ void ai_attack(int64_t source_obj, int64_t target_obj, int loudness, unsigned in
                         if ((flags & 0x01) != 0) {
                             reaction_adj(target_obj, source_obj, -10);
                         } else {
-                            v3 = reaction_get_with_limited_penalty(target_obj, source_obj);
-                            if (v3 > ai_params.attack_reaction_threshold) {
-                                reaction_adj(target_obj, source_obj, ai_params.attack_reaction_threshold - v3);
+                            current_reaction = reaction_get_with_limited_penalty(target_obj, source_obj);
+                            if (current_reaction > ai_params.attack_reaction_threshold) {
+                                reaction_adj(target_obj, source_obj, ai_params.attack_reaction_threshold - current_reaction);
                             }
                         }
                     }
@@ -1079,16 +1063,16 @@ void ai_auto_attack_response(int64_t attacker_obj, int64_t target_obj)
 }
 
 // 0x4A9B80
-void ai_followers_notify_attack(int64_t a1, int64_t a2, int a3, int a4)
+void ai_followers_notify_attack(int64_t leader_obj, int64_t target_obj, int notify_upset, int passive_notify_only)
 {
     ObjectList followers;
     ObjectNode* node;
 
-    if (a1 != a2) {
-        object_list_followers(a1, &followers);
+    if (leader_obj != target_obj) {
+        object_list_followers(leader_obj, &followers);
         node = followers.head;
         while (node != NULL) {
-            ai_follower_attack_react(node->obj, a1, a2, a3, a4, 0);
+            ai_follower_attack_react(node->obj, leader_obj, target_obj, notify_upset, passive_notify_only, 0);
             node = node->next;
         }
         object_list_destroy(&followers);
@@ -1096,14 +1080,14 @@ void ai_followers_notify_attack(int64_t a1, int64_t a2, int a3, int a4)
 }
 
 // 0x4A9C00
-void ai_follower_attack_react(int64_t source_obj, int64_t a2, int64_t target_obj, int a4, int a5, int a6)
+void ai_follower_attack_react(int64_t source_obj, int64_t leader_obj, int64_t target_obj, int notify_upset, int passive_notify_only, int lock_target)
 {
     int target_obj_type;
     int rc;
     char str[1000];
     int speech_id;
 
-    if (a2 == target_obj) {
+    if (leader_obj == target_obj) {
         return;
     }
 
@@ -1113,37 +1097,37 @@ void ai_follower_attack_react(int64_t source_obj, int64_t a2, int64_t target_obj
             return;
         }
 
-        rc = ai_check_upset_attacking(source_obj, target_obj, a2);
+        rc = ai_check_upset_attacking(source_obj, target_obj, leader_obj);
         if (rc != 0) {
-            if (a4
+            if (notify_upset
                 && !combat_critter_is_combat_mode_active(target_obj)
-                && !a5
+                && !passive_notify_only
                 && ai_float_line_func != NULL) {
                 if (critter_is_active(source_obj)) {
-                    dialog_copy_npc_upset_attacking_msg(source_obj, a2, rc, str, &speech_id);
-                    ai_float_line_func(source_obj, a2, str, speech_id);
+                    dialog_copy_npc_upset_attacking_msg(source_obj, leader_obj, rc, str, &speech_id);
+                    ai_float_line_func(source_obj, leader_obj, str, speech_id);
                 }
 
-                reaction_adj(source_obj, a2, -5);
+                reaction_adj(source_obj, leader_obj, -5);
             }
             return;
         }
 
-        if (a5) {
+        if (passive_notify_only) {
             return;
         }
 
-        if (a6) {
+        if (lock_target) {
             ai_target_lock(source_obj, target_obj);
         } else {
             ai_engage_or_flee_from_target(source_obj, target_obj);
         }
     } else {
-        if (a5) {
+        if (passive_notify_only) {
             return;
         }
 
-        if (a6) {
+        if (lock_target) {
             ai_target_lock(source_obj, target_obj);
         } else {
             ai_danger_state_set(source_obj,
@@ -1155,7 +1139,7 @@ void ai_follower_attack_react(int64_t source_obj, int64_t a2, int64_t target_obj
 }
 
 // 0x4A9E10
-void ai_nearby_attack_witnesses_notify(int64_t a1, int64_t a2, int loudness)
+void ai_nearby_attack_witnesses_notify(int64_t victim_obj, int64_t attacker_obj, int loudness)
 {
     int radius;
     int dist;
@@ -1163,21 +1147,21 @@ void ai_nearby_attack_witnesses_notify(int64_t a1, int64_t a2, int loudness)
     ObjectNode* node;
 
     radius = ai_sound_radius_by_loudness[loudness];
-    dist = (int)object_dist(a2, a1);
+    dist = (int)object_dist(attacker_obj, victim_obj);
     if (dist < 2 * ai_sound_radius_by_loudness[LOUDNESS_LOUD]) {
-        ai_objects_in_radius(a2, radius, &objects, OBJ_TM_NPC);
+        ai_objects_in_radius(attacker_obj, radius, &objects, OBJ_TM_NPC);
         node = objects.head;
         while (node != NULL) {
-            ai_attack_witness_process(node->obj, a2, a1, loudness);
+            ai_attack_witness_process(node->obj, attacker_obj, victim_obj, loudness);
             node = node->next;
         }
         object_list_destroy(&objects);
     }
     if (dist > 1) {
-        ai_objects_in_radius(a1, radius, &objects, OBJ_TM_NPC);
+        ai_objects_in_radius(victim_obj, radius, &objects, OBJ_TM_NPC);
         node = objects.head;
         while (node != NULL) {
-            ai_attack_witness_process(node->obj, a2, a1, loudness);
+            ai_attack_witness_process(node->obj, attacker_obj, victim_obj, loudness);
             node = node->next;
         }
         object_list_destroy(&objects);
@@ -1185,38 +1169,38 @@ void ai_nearby_attack_witnesses_notify(int64_t a1, int64_t a2, int loudness)
 }
 
 // 0x4A9F10
-void ai_attack_witness_process(int64_t a1, int64_t a2, int64_t a3, int loudness)
+void ai_attack_witness_process(int64_t witness_obj, int64_t attacker_obj, int64_t victim_obj, int loudness)
 {
     int64_t leader_obj;
     int danger_type;
 
-    if ((obj_field_int32_get(a1, OBJ_F_NPC_FLAGS) & ONF_AI_WAIT_HERE) != 0) {
+    if ((obj_field_int32_get(witness_obj, OBJ_F_NPC_FLAGS) & ONF_AI_WAIT_HERE) != 0) {
         leader_obj = OBJ_HANDLE_NULL;
     } else {
-        leader_obj = critter_leader_get(a1);
+        leader_obj = critter_leader_get(witness_obj);
     }
 
-    if (a1 != a3 && a1 != a2 && leader_obj != a2 && leader_obj != a3) {
-        if (critter_is_sleeping(a1)) {
-            ai_wake_up(a1);
+    if (witness_obj != victim_obj && witness_obj != attacker_obj && leader_obj != attacker_obj && leader_obj != victim_obj) {
+        if (critter_is_sleeping(witness_obj)) {
+            ai_wake_up(witness_obj);
         }
 
-        if (ai_check_protect(a1, a3) != AI_PROTECT_NO) {
-            if (ai_can_see(a1, a3) == 0 || ai_can_hear(a1, a3, loudness) == 0) {
-                ai_engage_or_flee_from_target(a1, a2);
+        if (ai_check_protect(witness_obj, victim_obj) != AI_PROTECT_NO) {
+            if (ai_can_see(witness_obj, victim_obj) == 0 || ai_can_hear(witness_obj, victim_obj, loudness) == 0) {
+                ai_engage_or_flee_from_target(witness_obj, attacker_obj);
             }
-        } else if (ai_check_protect(a1, a2) != AI_PROTECT_NO) {
-            if (ai_can_see(a1, a3) == 0 || ai_can_hear(a1, a3, loudness) == 0) {
-                ai_engage_or_flee_from_target(a1, a3);
+        } else if (ai_check_protect(witness_obj, attacker_obj) != AI_PROTECT_NO) {
+            if (ai_can_see(witness_obj, victim_obj) == 0 || ai_can_hear(witness_obj, victim_obj, loudness) == 0) {
+                ai_engage_or_flee_from_target(witness_obj, victim_obj);
             }
-        } else if (critter_social_class_get(a1) != SOCIAL_CLASS_GUARD
-            && (obj_field_int32_get(a1, OBJ_F_CRITTER_FLAGS) & OCF_NO_FLEE) == 0) {
-            ai_danger_source(a1, &danger_type, NULL);
+        } else if (critter_social_class_get(witness_obj) != SOCIAL_CLASS_GUARD
+            && (obj_field_int32_get(witness_obj, OBJ_F_CRITTER_FLAGS) & OCF_NO_FLEE) == 0) {
+            ai_danger_source(witness_obj, &danger_type, NULL);
             if (danger_type == AI_DANGER_SOURCE_TYPE_NONE
-                && (ai_can_see(a1, a3) == 0 || ai_can_hear(a1, a3, loudness) == 0)) {
-                ai_danger_state_set(a1,
+                && (ai_can_see(witness_obj, victim_obj) == 0 || ai_can_hear(witness_obj, victim_obj, loudness) == 0)) {
+                ai_danger_state_set(witness_obj,
                     AI_DANGER_SOURCE_TYPE_FLEE,
-                    a2,
+                    attacker_obj,
                     NULL);
             }
         }
@@ -1283,42 +1267,42 @@ void ai_notify_killed(int64_t victim_obj, int64_t killer_obj)
 }
 
 // 0x4AA300
-void ai_hostility_end_against_group(int64_t a1, int64_t a2)
+void ai_hostility_end_against_group(int64_t critter_obj, int64_t target_obj)
 {
-    int64_t v1;
+    int64_t target_group_leader;
     int obj_type;
     int reaction;
 
-    v1 = critter_pc_leader_get(a2);
-    if (v1 == OBJ_HANDLE_NULL) {
-        v1 = a2;
+    target_group_leader = critter_pc_leader_get(target_obj);
+    if (target_group_leader == OBJ_HANDLE_NULL) {
+        target_group_leader = target_obj;
     }
 
-    obj_field_handle_set(a1, OBJ_F_NPC_COMBAT_FOCUS, OBJ_HANDLE_NULL);
-    obj_field_handle_set(a1, OBJ_F_NPC_WHO_HIT_ME_LAST, OBJ_HANDLE_NULL);
-    ai_shitlist_remove(a1, v1);
+    obj_field_handle_set(critter_obj, OBJ_F_NPC_COMBAT_FOCUS, OBJ_HANDLE_NULL);
+    obj_field_handle_set(critter_obj, OBJ_F_NPC_WHO_HIT_ME_LAST, OBJ_HANDLE_NULL);
+    ai_shitlist_remove(critter_obj, target_group_leader);
 
-    obj_type = obj_field_int32_get(v1, OBJ_F_TYPE);
+    obj_type = obj_field_int32_get(target_group_leader, OBJ_F_TYPE);
     if (obj_type == OBJ_TYPE_PC) {
-        reaction = reaction_get(a1, v1);
+        reaction = reaction_get(critter_obj, target_group_leader);
         if (reaction < 50) {
-            reaction_adj(a1, v1, 50 - reaction);
+            reaction_adj(critter_obj, target_group_leader, 50 - reaction);
         }
     }
 
-    ai_danger_state_set(a1, AI_DANGER_SOURCE_TYPE_NONE, OBJ_HANDLE_NULL, NULL);
-    anim_attack_interrupt_for_target_or_leader(a1, v1);
+    ai_danger_state_set(critter_obj, AI_DANGER_SOURCE_TYPE_NONE, OBJ_HANDLE_NULL, NULL);
+    anim_attack_interrupt_for_target_or_leader(critter_obj, target_group_leader);
 
     if (obj_type_is_critter(obj_type)) {
         ObjectList objects;
         ObjectNode* node;
 
-        object_list_all_followers(v1, &objects);
+        object_list_all_followers(target_group_leader, &objects);
         node = objects.head;
         while (node != NULL) {
-            ai_forget_combat_target(node->obj, a1);
-            ai_shitlist_remove(a1, node->obj);
-            anim_attack_interrupt_for_target(node->obj, a1);
+            ai_forget_combat_target(node->obj, critter_obj);
+            ai_shitlist_remove(critter_obj, node->obj);
+            anim_attack_interrupt_for_target(node->obj, critter_obj);
             node = node->next;
         }
         object_list_destroy(&objects);
@@ -1407,50 +1391,50 @@ void ai_group_attacks_enable(int64_t obj)
 }
 
 // 0x4AA620
-void ai_engage_or_flee_from_target(int64_t a1, int64_t a2)
+void ai_engage_or_flee_from_target(int64_t critter_obj, int64_t threat_obj)
 {
     int danger_type;
     int64_t danger_source_obj;
     char str[1000];
     int speech_id;
 
-    if (critter_is_dead(a1)) {
+    if (critter_is_dead(critter_obj)) {
         return;
     }
 
-    ai_danger_source(a1, &danger_type, &danger_source_obj);
+    ai_danger_source(critter_obj, &danger_type, &danger_source_obj);
 
     switch (danger_type) {
     case AI_DANGER_SOURCE_TYPE_NONE:
-        ai_select_flee_or_combat_danger(a1, a2);
+        ai_select_flee_or_combat_danger(critter_obj, threat_obj);
         break;
     case AI_DANGER_SOURCE_TYPE_COMBAT_FOCUS:
-        if (danger_source_obj == a2
-            || ai_choose_target(a1, danger_source_obj, a2) == a2) {
-            ai_select_flee_or_combat_danger(a1, a2);
+        if (danger_source_obj == threat_obj
+            || ai_choose_target(critter_obj, danger_source_obj, threat_obj) == threat_obj) {
+            ai_select_flee_or_combat_danger(critter_obj, threat_obj);
         }
         break;
     case AI_DANGER_SOURCE_TYPE_FLEE:
-        if (danger_source_obj != a2
-            && ai_flee_distance_reached_or_mind_controlled(a1, danger_source_obj)) {
-            ai_select_flee_or_combat_danger(a1, a2);
+        if (danger_source_obj != threat_obj
+            && ai_flee_distance_reached_or_mind_controlled(critter_obj, danger_source_obj)) {
+            ai_select_flee_or_combat_danger(critter_obj, threat_obj);
         }
         break;
     case AI_DANGER_SOURCE_TYPE_SURRENDER:
-        if (danger_source_obj == a2
-            || ai_choose_target(a1, danger_source_obj, a2) == a2) {
-            ai_select_flee_or_combat_danger(a1, a2);
+        if (danger_source_obj == threat_obj
+            || ai_choose_target(critter_obj, danger_source_obj, threat_obj) == threat_obj) {
+            ai_select_flee_or_combat_danger(critter_obj, threat_obj);
         } else {
-            if (critter_is_active(a1)) {
-                dialog_copy_npc_fleeing_msg(a1, a2, str, &speech_id);
-                ai_float_line_func(a1, a2, str, speech_id);
+            if (critter_is_active(critter_obj)) {
+                dialog_copy_npc_fleeing_msg(critter_obj, threat_obj, str, &speech_id);
+                ai_float_line_func(critter_obj, threat_obj, str, speech_id);
             }
-            anim_goal_flee(a1, a2);
+            anim_goal_flee(critter_obj, threat_obj);
         }
         break;
     }
 
-    combat_turn_based_add_critter(a1);
+    combat_turn_based_add_critter(critter_obj);
 }
 
 // 0x4AA7A0
@@ -1622,7 +1606,7 @@ int ai_danger_state_set(int64_t source_obj, int danger_type, int64_t target_obj,
     unsigned int critter_flags;
     int64_t leader_obj;
     unsigned int npc_flags;
-    int v1;
+    int current_reaction;
     AiParams ai_params;
     char str[1000];
     int speech_id;
@@ -1705,10 +1689,10 @@ int ai_danger_state_set(int64_t source_obj, int danger_type, int64_t target_obj,
             }
 
             if (obj_field_int32_get(target_obj, OBJ_F_TYPE) == OBJ_TYPE_PC) {
-                v1 = reaction_get_with_limited_penalty(source_obj, target_obj);
+                current_reaction = reaction_get_with_limited_penalty(source_obj, target_obj);
                 ai_copy_params(source_obj, &ai_params);
-                if (v1 > ai_params.attack_reaction_threshold) {
-                    reaction_adj(source_obj, target_obj, ai_params.attack_reaction_threshold - v1);
+                if (current_reaction > ai_params.attack_reaction_threshold) {
+                    reaction_adj(source_obj, target_obj, ai_params.attack_reaction_threshold - current_reaction);
                 }
             }
 
@@ -1740,7 +1724,7 @@ int ai_danger_state_set(int64_t source_obj, int danger_type, int64_t target_obj,
 bool ai_flee_spell_select(Ai* ai)
 {
     unsigned int critter_flags;
-    AiMagicTechCandidates v1;
+    AiMagicTechCandidates spell_candidates;
     MagicTechAi magictech_ai;
 
     critter_flags = obj_field_int32_get(ai->obj, OBJ_F_CRITTER_FLAGS);
@@ -1750,10 +1734,10 @@ bool ai_flee_spell_select(Ai* ai)
     }
 
     mt_ai_create(&magictech_ai, ai->obj, MAGICTECH_AI_ACTION_FLEE);
-    v1.flags = 0x1;
-    v1.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_FLEE].entries;
-    v1.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_FLEE].cnt;
-    if (!ai_magictech_candidate_select(ai, &v1)) {
+    spell_candidates.flags = 0x1;
+    spell_candidates.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_FLEE].entries;
+    spell_candidates.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_FLEE].cnt;
+    if (!ai_magictech_candidate_select(ai, &spell_candidates)) {
         mt_ai_destroy(&magictech_ai);
         return false;
     }
@@ -1766,17 +1750,17 @@ bool ai_flee_spell_select(Ai* ai)
 }
 
 // 0x4AB030
-bool ai_flee_distance_reached_or_mind_controlled(int64_t a1, int64_t a2)
+bool ai_flee_distance_reached_or_mind_controlled(int64_t fleeing_obj, int64_t threat_obj)
 {
     AiParams params;
 
-    if ((obj_field_int32_get(a1, OBJ_F_SPELL_FLAGS) & OSF_MIND_CONTROLLED) != 0) {
+    if ((obj_field_int32_get(fleeing_obj, OBJ_F_SPELL_FLAGS) & OSF_MIND_CONTROLLED) != 0) {
         return true;
     }
 
-    ai_copy_params(a1, &params);
+    ai_copy_params(fleeing_obj, &params);
 
-    return object_dist(a1, a2) > params.flee_distance_tiles;
+    return object_dist(fleeing_obj, threat_obj) > params.flee_distance_tiles;
 }
 
 // 0x4AB0B0
@@ -1845,12 +1829,12 @@ int64_t ai_choose_target(int64_t attacker_obj, int64_t candidate1_obj, int64_t c
 }
 
 // 0x4AB2A0
-void ai_select_flee_or_combat_danger(int64_t a1, int64_t a2)
+void ai_select_flee_or_combat_danger(int64_t source_obj, int64_t target_obj)
 {
-    if (ai_should_flee(a1, a2)) {
-        ai_danger_state_set(a1, AI_DANGER_SOURCE_TYPE_FLEE, a2, 0);
+    if (ai_should_flee(source_obj, target_obj)) {
+        ai_danger_state_set(source_obj, AI_DANGER_SOURCE_TYPE_FLEE, target_obj, 0);
     } else {
-        ai_danger_state_set(a1, AI_DANGER_SOURCE_TYPE_COMBAT_FOCUS, a2, 0);
+        ai_danger_state_set(source_obj, AI_DANGER_SOURCE_TYPE_COMBAT_FOCUS, target_obj, 0);
     }
 }
 
@@ -1923,7 +1907,7 @@ int64_t ai_find_target(int64_t critter_obj)
     bool concealed;
     int obj_type;
     int64_t danger_source_obj = OBJ_HANDLE_NULL;
-    int64_t v1 = OBJ_HANDLE_NULL;
+    int64_t selected_target = OBJ_HANDLE_NULL;
 
     if (in_find_target) {
         return OBJ_HANDLE_NULL;
@@ -1995,7 +1979,7 @@ int64_t ai_find_target(int64_t critter_obj)
                 obj_type = obj_field_int32_get(handles[idx], OBJ_F_TYPE);
                 if (obj_type == OBJ_TYPE_PC
                     && critter_is_concealed(handles[idx])) {
-                    v1 = handles[idx];
+                    selected_target = handles[idx];
                 }
 
                 if (ai_check_kos(critter_obj, handles[idx]) != AI_KOS_NO) {
@@ -2040,8 +2024,8 @@ int64_t ai_find_target(int64_t critter_obj)
     object_list_destroy(&objects);
 
     if (danger_source_obj == OBJ_HANDLE_NULL) {
-        if (v1 != OBJ_HANDLE_NULL) {
-            anim_goal_rotate(critter_obj, object_rot(critter_obj, v1));
+        if (selected_target != OBJ_HANDLE_NULL) {
+            anim_goal_rotate(critter_obj, object_rot(critter_obj, selected_target));
         }
     }
 
@@ -2056,7 +2040,7 @@ bool ai_combat_target_is_valid(int64_t source_obj, int64_t target_obj)
     int64_t source_leader_obj;
     int64_t target_leader_obj;
     int target_obj_type;
-    int64_t v1;
+    int64_t preferred_target;
 
     if (target_obj == OBJ_HANDLE_NULL) {
         return false;
@@ -2083,9 +2067,9 @@ bool ai_combat_target_is_valid(int64_t source_obj, int64_t target_obj)
                 return false;
             }
 
-            v1 = ai_find_target(source_obj);
-            if (v1 != OBJ_HANDLE_NULL
-                && v1 != target_obj) {
+            preferred_target = ai_find_target(source_obj);
+            if (preferred_target != OBJ_HANDLE_NULL
+                && preferred_target != target_obj) {
                 return false;
             }
         }
@@ -2174,11 +2158,19 @@ void ai_combat_spell_action_prepare(Ai* ai)
 bool ai_combat_spell_select(Ai* ai)
 {
     MagicTechAi magictech_ai;
-    AiMagicTechCandidates v3;
+    AiMagicTechCandidates spell_candidates;
     AiParams ai_params;
 
     if (!ai_npc_fighting_enabled) {
         return false;
+    }
+
+    {
+        int mode = ai_utility_mode(ai);
+        if (mode > 0) {
+            bool selected = ai_utility_spell_select(ai, mode >= 2);
+            if (mode >= 2) return selected;
+        }
     }
 
     if (random_between(1, 100) > ai_combat_spell_attempt_chance(ai)) {
@@ -2187,10 +2179,10 @@ bool ai_combat_spell_select(Ai* ai)
 
     if (critter_num_followers(ai->obj, false) == 0) {
         mt_ai_create(&magictech_ai, ai->obj, MAGICTECH_AI_ACTION_SUMMON);
-        v3.flags = 0x1;
-        v3.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_SUMMON].entries;
-        v3.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_SUMMON].cnt;
-        if (ai_magictech_candidate_select(ai, &v3)) {
+        spell_candidates.flags = 0x1;
+        spell_candidates.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_SUMMON].entries;
+        spell_candidates.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_SUMMON].cnt;
+        if (ai_magictech_candidate_select(ai, &spell_candidates)) {
             mt_ai_destroy(&magictech_ai);
             return true;
         }
@@ -2202,10 +2194,10 @@ bool ai_combat_spell_select(Ai* ai)
 
     if (ai_params.defensive_spell_chance < random_between(1, 100)) {
         mt_ai_create(&magictech_ai, ai->obj, MAGICTECH_AI_ACTION_DEFENSIVE);
-        v3.flags = 0x4;
-        v3.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_DEFENSIVE].entries;
-        v3.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_DEFENSIVE].cnt;
-        if (ai_magictech_candidate_select(ai, &v3)) {
+        spell_candidates.flags = 0x4;
+        spell_candidates.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_DEFENSIVE].entries;
+        spell_candidates.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_DEFENSIVE].cnt;
+        if (ai_magictech_candidate_select(ai, &spell_candidates)) {
             mt_ai_destroy(&magictech_ai);
             return true;
         }
@@ -2214,10 +2206,10 @@ bool ai_combat_spell_select(Ai* ai)
     }
 
     mt_ai_create(&magictech_ai, ai->obj, MAGICTECH_AI_ACTION_OFFENSIVE);
-    v3.flags = 0x2;
-    v3.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_OFFENSIVE].entries;
-    v3.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_OFFENSIVE].cnt;
-    if (ai_magictech_candidate_select(ai, &v3)) {
+    spell_candidates.flags = 0x2;
+    spell_candidates.entries = magictech_ai.actions[MAGICTECH_AI_ACTION_OFFENSIVE].entries;
+    spell_candidates.cnt = magictech_ai.actions[MAGICTECH_AI_ACTION_OFFENSIVE].cnt;
+    if (ai_magictech_candidate_select(ai, &spell_candidates)) {
         mt_ai_destroy(&magictech_ai);
         return true;
     }
@@ -2331,6 +2323,10 @@ void ai_action_perform(Ai* ai)
         }
 
         switch (ai->action_type) {
+        case AI_ACTION_TYPE_RELEASE_MAINTENANCE:
+        case AI_ACTION_TYPE_RETREAT:
+            if (!ai_utility_action_perform(ai)) ai_action_perform_combat(ai);
+            break;
         case AI_ACTION_TYPE_CAST_SPELL:
             ai_action_perform_cast(ai);
             break;
@@ -2371,6 +2367,10 @@ void ai_action_perform_cast(Ai* ai)
     }
 
     object_handle_reference_init(ai->danger_source, &(mt_invocation.target_obj));
+
+    if (ai->utility_selected && ai->item_obj == OBJ_HANDLE_NULL) {
+        mt_invocation.flags |= MAGICTECH_INVOCATION_UTILITY_AI;
+    }
 
     if (magictech_invocation_check(&mt_invocation)) {
         magictech_invocation_run(&mt_invocation);
@@ -2604,7 +2604,7 @@ bool ai_use_grenade(Ai* ai, int64_t distance)
 }
 
 // 0x4ACBB0
-bool ai_waypoints_process(int64_t obj, bool a2)
+bool ai_waypoints_process(int64_t obj, bool teleport_to_waypoint)
 {
     bool is_sleeping;
     int map;
@@ -2627,7 +2627,7 @@ bool ai_waypoints_process(int64_t obj, bool a2)
 
     map = map_current_map();
     next_map = critter_teleport_map_get(obj);
-    if (next_map != map && !a2) {
+    if (next_map != map && !teleport_to_waypoint) {
         return false;
     }
 
@@ -2659,7 +2659,7 @@ bool ai_waypoints_process(int64_t obj, bool a2)
         next_loc = obj_arrayfield_int64_get(obj, OBJ_F_NPC_WAYPOINTS_IDX, wp);
     }
 
-    if (a2) {
+    if (teleport_to_waypoint) {
         if (next_map == map) {
             anim_object_interrupt_by_priority(obj, 4, false, true);
             object_move_to_location(obj, next_loc, 0, 0);
@@ -2687,7 +2687,7 @@ bool ai_is_day(void)
 }
 
 // 0x4ACDB0
-bool ai_standpoints_process(int64_t obj, bool a2)
+bool ai_standpoints_process(int64_t obj, bool teleport_to_standpoint)
 {
     bool is_sleeping;
     int64_t standpoint_loc;
@@ -2714,7 +2714,7 @@ bool ai_standpoints_process(int64_t obj, bool a2)
     next_map = critter_teleport_map_get(obj);
     map = map_current_map();
     if (next_map == map) {
-        if (!a2) {
+        if (!teleport_to_standpoint) {
             hour = datetime_current_hour();
             if ((hour == 6 || hour == 21)
                 && random_between(1, 1000) != 1) {
@@ -2722,7 +2722,7 @@ bool ai_standpoints_process(int64_t obj, bool a2)
             }
         }
     } else {
-        if (!a2) {
+        if (!teleport_to_standpoint) {
             return false;
         }
     }
@@ -2770,7 +2770,7 @@ bool ai_standpoints_process(int64_t obj, bool a2)
         obj_field_int32_set(obj, OBJ_F_NPC_FLAGS, npc_flags);
     }
 
-    if (a2) {
+    if (teleport_to_standpoint) {
         if (next_map == map) {
             anim_object_interrupt_by_priority(obj, 4, 0, 1);
             object_move_to_location(obj, standpoint_loc, 0, 0);
@@ -2872,7 +2872,7 @@ bool ai_timeevent_process(TimeEvent* timeevent)
     int64_t loc;
     int64_t sector_id;
     bool skip;
-    bool v1;
+    bool sector_is_loaded;
     unsigned int millis;
 
     obj = timeevent->params[0].object_value;
@@ -2881,7 +2881,7 @@ bool ai_timeevent_process(TimeEvent* timeevent)
     }
 
     skip = false;
-    v1 = false;
+    sector_is_loaded = false;
     if (!critter_is_dead(obj) && timeevent->params[1].integer_value != 0) {
         npc_flags = obj_field_int32_get(obj, OBJ_F_NPC_FLAGS);
         npc_flags |= ONF_CHECK_WIELD;
@@ -2923,10 +2923,10 @@ bool ai_timeevent_process(TimeEvent* timeevent)
         loc = obj_field_int64_get(obj, OBJ_F_LOCATION);
         sector_id = sector_id_from_loc(loc);
         if (sector_loaded(sector_id)) {
-            v1 = true;
+            sector_is_loaded = true;
         }
 
-        if (!ai_distant_follower_relocate(obj) && !v1) {
+        if (!ai_distant_follower_relocate(obj) && !sector_is_loaded) {
             if (!combat_turn_based_is_active()
                 && (obj_field_int32_get(obj, OBJ_F_CRITTER_FLAGS) & OCF_ENCOUNTER) != 0) {
                 object_destroy(obj);
@@ -3055,7 +3055,7 @@ void ai_schedule_delay(int64_t obj, DateTime* datetime)
 }
 
 // 0x4AD790
-void ai_schedule_immediate(int64_t obj, int a2)
+void ai_schedule_immediate(int64_t obj, int event_processing_flags)
 {
     TimeEvent timeevent;
 
@@ -3063,7 +3063,7 @@ void ai_schedule_immediate(int64_t obj, int a2)
 
     timeevent.type = TIMEEVENT_TYPE_AI;
     timeevent.params[0].object_value = obj;
-    timeevent.params[1].integer_value = a2;
+    timeevent.params[1].integer_value = event_processing_flags;
     timeevent_add_immediate(&timeevent);
 }
 
@@ -3075,7 +3075,7 @@ void ai_timeevent_clear(int64_t obj)
 }
 
 // 0x4AD800
-int ai_can_speak(int64_t npc_obj, int64_t pc_obj, bool a3)
+int ai_can_speak(int64_t npc_obj, int64_t pc_obj, bool ignore_combat_and_animation)
 {
     ObjectCritterFlags critter_flags;
     ObjectSpellFlags spell_flags;
@@ -3114,7 +3114,7 @@ int ai_can_speak(int64_t npc_obj, int64_t pc_obj, bool a3)
             return AI_SPEAK_SLEEP_UNCONSCIOUS;
         }
 
-        if (!a3) {
+        if (!ignore_combat_and_animation) {
             ai_danger_source(npc_obj, &danger_type, NULL);
 
             if (danger_type == AI_DANGER_SOURCE_TYPE_COMBAT_FOCUS
@@ -3533,16 +3533,16 @@ int ai_check_protect(int64_t source_obj, int64_t target_obj)
 }
 
 // 0x4AE450
-int64_t ai_dead_ally_attacker_find(int64_t a1, int64_t a2)
+int64_t ai_dead_ally_attacker_find(int64_t observer_obj, int64_t ally_obj)
 {
     int64_t combat_focus_obj;
 
-    if (critter_is_dead(a2)
-        && obj_field_int32_get(a2, OBJ_F_TYPE) == OBJ_TYPE_NPC
-        && obj_field_obj_get(a2, OBJ_F_NPC_COMBAT_FOCUS, &combat_focus_obj)
+    if (critter_is_dead(ally_obj)
+        && obj_field_int32_get(ally_obj, OBJ_F_TYPE) == OBJ_TYPE_NPC
+        && obj_field_obj_get(ally_obj, OBJ_F_NPC_COMBAT_FOCUS, &combat_focus_obj)
         && combat_focus_obj != OBJ_HANDLE_NULL
-        && ai_combat_target_is_valid(a1, combat_focus_obj)
-        && ai_check_protect(a1, a2) != AI_PROTECT_NO) {
+        && ai_combat_target_is_valid(observer_obj, combat_focus_obj)
+        && ai_check_protect(observer_obj, ally_obj) != AI_PROTECT_NO) {
         return combat_focus_obj;
     }
 
@@ -3875,7 +3875,7 @@ int ai_attempt_open_container(int64_t obj, int64_t container_obj)
 }
 
 // 0x4AEE50
-void ai_notify_portal_container_guards(int64_t critter_obj, int64_t target_obj, bool a3, int loudness)
+void ai_notify_portal_container_guards(int64_t critter_obj, int64_t target_obj, bool apply_reaction_penalty, int loudness)
 {
     int64_t pc_obj;
     int notify_npc;
@@ -3934,7 +3934,7 @@ void ai_notify_portal_container_guards(int64_t critter_obj, int64_t target_obj, 
             && (ai_can_see(node->obj, critter_obj) == 0
                 || ai_can_hear(node->obj, critter_obj, loudness) == 0)) {
             if (object_script_execute(critter_obj, node->obj, target_obj, SAP_CATCHING_THIEF_PC, 0) == 1) {
-                if (a3 && !critter_is_sleeping(node->obj)) {
+                if (apply_reaction_penalty && !critter_is_sleeping(node->obj)) {
                     reaction_adj(node->obj, pc_obj, -20);
                     ai_copy_params(node->obj, &ai_params);
                     if (reaction_get(node->obj, pc_obj) <= ai_params.attack_reaction_threshold) {
@@ -4230,22 +4230,22 @@ void ai_npc_fighting_toggle(void)
 }
 
 // 0x4AF8C0
-void ai_add_team_to_hostility_list(int64_t a1, int64_t a2)
+void ai_add_team_to_hostility_list(int64_t source_obj, int64_t target_obj)
 {
-    int64_t v1;
+    int64_t team_leader;
     ObjectList objects;
     ObjectNode* node;
 
-    v1 = critter_pc_leader_get(a2);
-    if (v1 == OBJ_HANDLE_NULL) {
-        v1 = a2;
+    team_leader = critter_pc_leader_get(target_obj);
+    if (team_leader == OBJ_HANDLE_NULL) {
+        team_leader = target_obj;
     }
 
-    object_list_team(v1, &objects);
+    object_list_team(team_leader, &objects);
 
     node = objects.head;
     while (node != NULL) {
-        ai_shitlist_add(a1, node->obj);
+        ai_shitlist_add(source_obj, node->obj);
         node = node->next;
     }
 

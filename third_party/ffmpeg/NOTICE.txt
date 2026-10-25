@@ -1,0 +1,21 @@
+FFmpeg native movie playback
+
+Copyright belongs to the FFmpeg authors.
+The default Bink-only Windows x64 SDK uses unmodified FFmpeg sources at
+29e619e767cde9045a75c29bc9a8278ae7b3a98b, under LGPL 2.1 or later.
+See the accompanying LICENSE.txt and BUILD-CONFIG.txt for this SDK.
+
+Source archive:
+https://github.com/FFmpeg/FFmpeg/archive/29e619e767cde9045a75c29bc9a8278ae7b3a98b.tar.gz
+Source SHA256:
+8e4699bcb6a311772e8f513cc72ce27328891b82a598b82e7cff3dfe580875a0
+
+Build recipe: tools/build_ffmpeg_windows.py in the Arcanum CE source tree.
+It enables Bink video, Bink RDFT/DCT audio, local file input, swscale and
+swresample. SIMD optimizations and runtime CPU detection remain enabled.
+No external codec libraries, encoder, network protocol or hardware decoder
+is included. GNU Make and NASM are build tools, not runtime dependencies.
+
+The libraries remain replaceable shared components. ARCANUM_FFMPEG_ROOT can
+select another ABI-compatible SDK; its own accompanying license takes precedence.
+No Bink DLL or proprietary decoder is included in this backend.

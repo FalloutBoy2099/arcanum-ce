@@ -28,13 +28,13 @@ typedef struct TigFont {
     /* 0004 */ tig_art_id_t art_id;
     /* 0008 */ tig_color_t color;
     /* 000C */ tig_color_t underline_color;
-    /* 0010 */ int field_10;
+    /* 0010 */ int reserved_slot_1;
     /* 0014 */ tig_color_t strike_through_color;
     /* 0018 */ float scale;
     /* 001C */ const char* str;
     /* 0020 */ int width;
     /* 0024 */ int height;
-    /* 0028 */ int field_28;
+    /* 0028 */ int reserved_slot_2;
     const char* modern_font_path;
     float modern_font_size;
     void* modern_font;

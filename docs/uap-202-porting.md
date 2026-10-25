@@ -1,5 +1,11 @@
 # UAP 2.0.2 Porting Notes
 
+Update 2026-10-25: six confirmed engine differences are addressed in
+[the current verification report](uap_six_engine_fixes_20261025.md): the effect
+range, minimum age, annual aging, optional Master Educator and kill-only XP,
+and the unspent-points limit. The initial binary mapping and remaining-work
+tables below are historical findings, not a current count of missing fixes.
+
 This document tracks the work needed to make Arcanum CE behave like the
 reference installation in `C:\Games\ArcanumUAP`:
 

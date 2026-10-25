@@ -1,4 +1,5 @@
 #include "game/combat.h"
+#include <tig/performance.h>
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -42,8 +43,8 @@
 
 static void turn_based_changed(void);
 static void fast_turn_based_changed(void);
-static void combat_create_projectile(CombatContext* combat, int64_t loc, int a3, int a4, tig_art_id_t proj_aid);
-static void combat_projectile_finish(int64_t proj_obj, int64_t a2, int64_t a3, CombatContext* combat, bool a5);
+static void combat_create_projectile(CombatContext* combat, int64_t loc, int offset_x, int offset_y, tig_art_id_t proj_aid);
+static void combat_projectile_finish(int64_t proj_obj, int64_t projectile_owner_obj, int64_t original_target_obj, CombatContext* combat, bool allow_return);
 static int combat_weapon_loudness(int64_t weapon_obj);
 static void combat_hit_result_apply(CombatContext* combat);
 static void combat_process_melee_attack(CombatContext* combat);
@@ -111,7 +112,7 @@ static int combat_material_damage_reduction_tbl[MATERIAL_COUNT] = {
 };
 
 // 0x5B57FC
-static int dword_5B57FC[2] = {
+static int combat_projectile_offset_by_arrow_type[2] = {
     0,
     10,
 };
@@ -159,7 +160,7 @@ static int combat_turn_based_turn;
 static int combat_action_points;
 
 // 0x5FC238
-static int64_t qword_5FC238;
+static int64_t combat_saved_object_reference;
 
 // 0x5FC240
 static ObjectNode* combat_current_turn_node;
@@ -262,10 +263,10 @@ bool combat_save(TigFile* stream)
 
     if (tig_file_fwrite(&combat_action_points, sizeof(combat_action_points), 1, stream) != 1) return false;
 
-    if (qword_5FC238 == OBJ_HANDLE_NULL) {
+    if (combat_saved_object_reference == OBJ_HANDLE_NULL) {
         oid.type = OID_TYPE_NULL;
     } else {
-        oid = obj_get_id(qword_5FC238);
+        oid = obj_get_id(combat_saved_object_reference);
     }
     if (tig_file_fwrite(&oid, sizeof(oid), 1, stream) != 1) return false;
 
@@ -310,7 +311,7 @@ bool combat_load(GameLoadInfo* load_info)
     combat_action_points = saved_action_points;
 
     if (tig_file_fread(&oid, sizeof(oid), 1, load_info->stream) != 1) return false;
-    qword_5FC238 = obj_pool_perm_lookup(oid);
+    combat_saved_object_reference = obj_pool_perm_lookup(oid);
 
     if (tig_file_fread(&oid, sizeof(oid), 1, load_info->stream) != 1) return false;
     obj = obj_pool_perm_lookup(oid);
@@ -427,7 +428,7 @@ void fast_turn_based_changed(void)
 }
 
 // 0x4B24F0
-void combat_create_projectile(CombatContext* combat, int64_t loc, int a3, int a4, tig_art_id_t proj_aid)
+void combat_create_projectile(CombatContext* combat, int64_t loc, int offset_x, int offset_y, tig_art_id_t proj_aid)
 {
     int64_t proj_obj;
     int hit_loc;
@@ -469,21 +470,21 @@ void combat_create_projectile(CombatContext* combat, int64_t loc, int a3, int a4
     anim_goal_projectile(combat->attacker_obj,
         proj_obj,
         proj_aid,
-        a3,
-        a4,
+        offset_x,
+        offset_y,
         combat->target_obj,
         combat->target_loc,
         combat->weapon_obj);
 }
 
 // 0x4B2650
-void combat_projectile_finish_from_context(int64_t a1, int64_t a2, CombatContext* combat)
+void combat_projectile_finish_from_context(int64_t projectile_obj, int64_t attacker_obj, CombatContext* combat)
 {
-    combat_projectile_finish(a1, a2, combat != NULL ? combat->original_target_obj : OBJ_HANDLE_NULL, combat, false);
+    combat_projectile_finish(projectile_obj, attacker_obj, combat != NULL ? combat->original_target_obj : OBJ_HANDLE_NULL, combat, false);
 }
 
 // 0x4B2690
-void combat_projectile_finish(int64_t proj_obj, int64_t a2, int64_t a3, CombatContext* combat, bool a5)
+void combat_projectile_finish(int64_t proj_obj, int64_t projectile_owner_obj, int64_t original_target_obj, CombatContext* combat, bool allow_return)
 {
     unsigned int proj_flags;
     int64_t weapon_obj;
@@ -498,20 +499,20 @@ void combat_projectile_finish(int64_t proj_obj, int64_t a2, int64_t a3, CombatCo
         object_flags_unset(weapon_obj, OF_OFF);
         object_destroy(proj_obj);
     } else if ((proj_flags & 0x1000) != 0) {
-        if (a5 && (proj_flags & 0x2000) == 0) {
+        if (allow_return && (proj_flags & 0x2000) == 0) {
             proj_flags |= 0x2000;
             obj_field_int32_set(proj_obj, OBJ_F_PROJECTILE_FLAGS_COMBAT, proj_flags);
-            if (!anim_projectile_return_to_parent(proj_obj, obj_field_int64_get(a2, OBJ_F_LOCATION), a3)) {
-                combat_projectile_finish(proj_obj, a2, a3, combat, true);
+            if (!anim_projectile_return_to_parent(proj_obj, obj_field_int64_get(projectile_owner_obj, OBJ_F_LOCATION), original_target_obj)) {
+                combat_projectile_finish(proj_obj, projectile_owner_obj, original_target_obj, combat, true);
                 return;
             }
         } else {
-            critter_flags2 = obj_field_int32_get(a2, OBJ_F_CRITTER_FLAGS2);
+            critter_flags2 = obj_field_int32_get(projectile_owner_obj, OBJ_F_CRITTER_FLAGS2);
             critter_flags2 &= ~OCF2_USING_BOOMERANG;
-            obj_field_int32_set(a2, OBJ_F_CRITTER_FLAGS2, critter_flags2);
+            obj_field_int32_set(projectile_owner_obj, OBJ_F_CRITTER_FLAGS2, critter_flags2);
 
             object_destroy(proj_obj);
-            ai_auto_attack_response(a2, a3);
+            ai_auto_attack_response(projectile_owner_obj, original_target_obj);
         }
     } else {
         object_destroy(proj_obj);
@@ -546,7 +547,7 @@ int combat_weapon_loudness(int64_t weapon_obj)
 }
 
 // 0x4B2870
-bool combat_projectile_step_resolve(int64_t attacker_obj, int64_t target_obj, int64_t target_loc, int64_t proj_obj, int range, int64_t cur_loc, int64_t a7)
+bool combat_projectile_step_resolve(int64_t attacker_obj, int64_t target_obj, int64_t target_loc, int64_t proj_obj, int range, int64_t cur_loc, int64_t original_target_obj)
 {
     unsigned int proj_flags;
     unsigned int proj_dam_flags;
@@ -598,7 +599,7 @@ bool combat_projectile_step_resolve(int64_t attacker_obj, int64_t target_obj, in
     if (proj_loc == target_loc) {
         if (target_obj == OBJ_HANDLE_NULL
             || (proj_flags & 0x2000) != 0) {
-            combat_projectile_finish(proj_obj, attacker_obj, a7, NULL, true);
+            combat_projectile_finish(proj_obj, attacker_obj, original_target_obj, NULL, true);
 
             if (weapon_obj != OBJ_HANDLE_NULL) {
                 object_script_execute(attacker_obj, weapon_obj, target_obj, SAP_HIT, 0);
@@ -868,13 +869,13 @@ int combat_attack_resolve(CombatContext* combat)
             }
         }
 
-        int v3 = 0;
+        int aptitude_failure_percent = 0;
         if (combat->weapon_obj != OBJ_HANDLE_NULL && combat->skill != SKILL_THROWING) {
-            v3 = item_target_aptitude_penalty_get(combat->weapon_obj, combat->attacker_obj, combat->target_obj);
+            aptitude_failure_percent = item_target_aptitude_penalty_get(combat->weapon_obj, combat->attacker_obj, combat->target_obj);
         }
 
         bool cont = true;
-        if (random_between(1, 100) <= v3) {
+        if (random_between(1, 100) <= aptitude_failure_percent) {
             if (combat->skill == SKILL_MELEE
                 && combat->weapon_obj != OBJ_HANDLE_NULL
                 && obj_field_int32_get(combat->weapon_obj, OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY) > 0) {
@@ -1112,7 +1113,7 @@ void combat_process_ranged_attack(CombatContext* combat)
     }
 
     for (arrow = 0; arrow < num_arrows; arrow++) {
-        combat_create_projectile(combat, loc, dword_5B57FC[arrow], dword_5B57FC[arrow], missile_art_id);
+        combat_create_projectile(combat, loc, combat_projectile_offset_by_arrow_type[arrow], combat_projectile_offset_by_arrow_type[arrow], missile_art_id);
     }
 }
 
@@ -1243,7 +1244,7 @@ void combat_critter_activate_combat_mode(int64_t obj)
 // 0x4B3F80
 void combat_critter_toggle_combat_mode(int64_t obj)
 {
-    bool v1 = false;
+    bool concealed_fidget = false;
     bool combat_mode_is_active;
     bool is_pc;
     int obj_type;
@@ -1283,7 +1284,7 @@ void combat_critter_toggle_combat_mode(int64_t obj)
     art_id = obj_field_int32_get(obj, OBJ_F_CURRENT_AID);
 
     if (tig_art_id_anim_get(art_id) == TIG_ART_ANIM_CONCEAL_FIDGET) {
-        v1 = true;
+        concealed_fidget = true;
         if (!is_pc && !critter_is_dead(obj)) {
             return;
         }
@@ -1356,7 +1357,7 @@ void combat_critter_toggle_combat_mode(int64_t obj)
             combat_callbacks.mode_change_notify(0);
         }
 
-        if (!v1 && anim_is_fidgeting(obj)) {
+        if (!concealed_fidget && anim_is_fidgeting(obj)) {
             anim_object_interrupt_by_priority(obj, 3, 0, 0);
         }
     } else {
@@ -1365,7 +1366,7 @@ void combat_critter_toggle_combat_mode(int64_t obj)
             ai_group_attacks_enable(obj);
         }
 
-        if (!v1 && !is_tb) {
+        if (!concealed_fidget && !is_tb) {
             anim_goal_fidget(obj);
         }
     }
@@ -1390,6 +1391,8 @@ void combat_refresh_fidget_if_allowed(int64_t obj)
 // 0x4B4390
 void combat_dmg(CombatContext* combat)
 {
+    tig_performance_trace(TIG_PERF_EVENT_DAMAGE_RESOLVE, (Uint64)combat->attacker_obj,
+        (Uint64)combat->target_obj, combat->flags, combat_turn_based_is_active());
     int obj_type;
     unsigned int dam_flags;
     int dam;
@@ -1836,6 +1839,7 @@ void combat_dmg(CombatContext* combat)
 
         if (combat->credited_attacker_obj != OBJ_HANDLE_NULL
             && obj_type == OBJ_TYPE_NPC
+            && settings_get_value(&settings, NO_XP_PER_HIT_KEY) == 0
             && (spell_flags & OSF_STONED) == 0) {
             int remaining_experience = obj_field_int32_get(combat->target_obj, OBJ_F_NPC_EXPERIENCE_POOL);
             if (remaining_experience > 0) {
@@ -2108,7 +2112,7 @@ void combat_heal(CombatContext* combat)
     int index;
     unsigned int critter_flags;
     bool unressurectable = false;
-    bool v2 = false;
+    bool revived = false;
     tig_art_id_t art_id;
 
     type = obj_field_int32_get(combat->target_obj, OBJ_F_TYPE);
@@ -2148,7 +2152,7 @@ void combat_heal(CombatContext* combat)
         art_id = tig_art_id_frame_set(art_id, 0);
         object_set_current_aid(combat->target_obj, art_id);
 
-        v2 = true;
+        revived = true;
 
         combat_remove_blood_splotch(combat->target_loc);
         ai_stop_fleeing(combat->target_obj);
@@ -2278,7 +2282,7 @@ void combat_heal(CombatContext* combat)
         }
     }
 
-    if (v2 && type != OBJ_TYPE_PC) {
+    if (revived && type != OBJ_TYPE_PC) {
         ai_schedule_default_delay(combat->target_obj);
     }
 
@@ -2760,7 +2764,7 @@ int combat_projectile_rot(int64_t from_loc, int64_t to_loc)
     int64_t y1;
     int64_t x2;
     int64_t y2;
-    double v1;
+    double angle_radians;
     int extended_rotation;
 
     if (from_loc == to_loc) {
@@ -2770,12 +2774,12 @@ int combat_projectile_rot(int64_t from_loc, int64_t to_loc)
     location_xy(from_loc, &x1, &y1);
     location_xy(to_loc, &x2, &y2);
 
-    v1 = atan2((double)(y2 - y1), (double)(x2 - x1));
-    if (v1 < 0.0) {
-        v1 += M_PI * 2.0;
+    angle_radians = atan2((double)(y2 - y1), (double)(x2 - x1));
+    if (angle_radians < 0.0) {
+        angle_radians += M_PI * 2.0;
     }
 
-    extended_rotation = (int)(v1 * 32.0 / (M_PI * 2.0));
+    extended_rotation = (int)(angle_radians * 32.0 / (M_PI * 2.0));
     if (extended_rotation < 0 || extended_rotation >= 32) {
         extended_rotation = 0;
     }

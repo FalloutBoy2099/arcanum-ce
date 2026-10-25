@@ -13,7 +13,7 @@ static void roof_xy(int64_t loc, int64_t* sx, int64_t* sy);
 static tig_art_id_t roof_art_id_get(int64_t loc);
 static bool roof_art_id_set(int64_t loc, tig_art_id_t aid);
 static void roof_get_rect(int x, int y, tig_art_id_t aid, TigRect* rect);
-static void roof_fill(int64_t loc, bool fill, int a3);
+static void roof_fill(int64_t loc, bool fill, int fill_direction);
 
 // 0x5A53A0
 static unsigned int roof_blit_flags = TIG_ART_BLT_BLEND_ALPHA_CONST;
@@ -506,8 +506,8 @@ void roof_recalc(int64_t loc)
     tig_art_id_t aid;
     int piece;
     int tile;
-    int v5;
-    int v6;
+    int subtile_x;
+    int subtile_y;
     bool fill;
 
     aid = roof_art_id_get(loc);
@@ -517,31 +517,31 @@ void roof_recalc(int64_t loc)
 
     piece = tig_art_roof_id_piece_get(aid);
     tile = tile_id_from_loc(loc);
-    v5 = tile & 3;
-    v6 = (tile >> 6) % 4;
+    subtile_x = tile & 3;
+    subtile_y = (tile >> 6) % 4;
 
     switch (piece) {
     case TIG_ART_ROOF_PIECE_NORTH_WEST_OUTSIDE:
-        fill = v6 > 1 && v5 < 3;
+        fill = subtile_y > 1 && subtile_x < 3;
         break;
     case TIG_ART_ROOF_PIECE_WEST:
-        fill = v5 < 3;
+        fill = subtile_x < 3;
         break;
     case TIG_ART_ROOF_PIECE_NORTH:
-        fill = v6 > 1;
+        fill = subtile_y > 1;
         break;
     case TIG_ART_ROOF_PIECE_NORTH_WEST_INSIDE:
-        if (v5 >= 3 && v6 <= 1) {
+        if (subtile_x >= 3 && subtile_y <= 1) {
             fill = false;
         } else {
             fill = true;
         }
         break;
     case TIG_ART_ROOF_PIECE_SOUTH_WEST_OUTSIDE:
-        if (v5 >= 3) {
+        if (subtile_x >= 3) {
             fill = false;
         } else {
-            if (v6 < 3) {
+            if (subtile_y < 3) {
                 fill = true;
             } else {
                 fill = false;
@@ -549,8 +549,8 @@ void roof_recalc(int64_t loc)
         }
         break;
     case TIG_ART_ROOF_PIECE_SOUTH_WEST_INSIDE:
-        if (v5 >= 3) {
-            if (v6 < 3) {
+        if (subtile_x >= 3) {
+            if (subtile_y < 3) {
                 fill = true;
             } else {
                 fill = false;
@@ -560,10 +560,10 @@ void roof_recalc(int64_t loc)
         }
         break;
     case TIG_ART_ROOF_PIECE_NORTH_EAST_INSIDE:
-        fill = v5 > 1 || v6 > 1;
+        fill = subtile_x > 1 || subtile_y > 1;
         break;
     case TIG_ART_ROOF_PIECE_NORTH_EAST_OUTSIDE:
-        if (v5 <= 1 || v6 <= 1) {
+        if (subtile_x <= 1 || subtile_y <= 1) {
             fill = false;
         } else {
             fill = true;
@@ -573,10 +573,10 @@ void roof_recalc(int64_t loc)
         fill = true;
         break;
     case TIG_ART_ROOF_PIECE_SOUTH_EAST_OUTSIDE:
-        if (v5 <= 1) {
+        if (subtile_x <= 1) {
             fill = false;
         } else {
-            if (v6 < 3) {
+            if (subtile_y < 3) {
                 fill = true;
             } else {
                 fill = false;
@@ -584,13 +584,13 @@ void roof_recalc(int64_t loc)
         }
         break;
     case TIG_ART_ROOF_PIECE_SOUTH:
-        fill = v6 < 3;
+        fill = subtile_y < 3;
         break;
     case TIG_ART_ROOF_PIECE_EAST:
-        fill = v5 > 1;
+        fill = subtile_x > 1;
         break;
     case TIG_ART_ROOF_PIECE_SOUTH_EAST_INSIDE:
-        fill = v5 > 1 || v6 < 3;
+        fill = subtile_x > 1 || subtile_y < 3;
         break;
     default:
         // Should be unreachable.
@@ -742,7 +742,7 @@ void roof_get_rect(int x, int y, tig_art_id_t aid, TigRect* rect)
 }
 
 // 0x43A1A0
-void roof_fill(int64_t loc, bool fill, int a3)
+void roof_fill(int64_t loc, bool fill, int fill_direction)
 {
     tig_art_id_t aid;
     int piece;
@@ -756,9 +756,9 @@ void roof_fill(int64_t loc, bool fill, int a3)
         return;
     }
 
-    if (a3 != -1) {
+    if (fill_direction != -1) {
         piece = tig_art_roof_id_piece_get(aid);
-        switch (a3) {
+        switch (fill_direction) {
         case 1:
             switch (piece) {
             case TIG_ART_ROOF_PIECE_NORTH_WEST_OUTSIDE:

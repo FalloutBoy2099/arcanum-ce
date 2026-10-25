@@ -3,6 +3,7 @@
 #include <tig/performance.h>
 
 #include "game/critter.h"
+#include "game/light.h"
 #include "game/location.h"
 #include "game/object.h"
 #include "game/sector.h"
@@ -24,8 +25,8 @@ static int path_try_nearby_destination(PathCreateInfo* path_create_info);
 static int path_make_direct_local(PathCreateInfo* path_create_info);
 static int path_make_local_astar(PathCreateInfo* path_create_info);
 static int path_dist(int src, int dst, int width);
-static int path_grid_direction_between_indices(int a1, int a2, int a3);
-static void path_straight_sample_offset(int64_t x, int64_t y, StraightPathState* a5);
+static int path_grid_direction_between_indices(int from_index, int to_index, int grid_width);
+static void path_straight_sample_offset(int64_t x, int64_t y, StraightPathState* state);
 static void path_line_points_enumerate(int64_t from_x, int64_t from_y, int64_t to_x, int64_t to_y, StraightPathState* state, void (*fn)(int64_t, int64_t, StraightPathState*));
 static int path_make_straight_offsets(int64_t from, int64_t to, int8_t* rotations);
 static int path_worldmap_destination_adjust(WmapPathInfo* path_info);
@@ -63,6 +64,9 @@ static int path_budget_search_count;
 // 0x5DE600
 static tig_duration_t path_budget_elapsed_milliseconds;
 
+static bool path_preview_active;
+static tig_timestamp_t path_preview_started;
+
 // 0x41F3C0
 static int path_make_impl(PathCreateInfo* path_create_info);
 
@@ -81,9 +85,24 @@ int path_make(PathCreateInfo* path_create_info)
     return result;
 }
 
+int path_make_preview(PathCreateInfo* path_create_info)
+{
+    if (path_create_info == NULL || path_create_info->rotations == NULL
+        || path_create_info->max_rotations <= 0 || path_create_info->max_rotations > 200
+        || (path_create_info->flags & (PATH_FLAG_LONG_RANGE_FALLBACK | PATH_FLAG_NEARBY_DESTINATION_SEARCH
+            | PATH_FLAG_STRAIGHT_PIXEL_OFFSETS | PATH_FLAG_STRAIGHT_TILE_STEPS)) != 0) return 0;
+    Uint64 start = tig_performance_begin();
+    tig_timer_now(&path_preview_started);
+    path_preview_active = true;
+    int result = path_make_impl(path_create_info);
+    path_preview_active = false;
+    tig_performance_end_detail(TIG_PERF_PATH, start, "MovementPreview");
+    return result;
+}
+
 static int path_make_impl(PathCreateInfo* path_create_info)
 {
-    bool v1 = false;
+    bool ignore_art_blocking = false;
 
     if ((path_create_info->flags & PATH_FLAG_NEARBY_DESTINATION_SEARCH) != 0) {
         return path_try_nearby_destination(path_create_info);
@@ -96,7 +115,7 @@ static int path_make_impl(PathCreateInfo* path_create_info)
     }
 
     if ((path_create_info->flags & PATH_FLAG_IGNORE_TILE_BLOCKING) != 0) {
-        v1 = true;
+        ignore_art_blocking = true;
     }
 
     if ((path_create_info->flags & PATH_FLAG_STRAIGHT_PIXEL_OFFSETS) != 0) {
@@ -109,7 +128,7 @@ static int path_make_impl(PathCreateInfo* path_create_info)
 
     if ((path_create_info->flags & (PATH_FLAG_IGNORE_BLOCKERS | PATH_FLAG_STOP_BEFORE_DESTINATION)) == 0) {
         if ((path_create_info->flags & PATH_FLAG_IGNORE_TILE_BLOCKING) == 0
-            && tile_is_blocking(path_create_info->to, v1)) {
+            && tile_is_blocking(path_create_info->to, ignore_art_blocking)) {
             return 0;
         }
 
@@ -119,28 +138,28 @@ static int path_make_impl(PathCreateInfo* path_create_info)
         }
     }
 
-    int v2 = 0;
+    int path_length = 0;
     if ((path_create_info->flags & PATH_FLAG_AVOID_SPOTTED_TRAPS) == 0) {
-        v2 = path_make_direct_local(path_create_info);
+        path_length = path_make_direct_local(path_create_info);
     }
 
-    if (v2 == 0) {
+    if (path_length == 0) {
         if ((path_create_info->flags & PATH_FLAG_LONG_RANGE_FALLBACK) != 0) {
-            v2 = path_make_long_range_fallback(path_create_info, 300);
+            path_length = path_make_long_range_fallback(path_create_info, 300);
         } else {
             if ((path_create_info->flags & PATH_FLAG_DIRECT_ONLY) != 0) {
                 return 0;
             }
 
-            v2 = path_make_local_astar(path_create_info);
+            path_length = path_make_local_astar(path_create_info);
         }
     }
 
-    if (v2 > 8) {
-        v2 = 8;
+    if (!path_preview_active && path_length > 8) {
+        path_length = 8;
     }
 
-    return v2;
+    return path_length;
 }
 
 // 0x41F570
@@ -171,8 +190,8 @@ int path_try_nearby_destination(PathCreateInfo* path_create_info)
     int range;
     int base_rot;
     int idx;
-    int v1;
-    int v2;
+    int path_length;
+    int best_partial_length;
     int64_t loc;
 
     rotations[0] = 4;
@@ -195,37 +214,37 @@ int path_try_nearby_destination(PathCreateInfo* path_create_info)
     range = path_create_info->range_or_partial_path_length - (int)dist;
     base_rot = location_rot(path_create_info->from, path_create_info->to);
 
-    v2 = 0;
+    best_partial_length = 0;
     for (idx = 0; idx < 8; idx++) {
         location_in_range(path_create_info->from,
             (base_rot + rotations[idx]) % 8,
             range,
             &(path_create_info->to));
-        v1 = path_make_direct_local(path_create_info);
-        if (v1 != 0) {
+        path_length = path_make_direct_local(path_create_info);
+        if (path_length != 0) {
             break;
         }
 
-        if (v2 < path_create_info->range_or_partial_path_length) {
-            v2 = path_create_info->range_or_partial_path_length;
+        if (best_partial_length < path_create_info->range_or_partial_path_length) {
+            best_partial_length = path_create_info->range_or_partial_path_length;
             loc = path_create_info->to;
         }
     }
 
     path_create_info->flags |= PATH_FLAG_NEARBY_DESTINATION_SEARCH;
 
-    if (v1 == 0 && v2 > 0) {
+    if (path_length == 0 && best_partial_length > 0) {
         path_create_info->to = loc;
-        v1 = path_make_direct_local(path_create_info);
+        path_length = path_make_direct_local(path_create_info);
     }
 
-    return v1;
+    return path_length;
 }
 
 // 0x41F840
 int path_make_direct_local(PathCreateInfo* path_create_info)
 {
-    bool v1 = false;
+    bool ignore_art_blocking = false;
     unsigned int flags;
     int idx;
     int64_t loc;
@@ -239,7 +258,7 @@ int path_make_direct_local(PathCreateInfo* path_create_info)
     }
 
     if ((path_create_info->flags & PATH_FLAG_IGNORE_TILE_BLOCKING) != 0) {
-        v1 = true;
+        ignore_art_blocking = true;
     }
 
     flags = path_translate_flags(path_create_info->flags);
@@ -258,7 +277,7 @@ int path_make_direct_local(PathCreateInfo* path_create_info)
             if (adjacent_loc != path_create_info->to
                 || (path_create_info->flags & PATH_FLAG_STOP_BEFORE_DESTINATION) == 0) {
                 if ((path_create_info->flags & PATH_FLAG_IGNORE_TILE_BLOCKING) == 0
-                    && tile_is_blocking(adjacent_loc, v1)) {
+                    && tile_is_blocking(adjacent_loc, ignore_art_blocking)) {
                     break;
                 }
 
@@ -302,7 +321,7 @@ int path_make_direct_local(PathCreateInfo* path_create_info)
 int path_make_local_astar(PathCreateInfo* path_create_info)
 {
     tig_timestamp_t timestamp;
-    bool v1 = false;
+    bool ignore_art_blocking = false;
     unsigned int flags;
     int64_t from_x;
     int64_t from_y;
@@ -317,7 +336,7 @@ int path_make_local_astar(PathCreateInfo* path_create_info)
     int current_index;
     uint64_t counted_comparisons = 0;
 
-    if (obj_field_int32_get(path_create_info->obj, OBJ_F_TYPE) == OBJ_TYPE_NPC) {
+    if (!path_preview_active && obj_field_int32_get(path_create_info->obj, OBJ_F_TYPE) == OBJ_TYPE_NPC) {
         if (path_budget_window_start == 0
             || tig_timer_elapsed(path_budget_window_start) >= 1000) {
             tig_timer_now(&path_budget_window_start);
@@ -346,7 +365,7 @@ int path_make_local_astar(PathCreateInfo* path_create_info)
     to_y = LOCATION_GET_Y(path_create_info->to);
 
     if ((path_create_info->flags & PATH_FLAG_IGNORE_TILE_BLOCKING) != 0) {
-        v1 = true;
+        ignore_art_blocking = true;
     }
 
     flags = path_translate_flags(path_create_info->flags);
@@ -389,6 +408,7 @@ int path_make_local_astar(PathCreateInfo* path_create_info)
     }
 
     while (true) {
+        if (path_preview_active && tig_timer_elapsed(path_preview_started) >= 5) return 0;
         // O(log N) selection instead of scanning the entire 64 x 64 grid.
         tig_performance_count(TIG_PERF_PATH_EXPANSIONS, 1);
         current_index = path_open_set_pop(&path_open_set);
@@ -409,8 +429,12 @@ int path_make_local_astar(PathCreateInfo* path_create_info)
             break;
         }
 
+        int64_t loc = location_make(origin_x + current_index % 64, origin_y + current_index / 64);
+        int incoming_direction = path_backtrack_tbl[current_index] == -1 ? -1
+            : path_grid_direction_between_indices(path_backtrack_tbl[current_index], current_index, 64);
+        int minimum_step_cost = (path_create_info->flags & PATH_FLAG_AVOID_SPOTTED_TRAPS) != 0 ? 4 : 10;
+
         for (int rot = 0; rot < 8; rot++) {
-            int64_t loc = location_make(origin_x + current_index % 64, origin_y + current_index / 64);
             int64_t adjacent_loc;
             if (!location_in_dir(loc, rot, &adjacent_loc)) {
                 continue;
@@ -434,7 +458,7 @@ int path_make_local_astar(PathCreateInfo* path_create_info)
                 if (adjacent_loc != path_create_info->to
                     || (path_create_info->flags & PATH_FLAG_STOP_BEFORE_DESTINATION) == 0) {
                     if ((path_create_info->flags & PATH_FLAG_IGNORE_TILE_BLOCKING) == 0
-                        && tile_is_blocking(adjacent_loc, v1)) {
+                        && tile_is_blocking(adjacent_loc, ignore_art_blocking)) {
                         path_cost_tbl[neighbor_index] = -32768;
                         path_open_set_remove(&path_open_set, neighbor_index);
                         continue;
@@ -454,6 +478,17 @@ int path_make_local_astar(PathCreateInfo* path_create_info)
                         continue;
                     }
                 }
+            }
+
+            int turn_cost = incoming_direction != -1 && incoming_direction != rot ? 1 : 0;
+            int known_cost = path_cost_tbl[neighbor_index];
+            if (known_cost < 0) {
+                known_cost = -known_cost;
+            }
+            int minimum_cost = path_cost_tbl[current_index] + minimum_step_cost
+                + (is_window ? 50 : 0) + turn_cost;
+            if (known_cost != 0 && minimum_cost >= known_cost) {
+                continue;
             }
 
             // Base movement cost.
@@ -496,10 +531,7 @@ int path_make_local_astar(PathCreateInfo* path_create_info)
             cost += path_cost_tbl[current_index];
 
             // Add additional cost in case direction change is needed.
-            if (path_backtrack_tbl[current_index] != -1
-                && path_grid_direction_between_indices(path_backtrack_tbl[current_index], current_index, 64) != rot) {
-                cost++;
-            }
+            cost += turn_cost;
 
             // If this neighbor has not been reached or a lower cost is now
             // available, update its cost and record the current node as its
@@ -589,32 +621,32 @@ int path_dist(int src, int dst, int width)
 }
 
 // 0x420110
-int path_grid_direction_between_indices(int a1, int a2, int a3)
+int path_grid_direction_between_indices(int from_index, int to_index, int grid_width)
 {
-    int v3;
-    int v4;
+    int delta_x;
+    int delta_y;
     int rot;
 
-    v3 = a2 % a3 - a1 % a3;
-    v4 = a2 / a3 - a1 / a3;
+    delta_x = to_index % grid_width - from_index % grid_width;
+    delta_y = to_index / grid_width - from_index / grid_width;
 
-    if (v4 >= 0) {
-        if (v3 >= 0) {
-            if (v4 <= 0) {
-                if (v4 > -1)
-                    rot = (v4 < 1) + 4;
+    if (delta_y >= 0) {
+        if (delta_x >= 0) {
+            if (delta_y <= 0) {
+                if (delta_y > -1)
+                    rot = (delta_y < 1) + 4;
                 else
                     rot = 6;
             } else {
-                rot = (v3 >= 1) + 3;
+                rot = (delta_x >= 1) + 3;
             }
-        } else if (v4 > -1) {
-            rot = (v4 >= 1) + 1;
+        } else if (delta_y > -1) {
+            rot = (delta_y >= 1) + 1;
         } else {
             rot = 0;
         }
-    } else if (v3 > -1) {
-        rot = (v3 < 1) + 6;
+    } else if (delta_x > -1) {
+        rot = (delta_x < 1) + 6;
     } else {
         rot = 0;
     }

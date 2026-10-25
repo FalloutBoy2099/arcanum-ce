@@ -1,0 +1,30 @@
+#include <winver.h>
+
+1 VERSIONINFO
+FILEVERSION 1,0,@version_patch@,@version_revision@
+PRODUCTVERSION 1,0,@version_patch@,@version_revision@
+FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+FILEFLAGS @version_flags@
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+FILESUBTYPE 0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Arcanum Community Edition\0"
+            VALUE "FileDescription", "Arcanum Community Edition\0"
+            VALUE "FileVersion", "@file_version@\0"
+            VALUE "InternalName", "arcanum-ce\0"
+            VALUE "LegalCopyright", "Arcanum Community Edition contributors\0"
+            VALUE "OriginalFilename", "arcanum-ce.exe\0"
+            VALUE "ProductName", "Arcanum Community Edition\0"
+            VALUE "ProductVersion", "@file_version@\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

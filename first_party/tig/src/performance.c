@@ -25,6 +25,13 @@ static const char* metric_names[TIG_PERF_METRIC_COUNT] = {
     "object_sort", "art_eviction",
     "art_load", "art_prepare", "art_blit",
     "art_file_open", "art_metadata", "art_pixels",
+    "sector_load", "sector_save", "sector_activate", "sector_art_precache",
+    "archive_read", "archive_inflate", "ai_decision", "event_lateness_real",
+    "file_read_native", "frame_interval",
+    "main_tail", "message_dispatch", "input_dispatch", "menu_modal", "profile_flush",
+    "benchmark_control", "neighbor_prefetch",
+    "simulation_module", "save_game", "teleport", "visual_fade",
+    "event_recovery", "event_callback", "ui_asset_warmup",
 };
 static const char* counter_names[TIG_PERF_COUNTER_COUNT] = {
     "dirty_pixels_requested", "path_expansions", "path_scanned_cells",
@@ -34,7 +41,39 @@ static const char* counter_names[TIG_PERF_COUNTER_COUNT] = {
     "object_sector_loads",
     "object_blits", "art_evictions",
     "zoom_scaled_pixels", "zoom_full_copies",
+    "sector_cache_hits", "sector_cache_misses", "sector_evictions", "sector_load_failures",
+    "art_cache_hits", "art_cache_misses", "archive_read_bytes", "archive_decoded_bytes",
+    "frame_over_16_67ms", "frame_over_33_33ms", "trace_events_dropped",
+    "file_read_native_bytes",
+    "prefetch_requests", "prefetch_hits", "prefetch_misses", "prefetch_ready_bytes",
+    "prefetch_source_rejections", "prefetch_source_limit_rejections",
+    "neighbor_requests", "neighbor_ready", "neighbor_failures", "neighbor_art_requests", "trace_sampled_out",
+    "prefetch_decoded_art", "prefetch_archive_ready_bytes", "prefetch_archive_hits",
+    "prefetch_evictions", "prefetch_evicted_bytes",
 };
+#define TRACE_CAPACITY 4096
+
+typedef struct PerformanceTrace {
+    Uint64 timestamp;
+    TigPerformanceEvent event;
+    Uint64 subject;
+    Uint64 correlation;
+    Sint64 value;
+    Sint64 auxiliary;
+} PerformanceTrace;
+
+static const char* event_names[TIG_PERF_EVENT_COUNT] = {
+    "attack_begin", "attack_release", "attack_end", "damage_resolve",
+    "attack_schedule", "ai_action", "late_dispatch",
+    "attack_stats", "attack_art", "pause_state", "slow_callback",
+    "utility_ai",
+    "utility_ai_detail",
+};
+static PerformanceTrace traces[TRACE_CAPACITY];
+static unsigned int trace_count;
+static unsigned int noisy_trace_count[3];
+static FILE* event_output;
+
 static PerformanceSamples samples[TIG_PERF_METRIC_COUNT];
 static Uint64 counters[TIG_PERF_COUNTER_COUNT];
 static FILE* output;
@@ -56,6 +95,8 @@ static int compare_samples(const void* a, const void* b)
 
 static void reset_window(void)
 {
+    trace_count = 0;
+    memset(noisy_trace_count, 0, sizeof(noisy_trace_count));
     memset(samples, 0, sizeof(samples));
     memset(counters, 0, sizeof(counters));
     window_start = SDL_GetPerformanceCounter();
@@ -73,6 +114,7 @@ bool tig_performance_set_enabled(bool enabled, const char* path)
             output = NULL;
         }
         if (details != NULL) { fclose(details); details = NULL; }
+        if (event_output != NULL) { fclose(event_output); event_output = NULL; }
         return true;
     }
     if (output != NULL) return true;
@@ -97,6 +139,14 @@ bool tig_performance_set_enabled(bool enabled, const char* path)
         if (details != NULL) {
             if (fseek(details, 0, SEEK_END) == 0 && ftell(details) == 0)
                 fputs("session,interval,metric,milliseconds,resource\n", details);
+        }
+    }
+    size = snprintf(details_path, sizeof(details_path), "%s.events.csv", path != NULL ? path : "performance.csv");
+    if (size > 0 && size < sizeof(details_path)) {
+        event_output = fopen(details_path, "a+");
+        if (event_output != NULL) {
+            if (fseek(event_output, 0, SEEK_END) == 0 && ftell(event_output) == 0)
+                fputs("session,interval,timestamp_ms,event,subject,correlation,value,auxiliary\n", event_output);
         }
     }
     reset_window();
@@ -148,11 +198,33 @@ void tig_performance_record(TigPerformanceMetric metric, double milliseconds)
 {
     if (output == NULL || metric < 0 || metric >= TIG_PERF_METRIC_COUNT
         || !isfinite(milliseconds) || milliseconds < 0.0) return;
+    if (metric == TIG_PERF_FRAME_INTERVAL) {
+        if (milliseconds > 1000.0 / 60.0) counters[TIG_PERF_FRAME_OVER_16MS]++;
+        if (milliseconds > 1000.0 / 30.0) counters[TIG_PERF_FRAME_OVER_33MS]++;
+    }
     PerformanceSamples* bucket = &samples[metric];
     bucket->values[bucket->count % SAMPLE_CAPACITY] = milliseconds;
     bucket->count++;
     bucket->total += milliseconds;
     if (milliseconds > bucket->maximum) bucket->maximum = milliseconds;
+}
+
+void tig_performance_trace(TigPerformanceEvent event, Uint64 subject, Uint64 correlation, Sint64 value, Sint64 auxiliary)
+{
+    if (output == NULL || event_output == NULL || event < 0 || event >= TIG_PERF_EVENT_COUNT) return;
+    if (event == TIG_PERF_EVENT_AI_ACTION || event == TIG_PERF_EVENT_LATE_DISPATCH
+        || event == TIG_PERF_EVENT_UTILITY_AI || event == TIG_PERF_EVENT_UTILITY_AI_DETAIL) {
+        int bucket = event == TIG_PERF_EVENT_AI_ACTION ? 0 : event == TIG_PERF_EVENT_LATE_DISPATCH ? 1 : 2;
+        if (noisy_trace_count[bucket]++ >= 512) {
+            tig_performance_count(TIG_PERF_TRACE_SAMPLED_OUT, 1);
+            return;
+        }
+    }
+    if (trace_count == TRACE_CAPACITY) {
+        counters[TIG_PERF_TRACE_DROPPED]++;
+        return;
+    }
+    traces[trace_count++] = (PerformanceTrace){ SDL_GetPerformanceCounter(), event, subject, correlation, value, auxiliary };
 }
 
 void tig_performance_count(TigPerformanceCounter counter, Uint64 value)
@@ -194,6 +266,7 @@ static void write_counter(double elapsed, const char* name, Uint64 value)
 void tig_performance_flush(void)
 {
     if (output == NULL) return;
+    Uint64 flush_start = SDL_GetPerformanceCounter();
     double elapsed = (double)(SDL_GetPerformanceCounter() - window_start) * 1000.0 / (double)frequency;
     for (int i = 0; i < TIG_PERF_METRIC_COUNT; i++) {
         TigPerformanceSummary summary;
@@ -213,10 +286,22 @@ void tig_performance_flush(void)
     write_counter(elapsed, "tig_live_bytes", memory.live_bytes);
     write_counter(elapsed, "tig_live_blocks", memory.live_blocks);
 #endif
+    if (event_output != NULL) {
+        for (unsigned int i = 0; i < trace_count; i++) {
+            PerformanceTrace* trace = &traces[i];
+            double timestamp_ms = (double)(trace->timestamp - session) * 1000.0 / (double)frequency;
+            fprintf(event_output, "%llu,%u,%.6f,%s,%llu,%llu,%lld,%lld\n",
+                (unsigned long long)session, interval, timestamp_ms, event_names[trace->event],
+                (unsigned long long)trace->subject, (unsigned long long)trace->correlation,
+                (long long)trace->value, (long long)trace->auxiliary);
+        }
+        fflush(event_output);
+    }
     fflush(output);
     if (details != NULL) fflush(details);
     interval++;
     reset_window();
+    tig_performance_end_detail(TIG_PERF_PROFILE_FLUSH, flush_start, "profiler_csv");
 }
 
 void tig_performance_poll(void)

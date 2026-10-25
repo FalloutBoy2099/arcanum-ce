@@ -2,12 +2,15 @@
 #define ARCANUM_GAME_SA_H_
 
 #include <tig/tig.h>
+#include "game/serialization_buffer.h"
 
 typedef struct SizeableArray {
     int size;
     int count;
     int bitset_id;
 } SizeableArray;
+
+static_assert(sizeof(SizeableArray) == 12, "wrong serialized array header size");
 
 typedef bool (*SizeableArrayEnumerateCallback)(void* entry, int index);
 
@@ -25,7 +28,7 @@ void sa_remove(SizeableArray** sa_ptr, int key);
 int sa_count(SizeableArray** sa_ptr);
 int sa_total_byte_size(SizeableArray** sa_ptr);
 void sa_write_mem(SizeableArray** src, SizeableArray* dst);
-void sa_read_mem(SizeableArray** sa_ptr, uint8_t** data);
+bool sa_read_mem(SizeableArray** sa_ptr, ReadBuffer* data);
 bool sa_read_no_dealloc(SizeableArray** sa_ptr, TigFile* stream);
 
 #endif /* ARCANUM_GAME_SA_H_ */

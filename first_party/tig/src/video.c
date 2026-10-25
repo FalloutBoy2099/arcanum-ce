@@ -2,17 +2,21 @@
 #include "tig/video_upload.h"
 #include "tig/scale_region.h"
 #include "tig/performance.h"
+#include "tig/sprite_cache.h"
 
 #include <limits.h>
+#include <math.h>
 #include <stdio.h>
 
 #include "tig/art.h"
+#include "tig/bmp.h"
 #include "tig/color.h"
 #include "tig/core.h"
 #include "tig/debug.h"
 #include "tig/draw.h"
 #include "tig/file.h"
 #include "tig/memory.h"
+#include "tig/pixel_buffer.h"
 #include "tig/message.h"
 #include "tig/mouse.h"
 #include "tig/timer.h"
@@ -46,7 +50,6 @@ static bool tig_video_window_create(TigInitInfo* init_info);
 static void tig_video_window_destroy(void);
 static bool tig_video_surface_color_masks_apply(void);
 static int tig_video_screenshot_make_internal(int key);
-static int tig_video_buffer_data_to_bmp(SDL_Surface* surface, TigRect* rect, const char* file_name);
 
 // 0x5BF3D8
 static int tig_video_screenshot_key = -1;
@@ -54,6 +57,54 @@ static int tig_video_screenshot_key = -1;
 // 0x60F250
 static TigVideoState tig_video_state;
 static TigVideoUpload tig_video_upload;
+
+typedef struct GpuCursor {
+    SDL_Texture* texture;
+    TigVideoBuffer* buffer;
+    TigRect source;
+    TigRect destination;
+} GpuCursor;
+
+static TigSpriteCache* tig_video_sprite_cache;
+static GpuCursor tig_video_gpu_cursor;
+static bool tig_video_gpu_cursor_enabled;
+
+void tig_video_gpu_cursor_clear(void)
+{
+    SDL_memset(&tig_video_gpu_cursor, 0, sizeof(tig_video_gpu_cursor));
+}
+
+bool tig_video_gpu_cursor_is_enabled(void)
+{
+    return tig_video_gpu_cursor_enabled;
+}
+
+void tig_video_gpu_cursor_set(bool enabled)
+{
+    tig_video_gpu_cursor_clear();
+    tig_video_gpu_cursor_enabled = enabled;
+    if (!enabled) {
+        tig_sprite_cache_destroy(tig_video_sprite_cache);
+        tig_video_sprite_cache = NULL;
+    }
+    tig_window_invalidate_rect(NULL);
+}
+
+bool tig_video_gpu_cursor_prepare(TigVideoBuffer* buffer, Uint64 key, Uint64 revision,
+    const TigRect* source, const TigRect* destination)
+{
+    if (!tig_video_gpu_cursor_enabled || !buffer || !source || !destination) return false;
+    if (!tig_video_sprite_cache) tig_video_sprite_cache = tig_sprite_cache_create(tig_video_state.renderer, 128, 16 * 1024 * 1024);
+    SDL_Texture* texture = tig_sprite_cache_get(tig_video_sprite_cache, key, revision,
+        buffer->surface, (buffer->flags & TIG_VIDEO_BUFFER_COLOR_KEY) != 0, buffer->color_key);
+    if (!texture) {
+        tig_video_gpu_cursor_set(false);
+        tig_debug_printf("GPU cursor unavailable, using CPU cursor: %s\n", SDL_GetError());
+        return false;
+    }
+    tig_video_gpu_cursor = (GpuCursor){ texture, buffer, *source, *destination };
+    return true;
+}
 
 // 0x60FEF8
 static float tig_video_gamma;
@@ -80,7 +131,7 @@ static bool tig_video_initialized;
 static bool tig_video_show_fps;
 
 // 0x6103A4
-static int dword_6103A4;
+static int tig_video_legacy_setting;
 
 static TigFadeState tig_fade_state;
 static TigColorGrade tig_world_color_grade = { 1, 1, 1, 1 };
@@ -111,7 +162,7 @@ int tig_video_init(TigInitInfo* init_info)
     tig_video_bpp = init_info->bpp;
 
     tig_video_screenshot_key = -1;
-    dword_6103A4 = 0;
+    tig_video_legacy_setting = 0;
 
     tig_video_initialized = true;
 
@@ -388,6 +439,9 @@ int tig_video_fill(const TigRect* rect, tig_color_t color)
 // 0x51F8F0
 void tig_video_invalidate_texture(void)
 {
+    tig_video_gpu_cursor_clear();
+    tig_sprite_cache_clear(tig_video_sprite_cache);
+    tig_window_invalidate_rect(NULL);
     if (tig_video_state.surface != NULL) {
         tig_video_upload_reset(&tig_video_upload, tig_video_state.surface->w, tig_video_state.surface->h);
     }
@@ -420,6 +474,20 @@ int tig_video_flip(void)
 
     SDL_RenderClear(tig_video_state.renderer);
     SDL_RenderTexture(tig_video_state.renderer, tig_video_state.texture, NULL, NULL);
+
+    if (tig_video_gpu_cursor.texture) {
+        GpuCursor cursor = tig_video_gpu_cursor;
+        SDL_FRect source = { (float)cursor.source.x, (float)cursor.source.y,
+            (float)cursor.source.width, (float)cursor.source.height };
+        SDL_FRect destination = { (float)cursor.destination.x, (float)cursor.destination.y,
+            (float)cursor.destination.width, (float)cursor.destination.height };
+        if (!SDL_RenderTexture(tig_video_state.renderer, cursor.texture, &source, &destination)) {
+            tig_video_gpu_cursor_set(false);
+            tig_video_blit(cursor.buffer, &cursor.source, &cursor.destination);
+            if (!tig_video_upload_flush(&tig_video_upload, tig_video_state.texture, tig_video_state.surface, NULL)) return TIG_ERR_GENERIC;
+            SDL_RenderTexture(tig_video_state.renderer, tig_video_state.texture, NULL, NULL);
+        }
+    }
 
     if (tig_fade_state.enabled) {
         SDL_BlendMode blend_mode;
@@ -467,7 +535,7 @@ int tig_video_screenshot_set_settings(TigVideoScreenshotSettings* settings)
     }
 
     tig_video_screenshot_key = settings->key;
-    dword_6103A4 = settings->field_4;
+    tig_video_legacy_setting = settings->legacy_mode;
 
     if (tig_video_screenshot_key != -1) {
         rc = tig_message_set_key_handler(tig_video_screenshot_make_internal, tig_video_screenshot_key);
@@ -629,24 +697,36 @@ int tig_video_buffer_create(TigVideoBufferCreateInfo* vb_create_info, TigVideoBu
     TigVideoBuffer* video_buffer;
     int texture_width;
     int texture_height;
+    int pitch;
+    size_t bytes;
+    if (video_buffer_ptr == NULL) return TIG_ERR_INVALID_PARAM;
+    *video_buffer_ptr = NULL;
+    if (vb_create_info == NULL
+        || !tig_pixel_buffer_row_size(vb_create_info->width, 32, &pitch)
+        || !tig_pixel_buffer_size(vb_create_info->width, vb_create_info->height, 32, pitch, &bytes)) return TIG_ERR_INVALID_PARAM;
 
     video_buffer = (TigVideoBuffer*)MALLOC(sizeof(*video_buffer));
     memset(video_buffer, 0, sizeof(*video_buffer));
-    *video_buffer_ptr = video_buffer;
 
     texture_width = vb_create_info->width;
     texture_height = vb_create_info->height;
 
     video_buffer->surface = SDL_CreateSurface(texture_width, texture_height, SDL_PIXELFORMAT_XRGB8888);
     if (video_buffer->surface == NULL) {
+        FREE(video_buffer);
         return TIG_ERR_OUT_OF_MEMORY;
+    }
+    if (!tig_pixel_buffer_size(texture_width, texture_height, 32, video_buffer->surface->pitch, &bytes)) {
+        SDL_DestroySurface(video_buffer->surface);
+        FREE(video_buffer);
+        return TIG_ERR_INVALID_PARAM;
     }
 
     video_buffer->flags |= TIG_VIDEO_BUFFER_SYSTEM_MEMORY;
 
     if ((vb_create_info->flags & TIG_VIDEO_BUFFER_CREATE_COLOR_KEY) != 0) {
         video_buffer->flags |= TIG_VIDEO_BUFFER_COLOR_KEY;
-        tig_video_buffer_set_color_key(*video_buffer_ptr, vb_create_info->color_key);
+        tig_video_buffer_set_color_key(video_buffer, vb_create_info->color_key);
     }
 
     video_buffer->frame.x = 0;
@@ -662,7 +742,7 @@ int tig_video_buffer_create(TigVideoBufferCreateInfo* vb_create_info, TigVideoBu
     }
 
     video_buffer->lock_count = 0;
-
+    *video_buffer_ptr = video_buffer;
     return TIG_OK;
 }
 
@@ -677,6 +757,15 @@ int tig_video_buffer_destroy(TigVideoBuffer* video_buffer)
     FREE(video_buffer);
 
     return TIG_OK;
+}
+
+size_t tig_video_buffer_memory_size(const TigVideoBuffer* video_buffer)
+{
+    size_t bytes;
+    if (video_buffer == NULL || video_buffer->surface == NULL
+        || !tig_pixel_buffer_size(video_buffer->surface->w, video_buffer->surface->h,
+            32, video_buffer->surface->pitch, &bytes)) return 0;
+    return bytes;
 }
 
 // 0x5203E0
@@ -1039,81 +1128,107 @@ int tig_video_buffer_scale_region(TigVideoBufferBlitInfo* blit_info, const TigRe
         ? TIG_OK : TIG_ERR_GENERIC;
 }
 
+static uint8_t tig_video_gradient_channel(float value)
+{
+    if (value <= 0.0f) return 0;
+    if (value >= 255.0f) return 255;
+    return (uint8_t)value;
+}
+
+static int tig_video_clip_blit_axis(int source_position, int source_extent, int source_limit,
+    int destination_position, int destination_extent, int destination_minimum, int destination_limit,
+    bool stretched, int* clipped_source_position, int* clipped_source_extent,
+    int* clipped_destination_position, int* clipped_destination_extent)
+{
+    int64_t source_begin = SDL_max((int64_t)source_position, 0);
+    int64_t source_end = SDL_min((int64_t)source_position + source_extent, source_limit);
+    if (source_begin >= source_end) return TIG_ERR_NO_INTERSECTION;
+    int64_t destination_begin = (int64_t)destination_position
+        + (source_begin - source_position) * destination_extent / source_extent;
+    int64_t destination_size = (int64_t)destination_extent
+        - ((int64_t)source_extent - (source_end - source_begin)) * destination_extent / source_extent;
+    int64_t destination_end = destination_begin + destination_size;
+    if (destination_size <= 0 || destination_begin >= destination_limit || destination_end <= destination_minimum)
+        return TIG_ERR_NO_INTERSECTION;
+    if (stretched) {
+        if (source_end - source_begin > 65535 || destination_size > 65535) return TIG_ERR_INVALID_PARAM;
+    } else {
+        int64_t visible_begin = SDL_max(destination_begin, destination_minimum);
+        int64_t visible_end = SDL_min(destination_end, destination_limit);
+        source_begin += visible_begin - destination_begin;
+        source_end -= destination_end - visible_end;
+        destination_begin = visible_begin;
+        destination_size = visible_end - visible_begin;
+    }
+    if (destination_begin < INT_MIN || destination_begin > INT_MAX) return TIG_ERR_INVALID_PARAM;
+    *clipped_source_position = (int)source_begin;
+    *clipped_source_extent = (int)(source_end - source_begin);
+    *clipped_destination_position = (int)destination_begin;
+    *clipped_destination_extent = (int)destination_size;
+    return TIG_OK;
+}
+
 int tig_video_buffer_blit(TigVideoBufferBlitInfo* blit_info)
 {
     bool stretched;
-    float width_ratio;
-    float height_ratio;
-    TigRect bounds;
     TigRect blit_src_rect;
     TigRect blit_dst_rect;
-    TigRect tmp_rect;
     SDL_Rect native_src_rect;
     SDL_Rect native_dst_rect;
     int rc;
 
-    if (blit_info->src_rect->width == blit_info->dst_rect->width
-        && blit_info->src_rect->height == blit_info->dst_rect->height) {
-        stretched = false;
-
-        // NOTE: Original code does not initialize these values, but we have
-        // to keep compiler happy.
-        width_ratio = 1;
-        height_ratio = 1;
-    } else {
-        stretched = true;
-        width_ratio = (float)blit_info->src_rect->width / (float)blit_info->dst_rect->width;
-        height_ratio = (float)blit_info->src_rect->height / (float)blit_info->dst_rect->height;
+    if (blit_info == NULL || blit_info->src_rect == NULL || blit_info->dst_rect == NULL
+        || blit_info->src_video_buffer == NULL || blit_info->dst_video_buffer == NULL
+        || blit_info->src_video_buffer->surface == NULL || blit_info->dst_video_buffer->surface == NULL) {
+        return TIG_ERR_INVALID_PARAM;
+    }
+    if (blit_info->src_rect->width < 0 || blit_info->src_rect->height < 0
+        || blit_info->dst_rect->width < 0 || blit_info->dst_rect->height < 0) {
+        return TIG_ERR_INVALID_PARAM;
+    }
+    if (blit_info->src_rect->width == 0 || blit_info->src_rect->height == 0
+        || blit_info->dst_rect->width == 0 || blit_info->dst_rect->height == 0) return TIG_OK;
+    if ((blit_info->flags & TIG_VIDEO_BUFFER_BLIT_BLEND_COLOR_LERP) != 0
+        && (blit_info->lerp_rect == NULL || blit_info->lerp_rect->width <= 0 || blit_info->lerp_rect->height <= 0)) {
+        return TIG_ERR_INVALID_PARAM;
     }
 
-    bounds.x = 0;
-    bounds.y = 0;
-    bounds.width = blit_info->src_video_buffer->frame.width;
-    bounds.height = blit_info->src_video_buffer->frame.height;
+    if ((blit_info->flags & TIG_VIDEO_BUFFER_BLIT_BLEND_COLOR_LERP) != 0
+        && (blit_info->src_rect->width != blit_info->dst_rect->width
+            || blit_info->src_rect->height != blit_info->dst_rect->height)) return TIG_ERR_INVALID_PARAM;
 
-    rc = tig_rect_intersection(blit_info->src_rect,
-        &bounds,
-        &blit_src_rect);
-    if (rc != TIG_OK) {
-        return TIG_OK;
-    }
-
-    tmp_rect = *blit_info->dst_rect;
-
+    stretched = blit_info->src_rect->width != blit_info->dst_rect->width
+        || blit_info->src_rect->height != blit_info->dst_rect->height;
+    if (tig_video_buffer_memory_size(blit_info->src_video_buffer) == 0
+        || tig_video_buffer_memory_size(blit_info->dst_video_buffer) == 0
+        || blit_info->src_video_buffer->frame.width <= 0 || blit_info->src_video_buffer->frame.height <= 0
+        || blit_info->dst_video_buffer->frame.width <= 0 || blit_info->dst_video_buffer->frame.height <= 0)
+        return TIG_ERR_INVALID_PARAM;
+    SDL_Rect clip;
+    if (!SDL_GetSurfaceClipRect(blit_info->dst_video_buffer->surface, &clip)) return TIG_OK;
+    int destination_right = (int)SDL_min((int64_t)clip.x + clip.w, blit_info->dst_video_buffer->frame.width);
+    int destination_bottom = (int)SDL_min((int64_t)clip.y + clip.h, blit_info->dst_video_buffer->frame.height);
+    if (clip.x >= destination_right || clip.y >= destination_bottom) return TIG_OK;
+    rc = tig_video_clip_blit_axis(blit_info->src_rect->x, blit_info->src_rect->width,
+        SDL_min(blit_info->src_video_buffer->frame.width, blit_info->src_video_buffer->surface->w),
+        blit_info->dst_rect->x, blit_info->dst_rect->width, clip.x, destination_right, stretched,
+        &blit_src_rect.x, &blit_src_rect.width, &blit_dst_rect.x, &blit_dst_rect.width);
+    if (rc == TIG_ERR_NO_INTERSECTION) return TIG_OK;
+    if (rc != TIG_OK) return rc;
+    rc = tig_video_clip_blit_axis(blit_info->src_rect->y, blit_info->src_rect->height,
+        SDL_min(blit_info->src_video_buffer->frame.height, blit_info->src_video_buffer->surface->h),
+        blit_info->dst_rect->y, blit_info->dst_rect->height, clip.y, destination_bottom, stretched,
+        &blit_src_rect.y, &blit_src_rect.height, &blit_dst_rect.y, &blit_dst_rect.height);
+    if (rc == TIG_ERR_NO_INTERSECTION) return TIG_OK;
+    if (rc != TIG_OK) return rc;
     if (stretched) {
-        tmp_rect.x += (int)((float)(blit_src_rect.x - blit_info->src_rect->x) / width_ratio);
-        tmp_rect.y += (int)((float)(blit_src_rect.y - blit_info->src_rect->y) / height_ratio);
-        tmp_rect.width -= (int)((float)(blit_info->src_rect->width - blit_src_rect.width) / width_ratio);
-        tmp_rect.height -= (int)((float)(blit_info->src_rect->height - blit_src_rect.height) / height_ratio);
-    } else {
-        tmp_rect.x += blit_src_rect.x - blit_info->src_rect->x;
-        tmp_rect.y += blit_src_rect.y - blit_info->src_rect->y;
-        tmp_rect.width -= blit_info->src_rect->width - blit_src_rect.width;
-        tmp_rect.height -= blit_info->src_rect->height - blit_src_rect.height;
-    }
-
-    bounds.x = 0;
-    bounds.y = 0;
-    bounds.width = blit_info->dst_video_buffer->frame.width;
-    bounds.height = blit_info->dst_video_buffer->frame.height;
-
-    rc = tig_rect_intersection(&tmp_rect,
-        &bounds,
-        &blit_dst_rect);
-    if (rc != TIG_OK) {
-        return TIG_OK;
-    }
-
-    if (stretched) {
-        blit_src_rect.x += (int)((float)(blit_dst_rect.x - tmp_rect.x) / width_ratio);
-        blit_src_rect.y += (int)((float)(blit_dst_rect.y - tmp_rect.y) / height_ratio);
-        blit_src_rect.width -= (int)((float)(tmp_rect.width - blit_dst_rect.width) / width_ratio);
-        blit_src_rect.height -= (int)((float)(tmp_rect.height - blit_dst_rect.height) / height_ratio);
-    } else {
-        blit_src_rect.x += blit_dst_rect.x - tmp_rect.x;
-        blit_src_rect.y += blit_dst_rect.y - tmp_rect.y;
-        blit_src_rect.width -= tmp_rect.width - blit_dst_rect.width;
-        blit_src_rect.height -= tmp_rect.height - blit_dst_rect.height;
+        size_t scaled_bytes;
+        int scaled_pitch;
+        int storage_bits = SDL_BYTESPERPIXEL(blit_info->src_video_buffer->surface->format) * 8;
+        if (storage_bits == 0) storage_bits = SDL_BITSPERPIXEL(blit_info->src_video_buffer->surface->format);
+        if (!tig_pixel_buffer_row_size(blit_dst_rect.width, storage_bits, &scaled_pitch)
+            || !tig_pixel_buffer_size(blit_dst_rect.width, blit_dst_rect.height, storage_bits, scaled_pitch, &scaled_bytes))
+            return TIG_ERR_INVALID_PARAM;
     }
 
     native_src_rect.x = blit_src_rect.x;
@@ -1132,6 +1247,22 @@ int tig_video_buffer_blit(TigVideoBufferBlitInfo* blit_info)
         // It is used to blit townmap tiles with partially obscured edges. These
         // tiles are loaded from a bunch of .bmp files, so it bypass art system
         // entirely.
+        SDL_Surface* source_surface = blit_info->src_video_buffer->surface;
+        SDL_Surface* destination_surface = blit_info->dst_video_buffer->surface;
+        if (SDL_BYTESPERPIXEL(source_surface->format) != 4 || SDL_BYTESPERPIXEL(destination_surface->format) != 4
+            || source_surface->pixels == NULL || destination_surface->pixels == NULL
+            || tig_video_buffer_memory_size(blit_info->src_video_buffer) == 0
+            || tig_video_buffer_memory_size(blit_info->dst_video_buffer) == 0
+            || blit_src_rect.width != blit_dst_rect.width || blit_src_rect.height != blit_dst_rect.height
+            || blit_src_rect.x < 0 || blit_src_rect.y < 0 || blit_dst_rect.x < 0 || blit_dst_rect.y < 0
+            || blit_src_rect.width <= 0 || blit_src_rect.height <= 0
+            || blit_src_rect.width > source_surface->w || blit_src_rect.height > source_surface->h
+            || blit_dst_rect.width > destination_surface->w || blit_dst_rect.height > destination_surface->h
+            || blit_src_rect.x > source_surface->w - blit_src_rect.width
+            || blit_src_rect.y > source_surface->h - blit_src_rect.height
+            || blit_dst_rect.x > destination_surface->w - blit_dst_rect.width
+            || blit_dst_rect.y > destination_surface->h - blit_dst_rect.height) return TIG_ERR_INVALID_PARAM;
+
         int tl_r = tig_color_get_red(blit_info->lerp_colors[0]);
         int tl_g = tig_color_get_green(blit_info->lerp_colors[0]);
         int tl_b = tig_color_get_blue(blit_info->lerp_colors[0]);
@@ -1149,43 +1280,40 @@ int tig_video_buffer_blit(TigVideoBufferBlitInfo* blit_info)
         int bl_b = tig_color_get_blue(blit_info->lerp_colors[3]);
 
         float vert_start_step_r = (float)(bl_r - tl_r) / blit_info->lerp_rect->height;
-        float vert_start_r = vert_start_step_r * (blit_src_rect.y - blit_info->lerp_rect->y) + tl_r;
+        float vert_start_r = vert_start_step_r * ((int64_t)blit_src_rect.y - blit_info->lerp_rect->y) + tl_r;
         float vert_end_step_r = (float)(br_r - tr_r) / blit_info->lerp_rect->height;
-        float vert_end_r = vert_end_step_r * (blit_src_rect.y - blit_info->lerp_rect->y) + tr_r;
+        float vert_end_r = vert_end_step_r * ((int64_t)blit_src_rect.y - blit_info->lerp_rect->y) + tr_r;
 
         float vert_start_step_g = (float)(bl_g - tl_g) / blit_info->lerp_rect->height;
-        float vert_start_g = vert_start_step_g * (blit_src_rect.y - blit_info->lerp_rect->y) + tl_g;
+        float vert_start_g = vert_start_step_g * ((int64_t)blit_src_rect.y - blit_info->lerp_rect->y) + tl_g;
         float vert_end_step_g = (float)(br_g - tr_g) / blit_info->lerp_rect->height;
-        float vert_end_g = vert_end_step_g * (blit_src_rect.y - blit_info->lerp_rect->y) + tr_g;
+        float vert_end_g = vert_end_step_g * ((int64_t)blit_src_rect.y - blit_info->lerp_rect->y) + tr_g;
 
         float vert_start_step_b = (float)(bl_b - tl_b) / blit_info->lerp_rect->height;
-        float vert_start_b = vert_start_step_b * (blit_src_rect.y - blit_info->lerp_rect->y) + tl_b;
+        float vert_start_b = vert_start_step_b * ((int64_t)blit_src_rect.y - blit_info->lerp_rect->y) + tl_b;
         float vert_end_step_b = (float)(br_b - tr_b) / blit_info->lerp_rect->height;
-        float vert_end_b = vert_end_step_b * (blit_src_rect.y - blit_info->lerp_rect->y) + tr_b;
+        float vert_end_b = vert_end_step_b * ((int64_t)blit_src_rect.y - blit_info->lerp_rect->y) + tr_b;
 
         int x;
         int y;
 
-        uint32_t* src = (uint32_t*)((uint8_t*)blit_info->src_video_buffer->surface->pixels
-            + blit_info->src_video_buffer->surface->pitch * blit_src_rect.y
-            + 4 * blit_src_rect.x);
-        uint32_t* dst = (uint32_t*)((uint8_t*)blit_info->dst_video_buffer->surface->pixels
-            + blit_info->dst_video_buffer->surface->pitch * blit_dst_rect.y
-            + 4 * blit_dst_rect.x);
-
         for (y = 0; y < blit_dst_rect.height; ++y) {
+            const uint32_t* src = (const uint32_t*)((const uint8_t*)source_surface->pixels
+                + (size_t)source_surface->pitch * (blit_src_rect.y + y) + (size_t)4 * blit_src_rect.x);
+            uint32_t* dst = (uint32_t*)((uint8_t*)destination_surface->pixels
+                + (size_t)destination_surface->pitch * (blit_dst_rect.y + y) + (size_t)4 * blit_dst_rect.x);
             float hor_step_r = (vert_end_r - vert_start_r) / blit_info->lerp_rect->width;
             float hor_step_g = (vert_end_g - vert_start_g) / blit_info->lerp_rect->width;
             float hor_step_b = (vert_end_b - vert_start_b) / blit_info->lerp_rect->width;
 
-            float r = vert_start_r + hor_step_r * (blit_src_rect.x - blit_info->lerp_rect->x);
-            float g = vert_start_g + hor_step_g * (blit_src_rect.x - blit_info->lerp_rect->x);
-            float b = vert_start_b + hor_step_b * (blit_src_rect.x - blit_info->lerp_rect->x);
+            float r = vert_start_r + hor_step_r * ((int64_t)blit_src_rect.x - blit_info->lerp_rect->x);
+            float g = vert_start_g + hor_step_g * ((int64_t)blit_src_rect.x - blit_info->lerp_rect->x);
+            float b = vert_start_b + hor_step_b * ((int64_t)blit_src_rect.x - blit_info->lerp_rect->x);
 
             for (x = 0; x < blit_dst_rect.width; ++x) {
                 if ((blit_info->src_video_buffer->flags & TIG_VIDEO_BUFFER_COLOR_KEY) == 0
                     || *src != blit_info->src_video_buffer->color_key) {
-                    *dst = tig_color_mul(*src, tig_color_make((uint8_t)r, (uint8_t)g, (uint8_t)b));
+                    *dst = tig_color_mul(*src, tig_color_make(tig_video_gradient_channel(r), tig_video_gradient_channel(g), tig_video_gradient_channel(b)));
                 }
 
                 r += hor_step_r;
@@ -1205,8 +1333,6 @@ int tig_video_buffer_blit(TigVideoBufferBlitInfo* blit_info)
             vert_start_b += vert_start_step_b;
             vert_end_b += vert_end_step_b;
 
-            src = (uint32_t*)((uint8_t*)src + blit_info->src_video_buffer->surface->pitch - 4 * blit_src_rect.width);
-            dst = (uint32_t*)((uint8_t*)dst + blit_info->dst_video_buffer->surface->pitch - 4 * blit_dst_rect.width);
         }
 
         return TIG_OK;
@@ -1231,53 +1357,32 @@ int tig_video_buffer_blit(TigVideoBufferBlitInfo* blit_info)
 
 int tig_video_buffer_blit_sdl_surface(SDL_Surface* surface, TigRect* src_rect, TigVideoBuffer* dst_video_buffer, TigRect* dst_rect)
 {
+    if (surface == NULL || src_rect == NULL || dst_video_buffer == NULL || dst_rect == NULL
+        || dst_video_buffer->surface == NULL || surface->pixels == NULL) return TIG_ERR_INVALID_PARAM;
+    if (src_rect->width < 0 || src_rect->height < 0) return TIG_ERR_INVALID_PARAM;
+    if (src_rect->width == 0 || src_rect->height == 0) return TIG_OK;
+    size_t source_bytes;
+    int storage_bits = SDL_BYTESPERPIXEL(surface->format) != 0
+        ? SDL_BYTESPERPIXEL(surface->format) * 8 : SDL_BITSPERPIXEL(surface->format);
+    if (!tig_pixel_buffer_size(surface->w, surface->h, storage_bits, surface->pitch, &source_bytes)
+        || SDL_BYTESPERPIXEL(dst_video_buffer->surface->format) != 4
+        || tig_video_buffer_memory_size(dst_video_buffer) == 0) return TIG_ERR_INVALID_PARAM;
+
+    int64_t left = SDL_max(INT64_C(0), SDL_max(-(int64_t)src_rect->x, -(int64_t)dst_rect->x));
+    int64_t top = SDL_max(INT64_C(0), SDL_max(-(int64_t)src_rect->y, -(int64_t)dst_rect->y));
+    int64_t right = SDL_min((int64_t)src_rect->width,
+        SDL_min((int64_t)surface->w - src_rect->x, (int64_t)dst_video_buffer->surface->w - dst_rect->x));
+    int64_t bottom = SDL_min((int64_t)src_rect->height,
+        SDL_min((int64_t)surface->h - src_rect->y, (int64_t)dst_video_buffer->surface->h - dst_rect->y));
+    if (left >= right || top >= bottom) return TIG_OK;
+    int source_x = (int)((int64_t)src_rect->x + left);
+    int source_y = (int)((int64_t)src_rect->y + top);
+    int destination_x = (int)((int64_t)dst_rect->x + left);
+    int destination_y = (int)((int64_t)dst_rect->y + top);
+    int width = (int)(right - left);
+    int height = (int)(bottom - top);
     int x;
     int y;
-    int width;
-    int height;
-
-    if (surface == NULL || src_rect == NULL || dst_video_buffer == NULL || dst_rect == NULL) {
-        return TIG_ERR_INVALID_PARAM;
-    }
-
-    width = src_rect->width;
-    height = src_rect->height;
-
-    if (src_rect->x < 0) {
-        width += src_rect->x;
-        dst_rect->x -= src_rect->x;
-        src_rect->x = 0;
-    }
-    if (src_rect->y < 0) {
-        height += src_rect->y;
-        dst_rect->y -= src_rect->y;
-        src_rect->y = 0;
-    }
-    if (dst_rect->x < 0) {
-        width += dst_rect->x;
-        src_rect->x -= dst_rect->x;
-        dst_rect->x = 0;
-    }
-    if (dst_rect->y < 0) {
-        height += dst_rect->y;
-        src_rect->y -= dst_rect->y;
-        dst_rect->y = 0;
-    }
-    if (src_rect->x + width > surface->w) {
-        width = surface->w - src_rect->x;
-    }
-    if (src_rect->y + height > surface->h) {
-        height = surface->h - src_rect->y;
-    }
-    if (dst_rect->x + width > dst_video_buffer->surface->w) {
-        width = dst_video_buffer->surface->w - dst_rect->x;
-    }
-    if (dst_rect->y + height > dst_video_buffer->surface->h) {
-        height = dst_video_buffer->surface->h - dst_rect->y;
-    }
-    if (width <= 0 || height <= 0) {
-        return TIG_OK;
-    }
 
     if (!SDL_LockSurface(surface)) {
         return TIG_ERR_GENERIC;
@@ -1289,8 +1394,8 @@ int tig_video_buffer_blit_sdl_surface(SDL_Surface* surface, TigRect* src_rect, T
 
     for (y = 0; y < height; y++) {
         uint32_t* dst = (uint32_t*)((uint8_t*)dst_video_buffer->surface->pixels
-            + dst_video_buffer->surface->pitch * (dst_rect->y + y)
-            + 4 * dst_rect->x);
+            + (size_t)dst_video_buffer->surface->pitch * (destination_y + y)
+            + (size_t)4 * destination_x);
 
         for (x = 0; x < width; x++) {
             Uint8 r;
@@ -1298,7 +1403,7 @@ int tig_video_buffer_blit_sdl_surface(SDL_Surface* surface, TigRect* src_rect, T
             Uint8 b;
             Uint8 a;
 
-            if (!SDL_ReadSurfacePixel(surface, src_rect->x + x, src_rect->y + y, &r, &g, &b, &a)) {
+            if (!SDL_ReadSurfacePixel(surface, source_x + x, source_y + y, &r, &g, &b, &a)) {
                 SDL_UnlockSurface(dst_video_buffer->surface);
                 SDL_UnlockSurface(surface);
                 return TIG_ERR_GENERIC;
@@ -1472,6 +1577,9 @@ int tig_video_buffer_save_to_bmp(TigVideoBufferSaveToBmpInfo* save_info)
     int rc;
     TigRect rect;
 
+    if (save_info == NULL || save_info->video_buffer == NULL
+        || save_info->video_buffer->surface == NULL) return TIG_ERR_INVALID_PARAM;
+
     if (save_info->rect != NULL) {
         rect = *save_info->rect;
     } else {
@@ -1481,7 +1589,7 @@ int tig_video_buffer_save_to_bmp(TigVideoBufferSaveToBmpInfo* save_info)
         rect.height = save_info->video_buffer->surface->h;
     }
 
-    rc = tig_video_buffer_data_to_bmp(save_info->video_buffer->surface,
+    rc = tig_bmp_save_surface(save_info->video_buffer->surface,
         &rect,
         save_info->path);
 
@@ -1555,11 +1663,16 @@ int tig_video_buffer_load_from_bmp(const char* filename, TigVideoBuffer** video_
 // 0x524080
 bool tig_video_window_create(TigInitInfo* init_info)
 {
+    int pitch;
+    size_t bytes;
+    if (init_info == NULL || !tig_pixel_buffer_row_size(init_info->width, 32, &pitch)
+        || !tig_pixel_buffer_size(init_info->width, init_info->height, 32, pitch, &bytes)) return false;
     const char* name = (init_info->flags & TIG_INITIALIZE_SET_WINDOW_NAME) != 0
         ? init_info->window_name
         : "TIG";
 
     SDL_WindowFlags flags = SDL_WINDOW_HIGH_PIXEL_DENSITY;
+    if ((init_info->flags & TIG_INITIALIZE_HIDDEN) != 0) flags |= SDL_WINDOW_HIDDEN;
     if ((init_info->flags & TIG_INITIALIZE_WINDOWED) == 0) {
         flags |= SDL_WINDOW_FULLSCREEN;
     } else {
@@ -1568,8 +1681,12 @@ bool tig_video_window_create(TigInitInfo* init_info)
 
     float scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
 
-    int window_width = (int)(init_info->width * scale);
-    int window_height = (int)(init_info->height * scale);
+    double physical_width = init_info->width * (double)scale;
+    double physical_height = init_info->height * (double)scale;
+    if (!isfinite(physical_width) || !isfinite(physical_height)
+        || physical_width < 1 || physical_height < 1 || physical_width > INT_MAX || physical_height > INT_MAX) return false;
+    int window_width = (int)physical_width;
+    int window_height = (int)physical_height;
 
 #if SDL_PLATFORM_ANDROID || SDL_PLATFORM_IOS
     SDL_Rect display_bounds;
@@ -1603,6 +1720,8 @@ bool tig_video_window_create(TigInitInfo* init_info)
     SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengles2,metal");
 #endif
 
+    if (!tig_pixel_buffer_row_size(init_info->width, 32, &pitch)
+        || !tig_pixel_buffer_size(init_info->width, init_info->height, 32, pitch, &bytes)) return false;
     SDL_Window* window;
     SDL_Renderer* renderer;
     if (!SDL_CreateWindowAndRenderer(name, window_width, window_height, flags, &window, &renderer)) {
@@ -1649,6 +1768,13 @@ bool tig_video_window_create(TigInitInfo* init_info)
         return false;
     }
 
+    if (!tig_pixel_buffer_size(surface->w, surface->h, 32, surface->pitch, &bytes)) {
+        SDL_DestroySurface(surface);
+        SDL_DestroyTexture(texture);
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        return false;
+    }
     tig_video_state.window = window;
     tig_video_state.renderer = renderer;
     tig_video_state.texture = texture;
@@ -1666,6 +1792,16 @@ bool tig_video_window_create(TigInitInfo* init_info)
 // 0x5242F0
 void tig_video_window_destroy(void)
 {
+    tig_video_gpu_cursor_clear();
+    if (tig_video_sprite_cache) {
+        TigSpriteCacheStats stats = tig_sprite_cache_stats(tig_video_sprite_cache);
+        tig_debug_printf("GPU sprite cache: %llu hits, %llu uploads, %llu bytes, %llu evictions\n",
+            (unsigned long long)stats.hits, (unsigned long long)stats.uploads,
+            (unsigned long long)stats.uploaded_bytes, (unsigned long long)stats.evictions);
+    }
+    tig_sprite_cache_destroy(tig_video_sprite_cache);
+    tig_video_sprite_cache = NULL;
+    tig_video_gpu_cursor_enabled = false;
     if (tig_video_state.surface != NULL) {
         SDL_DestroySurface(tig_video_state.surface);
         tig_video_state.surface = NULL;
@@ -1735,57 +1871,23 @@ int tig_video_screenshot_make_internal(int key)
     rect.width = tig_video_state.surface->w;
     rect.height = tig_video_state.surface->h;
 
-    rc = tig_video_buffer_data_to_bmp(tig_video_state.surface, &rect, path);
+    SDL_Surface* snapshot = NULL;
+    if (tig_video_gpu_cursor.texture && tig_video_gpu_cursor.buffer) {
+        snapshot = SDL_ConvertSurface(tig_video_state.surface, tig_video_state.surface->format);
+        if (!snapshot) return TIG_ERR_GENERIC;
+        SDL_Rect source = { tig_video_gpu_cursor.source.x, tig_video_gpu_cursor.source.y,
+            tig_video_gpu_cursor.source.width, tig_video_gpu_cursor.source.height };
+        SDL_Rect destination = { tig_video_gpu_cursor.destination.x, tig_video_gpu_cursor.destination.y,
+            tig_video_gpu_cursor.destination.width, tig_video_gpu_cursor.destination.height };
+        if (!SDL_BlitSurface(tig_video_gpu_cursor.buffer->surface, &source, snapshot, &destination)) {
+            SDL_DestroySurface(snapshot);
+            return TIG_ERR_GENERIC;
+        }
+    }
+    rc = tig_bmp_save_surface(snapshot ? snapshot : tig_video_state.surface, &rect, path);
+    SDL_DestroySurface(snapshot);
 
     return rc;
 }
 
-// 0x525ED0
-int tig_video_buffer_data_to_bmp(SDL_Surface* surface, TigRect* rect, const char* file_name)
-{
-    SDL_Surface* intermediate_surface;
-    SDL_IOStream* io;
-    int rc;
 
-    io = tig_file_io_open(file_name, "wb");
-    if (io == NULL) {
-        return TIG_ERR_IO;
-    }
-
-    if (rect->x == 0
-        && rect->y == 0
-        && rect->width == surface->w
-        && rect->height == surface->h) {
-        intermediate_surface = surface;
-    } else {
-        SDL_Rect blit_rect;
-
-        intermediate_surface = SDL_CreateSurface(rect->width, rect->height, surface->format);
-        if (intermediate_surface == NULL) {
-            SDL_CloseIO(io);
-            return TIG_ERR_GENERIC;
-        }
-
-        blit_rect.x = rect->x;
-        blit_rect.y = rect->y;
-        blit_rect.w = rect->width;
-        blit_rect.h = rect->height;
-
-        if (!SDL_BlitSurface(surface, &blit_rect, intermediate_surface, &blit_rect)) {
-            SDL_DestroySurface(intermediate_surface);
-            SDL_CloseIO(io);
-            return TIG_ERR_GENERIC;
-        }
-    }
-
-    rc = TIG_OK;
-    if (!SDL_SaveBMP_IO(intermediate_surface, io, true)) {
-        rc = TIG_ERR_IO;
-    }
-
-    if (intermediate_surface != surface) {
-        SDL_DestroySurface(intermediate_surface);
-    }
-
-    return rc;
-}

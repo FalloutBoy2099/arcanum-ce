@@ -27,6 +27,7 @@
 #define AUTO_EXIT_COMBAT_KEY "auto_exit_combat"
 #define DAY_NIGHT_STRENGTH_KEY "day_night_strength"
 #define WATER_SHADER_KEY "water_shader"
+#define GPU_CURSOR_KEY "gpu_cursor"
 #define WATER_STRENGTH_KEY "water_strength"
 #define HUD_STAGE_KEY "hud_stage"
 #define VIOLENCE_FILTER_KEY "violence_filter"
@@ -36,6 +37,8 @@
 #define AUTO_SWITCH_WEAPON_KEY "auto_switch"
 #define ALWAYS_RUN_KEY "always_run"
 #define FOLLOWER_SKILLS_KEY "follower_skills"
+#define MASTER_EDUCATOR_KEY "master_educator"
+#define NO_XP_PER_HIT_KEY "no_xp_per_hit"
 #define FOLLOWERS_MANUALLY_LEVEL_UP_KEY "followers_manually_level_up"
 
 #define BRIGHTNESS_KEY "brightness"
@@ -79,6 +82,7 @@
 #define CRITTER_VOLUME_KEY "critter_volume"
 #define VOICE_VOLUME_KEY "voice_volume"
 #define MUSIC_VOLUME_KEY "music_volume"
+#define MUTE_REPETITIVE_SOUNDS_KEY "mute_repetitive_sounds"
 #define NO_COMBAT_MUSIC_KEY "no_combat_music"
 
 #define SPLASH_KEY "splash"
@@ -118,20 +122,20 @@ typedef struct GameSaveInfo {
     /* 0104 */ char module_name[256];
     /* 0204 */ int pc_portrait;
     /* 0208 */ int pc_level;
-    /* 020C */ int field_20C;
+    /* 020C */ int reserved_slot_1;
     /* 0210 */ int64_t pc_location;
     /* 0218 */ char description[256];
     /* 0318 */ TigVideoBuffer* thumbnail_video_buffer;
-    /* 031C */ int field_31C;
+    /* 031C */ int reserved_slot_2;
     /* 0320 */ DateTime datetime;
     /* 0328 */ char pc_name[24];
     /* 0340 */ int map;
-    /* 0344 */ int field_344;
-    /* 0348 */ int field_348;
-    /* 034C */ int field_34C;
-    /* 0350 */ int field_350;
-    /* 0354 */ int field_354;
-    /* 0358 */ int field_358;
+    /* 0344 */ int reserved_slot_3;
+    /* 0348 */ int reserved_slot_4;
+    /* 034C */ int reserved_slot_5;
+    /* 0350 */ int reserved_slot_6;
+    /* 0354 */ int reserved_slot_7;
+    /* 0358 */ int reserved_slot_8;
     /* 035C */ int story_state;
 } GameSaveInfo;
 
@@ -175,7 +179,7 @@ void gamelib_set_extra_load_func(GameExtraLoadFunc func);
 void gamelib_savelist_create(GameSaveList* save_list);
 void gamelib_savelist_create_module(const char* module, GameSaveList* save_list);
 void gamelib_savelist_destroy(GameSaveList* save_list);
-void gamelib_savelist_sort(GameSaveList* save_list, GameSaveListOrder order, bool a3);
+void gamelib_savelist_sort(GameSaveList* save_list, GameSaveListOrder order, bool include_autosave_in_sort);
 bool gamelib_saveinfo_init(const char* name, const char* description, GameSaveInfo* save_info);
 void gamelib_saveinfo_exit(GameSaveInfo* save_info);
 bool gamelib_saveinfo_save(GameSaveInfo* save_info);

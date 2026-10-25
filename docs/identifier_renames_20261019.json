@@ -1,0 +1,965 @@
+{
+  "verification": {
+    "files": 45,
+    "token_substitutions": 719,
+    "scoped_rules": 263,
+    "exact_inverse_verified": true
+  },
+  "global_renames": [
+    {
+      "old": "anim_create_path_max_length",
+      "new": "anim_path_length_error_log"
+    },
+    {
+      "old": "byte_5D0B58",
+      "new": "gamelib_optional_repository_path"
+    },
+    {
+      "old": "dword_5B3FD8",
+      "new": "multiplayer_reserved_setting_value"
+    },
+    {
+      "old": "dword_5B57FC",
+      "new": "combat_projectile_offset_by_arrow_type"
+    },
+    {
+      "old": "dword_5BEA18",
+      "new": "tig_art_wall_primary_piece_by_direction"
+    },
+    {
+      "old": "dword_5BEA28",
+      "new": "tig_art_wall_secondary_piece_by_direction"
+    },
+    {
+      "old": "dword_5C4004",
+      "new": "mainmenu_ui_map_entry_hook_enabled"
+    },
+    {
+      "old": "dword_5C6D58",
+      "new": "intgame_saved_rotating_window_type"
+    },
+    {
+      "old": "dword_5F0DEC",
+      "new": "multiplayer_object_id_list"
+    },
+    {
+      "old": "dword_5F0E00",
+      "new": "multiplayer_session_active"
+    },
+    {
+      "old": "dword_603A20",
+      "new": "terrain_type_blocked_flags"
+    },
+    {
+      "old": "dword_64C6AC",
+      "new": "intgame_requested_rotating_window_type"
+    },
+    {
+      "old": "dword_739E50",
+      "new": "name_art_picker_extra_parameters"
+    },
+    {
+      "old": "dword_739F58",
+      "new": "inven_ui_close_requested"
+    },
+    {
+      "old": "redraw_inven_fix_bad_inven",
+      "new": "inven_ui_invalid_parent_link_remove"
+    },
+    {
+      "old": "stru_5C36B0",
+      "new": "mainmenu_ui_mode_behavior_flags"
+    },
+    {
+      "old": "stru_5C83F0",
+      "new": "charedit_basic_info_text_rows"
+    },
+    {
+      "old": "stru_5C8970",
+      "new": "charedit_gauge_top_cap_rect"
+    },
+    {
+      "old": "stru_5C8980",
+      "new": "charedit_gauge_bottom_cap_rect"
+    }
+  ],
+  "scoped_renames": [
+    {
+      "function": "a_name_outdoor_tile_pair_parse",
+      "old": "v1",
+      "new": "first_tile_found"
+    },
+    {
+      "function": "a_name_tile_transition_first_step_find",
+      "old": "a1",
+      "new": "from_tile"
+    },
+    {
+      "function": "a_name_tile_transition_first_step_find",
+      "old": "a2",
+      "new": "to_tile"
+    },
+    {
+      "function": "a_name_tile_transition_first_step_find",
+      "old": "a3",
+      "new": "transitions"
+    },
+    {
+      "function": "a_name_tile_transition_first_step_find",
+      "old": "a4",
+      "new": "next_tile_ptr"
+    },
+    {
+      "function": "a_name_tile_transition_first_step_find",
+      "old": "v1",
+      "new": "path"
+    },
+    {
+      "function": "ai_add_team_to_hostility_list",
+      "old": "a1",
+      "new": "source_obj"
+    },
+    {
+      "function": "ai_add_team_to_hostility_list",
+      "old": "a2",
+      "new": "target_obj"
+    },
+    {
+      "function": "ai_add_team_to_hostility_list",
+      "old": "v1",
+      "new": "team_leader"
+    },
+    {
+      "function": "ai_dead_ally_attacker_find",
+      "old": "a1",
+      "new": "observer_obj"
+    },
+    {
+      "function": "ai_dead_ally_attacker_find",
+      "old": "a2",
+      "new": "ally_obj"
+    },
+    {
+      "function": "ai_flee_distance_reached_or_mind_controlled",
+      "old": "a1",
+      "new": "fleeing_obj"
+    },
+    {
+      "function": "ai_flee_distance_reached_or_mind_controlled",
+      "old": "a2",
+      "new": "threat_obj"
+    },
+    {
+      "function": "ai_select_flee_or_combat_danger",
+      "old": "a1",
+      "new": "source_obj"
+    },
+    {
+      "function": "ai_select_flee_or_combat_danger",
+      "old": "a2",
+      "new": "target_obj"
+    },
+    {
+      "function": "anim_attack_interrupt_for_target",
+      "old": "a1",
+      "new": "attacker_obj"
+    },
+    {
+      "function": "anim_attack_interrupt_for_target",
+      "old": "a2",
+      "new": "target_obj"
+    },
+    {
+      "function": "anim_attack_interrupt_for_target_or_leader",
+      "old": "a1",
+      "new": "attacker_obj"
+    },
+    {
+      "function": "anim_attack_interrupt_for_target_or_leader",
+      "old": "a2",
+      "new": "target_or_leader_obj"
+    },
+    {
+      "function": "anim_create_path_max_length",
+      "old": "a1",
+      "new": "obj"
+    },
+    {
+      "function": "anim_projectile_return_to_parent",
+      "old": "a2",
+      "new": "target_location"
+    },
+    {
+      "function": "anim_projectile_return_to_parent",
+      "old": "a3",
+      "new": "scratch_obj"
+    },
+    {
+      "function": "broadcast_follower_shortcut_execute",
+      "old": "a1",
+      "new": "shortcut_index"
+    },
+    {
+      "function": "dialog_acknowledgement_build",
+      "old": "a1",
+      "new": "message_id"
+    },
+    {
+      "function": "dialog_acknowledgement_build",
+      "old": "a2",
+      "new": "response_type"
+    },
+    {
+      "function": "dialog_acknowledgement_build",
+      "old": "a3",
+      "new": "response_value"
+    },
+    {
+      "function": "dialog_ask_money_for_directions",
+      "old": "v1",
+      "new": "response_type"
+    },
+    {
+      "function": "dialog_ask_money_for_directions",
+      "old": "v2",
+      "new": "response_value"
+    },
+    {
+      "function": "dialog_ask_money_for_mark_area",
+      "old": "v1",
+      "new": "response_type"
+    },
+    {
+      "function": "dialog_ask_money_for_mark_area",
+      "old": "v2",
+      "new": "response_value"
+    },
+    {
+      "function": "dialog_ask_money_for_newspaper",
+      "old": "v1",
+      "new": "response_type"
+    },
+    {
+      "function": "dialog_ask_money_for_newspaper",
+      "old": "v2",
+      "new": "response_value"
+    },
+    {
+      "function": "dialog_ask_money_for_spell",
+      "old": "v1",
+      "new": "response_type"
+    },
+    {
+      "function": "dialog_ask_money_for_spell",
+      "old": "v2",
+      "new": "response_value"
+    },
+    {
+      "function": "dialog_build_pc_insult_option",
+      "old": "a2",
+      "new": "response_value"
+    },
+    {
+      "function": "dialog_build_pc_insult_option",
+      "old": "a3",
+      "new": "extra_value"
+    },
+    {
+      "function": "dialog_buy_newspaper",
+      "old": "a2",
+      "new": "response_type"
+    },
+    {
+      "function": "dialog_buy_newspaper",
+      "old": "a3",
+      "new": "response_value"
+    },
+    {
+      "function": "dialog_greeting_override_apply",
+      "old": "a2",
+      "new": "response_value"
+    },
+    {
+      "function": "dialog_insult_reply",
+      "old": "a1",
+      "new": "response_type"
+    },
+    {
+      "function": "dialog_insult_reply",
+      "old": "a2",
+      "new": "response_value"
+    },
+    {
+      "function": "dialog_payment_process",
+      "old": "a1",
+      "new": "cost"
+    },
+    {
+      "function": "dialog_prepare_npc_reply",
+      "old": "a2",
+      "new": "skip_speech_check"
+    },
+    {
+      "function": "dialog_response_decode",
+      "old": "a1",
+      "new": "encoded_response"
+    },
+    {
+      "function": "dialog_response_decode",
+      "old": "a2",
+      "new": "response_type_ptr"
+    },
+    {
+      "function": "dialog_response_decode",
+      "old": "a3",
+      "new": "response_value_ptr"
+    },
+    {
+      "function": "dialog_speech_id_decode",
+      "old": "a1",
+      "new": "speech_id"
+    },
+    {
+      "function": "dialog_speech_id_decode",
+      "old": "a2",
+      "new": "script_number_ptr"
+    },
+    {
+      "function": "dialog_speech_id_decode",
+      "old": "a3",
+      "new": "speech_line_ptr"
+    },
+    {
+      "function": "dialog_speech_id_encode",
+      "old": "a1",
+      "new": "speech_line_text"
+    },
+    {
+      "function": "dialog_speech_id_encode",
+      "old": "a2",
+      "new": "script_number"
+    },
+    {
+      "function": "dialog_tell_rumor",
+      "old": "a2",
+      "new": "response_type"
+    },
+    {
+      "function": "dialog_tell_rumor",
+      "old": "a3",
+      "new": "response_value"
+    },
+    {
+      "function": "dialog_use_spell",
+      "old": "a2",
+      "new": "response_type"
+    },
+    {
+      "function": "dialog_use_spell",
+      "old": "a3",
+      "new": "response_value"
+    },
+    {
+      "function": "hotkey_ui_item_location_assign",
+      "old": "a2",
+      "new": "item_obj"
+    },
+    {
+      "function": "hotkey_ui_item_location_assign",
+      "old": "a3",
+      "new": "inventory_location"
+    },
+    {
+      "function": "hotkey_ui_item_slot_replace",
+      "old": "v1",
+      "new": "original_owner"
+    },
+    {
+      "function": "intgame_message_window_display_str",
+      "old": "a1",
+      "new": "unused_message_id"
+    },
+    {
+      "function": "inven_ui_dragged_item_plant",
+      "old": "a1",
+      "new": "success_ptr"
+    },
+    {
+      "function": "inven_ui_dragged_item_plant",
+      "old": "v1",
+      "new": "item_obj"
+    },
+    {
+      "function": "inven_ui_dragged_item_steal",
+      "old": "a1",
+      "new": "success_ptr"
+    },
+    {
+      "function": "inven_ui_dragged_item_steal",
+      "old": "v1",
+      "new": "item_obj"
+    },
+    {
+      "function": "item_armor_ac_adj",
+      "old": "a3",
+      "new": "require_identification"
+    },
+    {
+      "function": "item_check_use_box_flag",
+      "old": "a1",
+      "new": "unused_actor_obj"
+    },
+    {
+      "function": "item_check_use_box_flag",
+      "old": "a2",
+      "new": "item_obj"
+    },
+    {
+      "function": "item_total_defence",
+      "old": "v1",
+      "new": "weighted_defence"
+    },
+    {
+      "function": "item_total_defence",
+      "old": "v2",
+      "new": "total_score_weight"
+    },
+    {
+      "function": "item_unequip",
+      "old": "v1",
+      "new": "bag_location"
+    },
+    {
+      "function": "location_offsets_to_sort_axes",
+      "old": "a1",
+      "new": "offset_x"
+    },
+    {
+      "function": "location_offsets_to_sort_axes",
+      "old": "a2",
+      "new": "offset_y"
+    },
+    {
+      "function": "location_offsets_to_sort_axes",
+      "old": "a3",
+      "new": "sort_x_ptr"
+    },
+    {
+      "function": "location_offsets_to_sort_axes",
+      "old": "a4",
+      "new": "sort_y_ptr"
+    },
+    {
+      "function": "location_offsets_to_sort_axes",
+      "old": "v1",
+      "new": "horizontal_axis_offset"
+    },
+    {
+      "function": "location_offsets_to_sort_axes",
+      "old": "v2",
+      "new": "vertical_axis_offset"
+    },
+    {
+      "function": "magictech_aggressive_target_notify_once",
+      "old": "a1",
+      "new": "attacker_obj"
+    },
+    {
+      "function": "magictech_maintenance_cost_consume_with_surcharge",
+      "old": "a3",
+      "new": "surcharge_percent"
+    },
+    {
+      "function": "magictech_maintenance_cost_consume_with_surcharge",
+      "old": "v1",
+      "new": "surcharge"
+    },
+    {
+      "function": "magictech_maintenance_timeevent_prepare",
+      "old": "a2",
+      "new": "mt_id"
+    },
+    {
+      "function": "magictech_maintenance_timeevent_prepare",
+      "old": "a3",
+      "new": "period_seconds"
+    },
+    {
+      "function": "magictech_projectile_art_id_get",
+      "old": "v2",
+      "new": "effect_entry"
+    },
+    {
+      "function": "magictech_resurrection_fx_notify",
+      "old": "a1",
+      "new": "unused_source_obj"
+    },
+    {
+      "function": "magictech_resurrection_fx_notify",
+      "old": "a2",
+      "new": "resurrected_obj"
+    },
+    {
+      "function": "magictech_timeevent_add_unless_pending",
+      "old": "a2",
+      "new": "delay"
+    },
+    {
+      "function": "magictech_timeevent_add_unless_pending",
+      "old": "a3",
+      "new": "at"
+    },
+    {
+      "function": "magictech_timeevent_add_unless_pending",
+      "old": "v1",
+      "new": "already_pending"
+    },
+    {
+      "function": "mainmenu_ui_history_route_seed",
+      "old": "a1",
+      "new": "window_types"
+    },
+    {
+      "function": "mainmenu_ui_list_top_index_set",
+      "old": "a1",
+      "new": "top_index"
+    },
+    {
+      "function": "mainmenu_ui_scroll_to",
+      "old": "a1",
+      "new": "top_index"
+    },
+    {
+      "function": "mp_object_move_to_location",
+      "old": "a7",
+      "new": "center_local_player_view"
+    },
+    {
+      "function": "mp_object_pull_packet_process",
+      "old": "v1",
+      "new": "source_obj"
+    },
+    {
+      "function": "mp_object_pull_packet_process",
+      "old": "v2",
+      "new": "target_obj"
+    },
+    {
+      "function": "mp_object_pull_request",
+      "old": "a1",
+      "new": "source_obj"
+    },
+    {
+      "function": "mp_object_pull_request",
+      "old": "a2",
+      "new": "target_obj"
+    },
+    {
+      "function": "mp_ui_character_sheet_request",
+      "old": "a2",
+      "new": "target_obj"
+    },
+    {
+      "function": "mp_ui_object_examine_request",
+      "old": "a2",
+      "new": "observer_obj"
+    },
+    {
+      "function": "mt_ai_action_score_compare_descending",
+      "old": "v1",
+      "new": "first_score"
+    },
+    {
+      "function": "mt_ai_action_score_compare_descending",
+      "old": "v2",
+      "new": "second_score"
+    },
+    {
+      "function": "multiplayer_object_lock_entry_add",
+      "old": "a1",
+      "new": "object_id"
+    },
+    {
+      "function": "multiplayer_object_lock_entry_add",
+      "old": "a2",
+      "new": "parent_id"
+    },
+    {
+      "function": "multiplayer_object_lock_entry_add",
+      "old": "a3",
+      "new": "client_id"
+    },
+    {
+      "function": "multiplayer_saved_characters_release",
+      "old": "a1",
+      "new": "destroy_objects"
+    },
+    {
+      "function": "name_art_picker_open",
+      "old": "a1",
+      "new": "art_type"
+    },
+    {
+      "function": "name_art_picker_open",
+      "old": "a2",
+      "new": "extra_parameters"
+    },
+    {
+      "function": "name_art_picker_open",
+      "old": "a3",
+      "new": "selected_art_id_ptr"
+    },
+    {
+      "function": "obj_inst_field_read_mem",
+      "old": "v1",
+      "new": "descriptor"
+    },
+    {
+      "function": "obj_inst_field_write_mem",
+      "old": "v1",
+      "new": "descriptor"
+    },
+    {
+      "function": "obj_proto_field_read_file",
+      "old": "v1",
+      "new": "descriptor"
+    },
+    {
+      "function": "obj_proto_field_read_mem",
+      "old": "v1",
+      "new": "descriptor"
+    },
+    {
+      "function": "obj_proto_field_write_file",
+      "old": "v1",
+      "new": "descriptor"
+    },
+    {
+      "function": "obj_proto_field_write_mem",
+      "old": "v1",
+      "new": "descriptor"
+    },
+    {
+      "function": "object_changed_field_debug_print",
+      "old": "a2",
+      "new": "unused_field"
+    },
+    {
+      "function": "object_field_read",
+      "old": "v1",
+      "new": "descriptor"
+    },
+    {
+      "function": "object_field_write",
+      "old": "v1",
+      "new": "descriptor"
+    },
+    {
+      "function": "object_inst_field_copy_from_prototype",
+      "old": "v1",
+      "new": "descriptor"
+    },
+    {
+      "function": "object_inst_field_copy_from_prototype",
+      "old": "v2",
+      "new": "prototype_storage_index"
+    },
+    {
+      "function": "object_inst_field_copy_from_prototype",
+      "old": "v3",
+      "new": "instance_storage_index"
+    },
+    {
+      "function": "object_inst_field_storage_index",
+      "old": "v1",
+      "new": "storage_index"
+    },
+    {
+      "function": "object_inst_field_storage_remove",
+      "old": "v1",
+      "new": "storage_index"
+    },
+    {
+      "function": "object_inst_field_storage_remove",
+      "old": "v2",
+      "new": "descriptor"
+    },
+    {
+      "function": "reaction_adjust_price",
+      "old": "a1",
+      "new": "npc_obj"
+    },
+    {
+      "function": "reaction_adjust_price",
+      "old": "a2",
+      "new": "pc_obj"
+    },
+    {
+      "function": "reaction_adjust_price",
+      "old": "a3",
+      "new": "base_price"
+    },
+    {
+      "function": "reaction_adjust_price",
+      "old": "v1",
+      "new": "reaction_level"
+    },
+    {
+      "function": "reaction_adjust_price",
+      "old": "v2",
+      "new": "price_percent"
+    },
+    {
+      "function": "reaction_begin_conversation",
+      "old": "v1",
+      "new": "reaction_level"
+    },
+    {
+      "function": "reaction_end_conversation",
+      "old": "v1",
+      "new": "reaction_level"
+    },
+    {
+      "function": "reaction_met_before",
+      "old": "v1",
+      "new": "stored_reaction"
+    },
+    {
+      "function": "reaction_stored_lookup",
+      "old": "a3",
+      "new": "include_current_slot"
+    },
+    {
+      "function": "reaction_stored_lookup",
+      "old": "a4",
+      "new": "reaction_level_ptr"
+    },
+    {
+      "function": "reaction_stored_or_base_get",
+      "old": "v1",
+      "new": "stored_reaction"
+    },
+    {
+      "function": "redraw_inven_fix_bad_inven",
+      "old": "a1",
+      "new": "item_obj"
+    },
+    {
+      "function": "redraw_inven_fix_bad_inven",
+      "old": "a2",
+      "new": "expected_owner"
+    },
+    {
+      "function": "skill_ui_target_skill_resolve",
+      "old": "v1",
+      "new": "resolved_skill"
+    },
+    {
+      "function": "terrain_compressed_row_pointer_get",
+      "old": "v1",
+      "new": "row_index"
+    },
+    {
+      "function": "terrain_compressed_row_pointer_get",
+      "old": "v2",
+      "new": "row_data"
+    },
+    {
+      "function": "terrain_encode_to_pointer",
+      "old": "a1",
+      "new": "primary_type"
+    },
+    {
+      "function": "terrain_encode_to_pointer",
+      "old": "a2",
+      "new": "secondary_type"
+    },
+    {
+      "function": "terrain_encode_to_pointer",
+      "old": "a3",
+      "new": "transition_mask"
+    },
+    {
+      "function": "terrain_encode_to_pointer",
+      "old": "a4",
+      "new": "variant"
+    },
+    {
+      "function": "terrain_is_blocked",
+      "old": "v1",
+      "new": "tile_data"
+    },
+    {
+      "function": "terrain_transition_base_tile_get",
+      "old": "v1",
+      "new": "next_type"
+    },
+    {
+      "function": "terrain_transition_first_step_find",
+      "old": "a4",
+      "new": "next_type_ptr"
+    },
+    {
+      "function": "terrain_transition_first_step_find",
+      "old": "v1",
+      "new": "path"
+    },
+    {
+      "function": "terrain_transition_variant_randomize",
+      "old": "a1",
+      "new": "primary_type"
+    },
+    {
+      "function": "terrain_transition_variant_randomize",
+      "old": "a2",
+      "new": "secondary_type"
+    },
+    {
+      "function": "terrain_transition_variant_randomize",
+      "old": "a3",
+      "new": "transition_mask"
+    },
+    {
+      "function": "terrain_variant_sector_id",
+      "old": "v1",
+      "new": "variant_index"
+    },
+    {
+      "function": "tig_art_container_id_create",
+      "old": "a5",
+      "new": "palette"
+    },
+    {
+      "function": "tig_art_interface_id_create",
+      "old": "a3",
+      "new": "special_flag"
+    },
+    {
+      "function": "tig_art_light_id_create",
+      "old": "a4",
+      "new": "extended_rotation"
+    },
+    {
+      "function": "tig_art_tile_id_transition_mask_get",
+      "old": "v1",
+      "new": "transition_mask"
+    },
+    {
+      "function": "tig_art_tile_id_variant_get",
+      "old": "v1",
+      "new": "variant"
+    },
+    {
+      "function": "tig_art_tile_id_variant_get",
+      "old": "v2",
+      "new": "transition_mask"
+    },
+    {
+      "function": "tig_database_find_entry_by_path",
+      "old": "a1",
+      "new": "path_ptr"
+    },
+    {
+      "function": "tig_database_find_entry_by_path",
+      "old": "a2",
+      "new": "entry_ptr"
+    },
+    {
+      "function": "ui_schematic_open_request",
+      "old": "a1",
+      "new": "primary_obj"
+    },
+    {
+      "function": "ui_schematic_open_request",
+      "old": "a2",
+      "new": "secondary_obj"
+    },
+    {
+      "function": "wall_delete",
+      "old": "a2",
+      "new": "delete_original"
+    },
+    {
+      "function": "wmap_ui_coords_snap_to_player",
+      "old": "v1",
+      "new": "requested_location"
+    },
+    {
+      "function": "wmap_ui_direct_travel_hours_estimate",
+      "old": "v1",
+      "new": "from_location"
+    },
+    {
+      "function": "wmap_ui_direct_travel_hours_estimate",
+      "old": "v2",
+      "new": "to_location"
+    },
+    {
+      "function": "wmap_ui_direct_travel_hours_estimate",
+      "old": "v3",
+      "new": "travel_hours"
+    },
+    {
+      "function": "wmap_ui_note_edit_end",
+      "old": "a1",
+      "new": "clear_displayed_text"
+    },
+    {
+      "function": "wmap_ui_note_icon_select",
+      "old": "v1",
+      "new": "note_types"
+    },
+    {
+      "function": "wmap_ui_waypoint_travel_value_set",
+      "old": "a3",
+      "new": "refresh"
+    }
+  ],
+  "files": [
+    "first_party/tig/include/tig/art.h",
+    "first_party/tig/src/art.c",
+    "first_party/tig/src/database.c",
+    "src/game/a_name.c",
+    "src/game/ai.c",
+    "src/game/anim.c",
+    "src/game/anim.h",
+    "src/game/anim_private.c",
+    "src/game/anim_private.h",
+    "src/game/broadcast.c",
+    "src/game/combat.c",
+    "src/game/dialog.c",
+    "src/game/dialog.h",
+    "src/game/gamelib.c",
+    "src/game/item.c",
+    "src/game/item.h",
+    "src/game/location.c",
+    "src/game/location.h",
+    "src/game/magictech.c",
+    "src/game/magictech.h",
+    "src/game/mp_utils.c",
+    "src/game/mp_utils.h",
+    "src/game/mt_ai.c",
+    "src/game/multiplayer.c",
+    "src/game/multiplayer.h",
+    "src/game/name.c",
+    "src/game/name.h",
+    "src/game/obj.c",
+    "src/game/reaction.c",
+    "src/game/reaction.h",
+    "src/game/terrain.c",
+    "src/game/ui.c",
+    "src/game/ui.h",
+    "src/game/wall.c",
+    "src/game/wall.h",
+    "src/ui/charedit_ui.c",
+    "src/ui/hotkey_ui.c",
+    "src/ui/hotkey_ui.h",
+    "src/ui/intgame.c",
+    "src/ui/intgame.h",
+    "src/ui/inven_ui.c",
+    "src/ui/mainmenu_ui.c",
+    "src/ui/mainmenu_ui.h",
+    "src/ui/skill_ui.c",
+    "src/ui/wmap_ui.c"
+  ]
+}

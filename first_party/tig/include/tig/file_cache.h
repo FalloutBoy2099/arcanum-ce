@@ -28,8 +28,8 @@ typedef struct TigFileCacheItem {
 typedef struct TigFileCache {
     int signature;
     int capacity;
-    int max_size;
-    int bytes;
+    size_t max_size;
+    size_t bytes;
     int items_count;
     TigFileCacheItem* items;
 } TigFileCache;
@@ -47,7 +47,7 @@ void tig_file_cache_flush(TigFileCache* cache);
 //
 // - `capacity`: total nubmer of files this cache object can manage.
 // - `max_size`: max size of files this cache object can manage.
-TigFileCache* tig_file_cache_create(int capacity, int max_size);
+TigFileCache* tig_file_cache_create(int capacity, size_t max_size);
 
 // Destroys the given file cache.
 //

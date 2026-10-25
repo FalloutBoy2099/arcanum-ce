@@ -279,13 +279,13 @@ bool target_pick_at_virtual_xy(int x, int y, TargetDescriptor* td, bool fullscre
 bool target_pick_at_local_xy(int x, int y, TargetDescriptor* td)
 {
     int64_t pc_obj;
-    TargetDescriptorEvaluation v1;
+    TargetDescriptorEvaluation evaluation;
     ObjectList party_members;
     ObjectList mp_party_members;
     ObjectList dead_critters;
     ObjectList objects;
     ObjectNode* node;
-    int64_t v2;
+    int64_t picked_obj;
     int64_t loc;
     bool ret = false;
 
@@ -297,9 +297,9 @@ bool target_pick_at_local_xy(int x, int y, TargetDescriptor* td)
     dead_critters.head = NULL;
     objects.head = NULL;
 
-    v1.source_obj = pc_obj;
-    v1.self_obj = pc_obj;
-    v1.descriptor = td;
+    evaluation.source_obj = pc_obj;
+    evaluation.self_obj = pc_obj;
+    evaluation.descriptor = td;
 
     if ((target_current_params.tgt & TGT_OBJ_NO_SELF) != 0) {
         object_flags_set(pc_obj, OF_CLICK_THROUGH);
@@ -334,10 +334,10 @@ bool target_pick_at_local_xy(int x, int y, TargetDescriptor* td)
         }
     }
 
-    if (object_pick_at_screen_xy(x, y, &v2, 0x3)) {
-        target_resolve_scenery_occupant(&v2);
-        target_descriptor_set_obj(td, v2);
-        if (target_descriptor_evaluate_current(&v1)) {
+    if (object_pick_at_screen_xy(x, y, &picked_obj, 0x3)) {
+        target_resolve_scenery_occupant(&picked_obj);
+        target_descriptor_set_obj(td, picked_obj);
+        if (target_descriptor_evaluate_current(&evaluation)) {
             ret = true;
         }
     }
@@ -347,10 +347,10 @@ bool target_pick_at_local_xy(int x, int y, TargetDescriptor* td)
             object_list_location(loc, OBJ_TM_ALL & ~OBJ_TM_PROJECTILE, &objects);
             node = objects.head;
             while (node != NULL) {
-                v2 = node->obj;
-                target_resolve_scenery_occupant(&v2);
-                target_descriptor_set_obj(td, v2);
-                if (target_descriptor_evaluate_current(&v1)) {
+                picked_obj = node->obj;
+                target_resolve_scenery_occupant(&picked_obj);
+                target_descriptor_set_obj(td, picked_obj);
+                if (target_descriptor_evaluate_current(&evaluation)) {
                     ret = true;
                     break;
                 }
@@ -360,7 +360,7 @@ bool target_pick_at_local_xy(int x, int y, TargetDescriptor* td)
 
             if (!ret) {
                 target_descriptor_set_loc(td, loc);
-                if (target_descriptor_evaluate_current(&v1)) {
+                if (target_descriptor_evaluate_current(&evaluation)) {
                     ret = true;
                 }
             }
@@ -674,23 +674,23 @@ bool target_context_evaluate(TargetContext* ctx)
                     // TODO: Looks the same as the code below, probably one of
                     // it should be inverted, check.
                     if (ctx->self_obj != OBJ_HANDLE_NULL) {
-                        int64_t v1;
-                        int64_t v2;
+                        int64_t target_group_leader;
+                        int64_t source_group_leader;
 
-                        v1 = critter_pc_leader_get(ctx->target_obj);
-                        v2 = critter_pc_leader_get(ctx->self_obj);
-                        if (v1 == ctx->self_obj
-                            || (v1 == v2 && v1 != OBJ_HANDLE_NULL)
-                            || v2 == ctx->target_obj) {
+                        target_group_leader = critter_pc_leader_get(ctx->target_obj);
+                        source_group_leader = critter_pc_leader_get(ctx->self_obj);
+                        if (target_group_leader == ctx->self_obj
+                            || (target_group_leader == source_group_leader && target_group_leader != OBJ_HANDLE_NULL)
+                            || source_group_leader == ctx->target_obj) {
                             return false;
                         }
 
                         if (tig_net_is_active()
-                            && obj_field_int32_get(v2, OBJ_F_TYPE) == OBJ_TYPE_PC) {
+                            && obj_field_int32_get(source_group_leader, OBJ_F_TYPE) == OBJ_TYPE_PC) {
                             object_list_party(ctx->self_obj, &objects);
                             node = objects.head;
                             while (node != NULL) {
-                                if (node->obj == v1
+                                if (node->obj == target_group_leader
                                     || node->obj == ctx->target_obj) {
                                     break;
                                 }
@@ -705,24 +705,24 @@ bool target_context_evaluate(TargetContext* ctx)
                     }
 
                     if (ctx->attacker_obj != OBJ_HANDLE_NULL) {
-                        int64_t v1;
-                        int64_t v2;
+                        int64_t target_group_leader;
+                        int64_t source_group_leader;
 
-                        v1 = critter_pc_leader_get(ctx->target_obj);
-                        v2 = critter_pc_leader_get(ctx->attacker_obj);
-                        if (v1 == ctx->attacker_obj
-                            || (v1 == v2 && v1 != OBJ_HANDLE_NULL)
-                            || v2 == ctx->target_obj
+                        target_group_leader = critter_pc_leader_get(ctx->target_obj);
+                        source_group_leader = critter_pc_leader_get(ctx->attacker_obj);
+                        if (target_group_leader == ctx->attacker_obj
+                            || (target_group_leader == source_group_leader && target_group_leader != OBJ_HANDLE_NULL)
+                            || source_group_leader == ctx->target_obj
                             || ctx->target_obj == ctx->attacker_obj) {
                             return false;
                         }
 
                         if (tig_net_is_active()
-                            && obj_field_int32_get(v2, OBJ_F_TYPE) == OBJ_TYPE_PC) {
+                            && obj_field_int32_get(source_group_leader, OBJ_F_TYPE) == OBJ_TYPE_PC) {
                             object_list_party(ctx->attacker_obj, &objects);
                             node = objects.head;
                             while (node != NULL) {
-                                if (node->obj == v1
+                                if (node->obj == target_group_leader
                                     || node->obj == ctx->target_obj) {
                                     break;
                                 }
@@ -771,23 +771,23 @@ bool target_context_evaluate(TargetContext* ctx)
                     // TODO: Looks the same as the code above, probably one of
                     // it should be inverted, check.
                     if (ctx->self_obj != OBJ_HANDLE_NULL) {
-                        int64_t v1;
-                        int64_t v2;
+                        int64_t target_group_leader;
+                        int64_t source_group_leader;
 
-                        v1 = critter_pc_leader_get(ctx->target_obj);
-                        v2 = critter_pc_leader_get(ctx->self_obj);
-                        if (v1 == ctx->self_obj
-                            || (v1 == v2 && v1 != OBJ_HANDLE_NULL)
-                            || v2 == ctx->target_obj) {
+                        target_group_leader = critter_pc_leader_get(ctx->target_obj);
+                        source_group_leader = critter_pc_leader_get(ctx->self_obj);
+                        if (target_group_leader == ctx->self_obj
+                            || (target_group_leader == source_group_leader && target_group_leader != OBJ_HANDLE_NULL)
+                            || source_group_leader == ctx->target_obj) {
                             return false;
                         }
 
                         if (tig_net_is_active()
-                            && obj_field_int32_get(v2, OBJ_F_TYPE) == OBJ_TYPE_PC) {
+                            && obj_field_int32_get(source_group_leader, OBJ_F_TYPE) == OBJ_TYPE_PC) {
                             object_list_party(ctx->self_obj, &objects);
                             node = objects.head;
                             while (node != NULL) {
-                                if (node->obj == v1
+                                if (node->obj == target_group_leader
                                     || node->obj == ctx->target_obj) {
                                     break;
                                 }
@@ -802,24 +802,24 @@ bool target_context_evaluate(TargetContext* ctx)
                     }
 
                     if (ctx->attacker_obj != OBJ_HANDLE_NULL) {
-                        int64_t v1;
-                        int64_t v2;
+                        int64_t target_group_leader;
+                        int64_t source_group_leader;
 
-                        v1 = critter_pc_leader_get(ctx->target_obj);
-                        v2 = critter_pc_leader_get(ctx->attacker_obj);
-                        if (v1 == ctx->attacker_obj
-                            || (v1 == v2 && v1 != OBJ_HANDLE_NULL)
-                            || v2 == ctx->target_obj
+                        target_group_leader = critter_pc_leader_get(ctx->target_obj);
+                        source_group_leader = critter_pc_leader_get(ctx->attacker_obj);
+                        if (target_group_leader == ctx->attacker_obj
+                            || (target_group_leader == source_group_leader && target_group_leader != OBJ_HANDLE_NULL)
+                            || source_group_leader == ctx->target_obj
                             || ctx->target_obj == ctx->attacker_obj) {
                             return false;
                         }
 
                         if (tig_net_is_active()
-                            && obj_field_int32_get(v2, OBJ_F_TYPE) == OBJ_TYPE_PC) {
+                            && obj_field_int32_get(source_group_leader, OBJ_F_TYPE) == OBJ_TYPE_PC) {
                             object_list_party(ctx->attacker_obj, &objects);
                             node = objects.head;
                             while (node != NULL) {
-                                if (node->obj == v1
+                                if (node->obj == target_group_leader
                                     || node->obj == ctx->target_obj) {
                                     break;
                                 }
@@ -990,7 +990,7 @@ bool target_context_evaluate(TargetContext* ctx)
     }
 
     if ((tgt & TGT_TILE_EMPTY) != 0) {
-        bool v51 = true;
+        bool tile_empty = true;
 
         if (tile_is_blocking(ctx->target_loc, false)) {
             return false;
@@ -1002,7 +1002,7 @@ bool target_context_evaluate(TargetContext* ctx)
             if (node->obj != OBJ_HANDLE_NULL) {
                 if (!obj_type_is_item(obj_field_int32_get(node->obj, OBJ_F_TYPE))
                     && (obj_field_int32_get(node->obj, OBJ_F_FLAGS) & OF_NO_BLOCK) == 0) {
-                    v51 = false;
+                    tile_empty = false;
                     break;
                 }
             }
@@ -1010,13 +1010,13 @@ bool target_context_evaluate(TargetContext* ctx)
         }
         object_list_destroy(&objects);
 
-        if (!v51) {
+        if (!tile_empty) {
             return false;
         }
     }
 
     if ((tgt & TGT_TILE_EMPTY_IMMOBILES) != 0) {
-        bool v54 = true;
+        bool tile_without_immobiles = true;
 
         if (tile_is_blocking(ctx->target_loc, false)) {
             return false;
@@ -1028,7 +1028,7 @@ bool target_context_evaluate(TargetContext* ctx)
             if (node->obj != OBJ_HANDLE_NULL) {
                 if (!obj_type_is_item(obj_field_int32_get(node->obj, OBJ_F_TYPE))
                     && (obj_field_int32_get(node->obj, OBJ_F_FLAGS) & OF_NO_BLOCK) == 0) {
-                    v54 = false;
+                    tile_without_immobiles = false;
                     break;
                 }
             }
@@ -1036,7 +1036,7 @@ bool target_context_evaluate(TargetContext* ctx)
         }
         object_list_destroy(&objects);
 
-        if (!v54) {
+        if (!tile_without_immobiles) {
             return false;
         }
     }

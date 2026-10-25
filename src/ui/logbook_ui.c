@@ -1,4 +1,5 @@
 #include "ui/logbook_ui.h"
+#include "ui/asset_warmup.h"
 #include <tig/performance.h>
 #include "ui/cache_key.h"
 #include "ui/search_bar.h"
@@ -552,6 +553,16 @@ bool logbook_ui_init(GameInitInfo* init_info)
     logbook_ui_index_mode = false;
     logbook_ui_obj = OBJ_HANDLE_NULL;
     logbook_ui_current_page = 1;
+    const int background_art_numbers[] = {
+        settings_get_value(&settings, LOGBOOK_TOOLBAR_KEY) ? NAME_BOOK_MAIN_XL : 260,
+        261, 262, 263,
+        settings_get_value(&settings, LOGBOOK_TOOLBAR_KEY) ? NAME_BOOK_SIDE_XL : 264,
+        198,
+    };
+    for (size_t i = 0; i < SDL_arraysize(background_art_numbers); i++) ui_asset_warmup_register(background_art_numbers[i]);
+    for (int i = 0; i < LOGBOOK_UI_TAB_COUNT; i++) ui_asset_warmup_register(logbook_ui_tab_buttons[i].art_num);
+    for (int i = 0; i < LOGBOOK_UI_BUTTON_COUNT; i++) ui_asset_warmup_register(logbook_ui_page_buttons[i].art_num);
+    ui_asset_warmup_register(logbook_ui_index_button.art_num);
     logbook_ui_initialized = true;
 
     return true;

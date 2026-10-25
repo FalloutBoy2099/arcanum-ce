@@ -174,3 +174,11 @@
 {2070}{Off}
 {2071}{On}
 {2072}{Adaptive}
+
+{210}{Mute repetitive sounds}
+{1210}{Mutes repetitive Krag, elemental buff and Tempus Fugit sounds. Applies immediately, including to sounds already looping.}
+
+{117}{Master Educator}
+{118}{XP only on kill}
+{1117}{Followers receive the player's training tier when their skill points allow it. The Educator background is not required.}
+{1118}{Disables XP for damage dealt. Remaining XP is awarded when the enemy dies, including kills by followers.}

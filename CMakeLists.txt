@@ -15,6 +15,16 @@ add_subdirectory("third_party/sdl3_mixer" EXCLUDE_FROM_ALL)
 add_subdirectory("third_party/sdl3_ttf" EXCLUDE_FROM_ALL)
 add_subdirectory("third_party/zlib" EXCLUDE_FROM_ALL)
 
+set(arcanum_native_movies_default OFF)
+if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(arcanum_native_movies_default ON)
+endif()
+option(ARCANUM_NATIVE_MOVIES "Use native FFmpeg Bink playback" ${arcanum_native_movies_default})
+if(ARCANUM_NATIVE_MOVIES)
+    add_subdirectory("third_party/ffmpeg" EXCLUDE_FROM_ALL)
+    add_subdirectory("first_party/movie_decoder" EXCLUDE_FROM_ALL)
+endif()
+
 add_subdirectory("first_party/bink_compat" EXCLUDE_FROM_ALL)
 add_subdirectory("first_party/mss_compat" EXCLUDE_FROM_ALL)
 add_subdirectory("first_party/tig" EXCLUDE_FROM_ALL)
@@ -25,10 +35,15 @@ add_subdirectory("first_party/tig" EXCLUDE_FROM_ALL)
 
 # Keep alphabetically sorted.
 set(SRCS
+    "src/ui/asset_warmup.c"
+    "src/ui/asset_warmup.h"
     "src/game/a_name.c"
     "src/game/a_name.h"
     "src/game/ai.c"
     "src/game/ai.h"
+    "src/game/ai_private.h"
+    "src/game/ai_utility_adapter.c"
+    "src/game/ai_utility_adapter.h"
     "src/game/anim_private.c"
     "src/game/anim_private.h"
     "src/game/anim.c"
@@ -39,6 +54,8 @@ set(SRCS
     "src/game/antiteleport.h"
     "src/game/area.c"
     "src/game/area.h"
+    "src/game/art_picker_history.c"
+    "src/game/art_picker_history.h"
     "src/game/background.c"
     "src/game/background.h"
     "src/game/benchmark.c"
@@ -117,12 +134,24 @@ set(SRCS
     "src/game/item_effect.h"
     "src/game/item.c"
     "src/game/item.h"
+    "src/game/item_private.h"
+    "src/game/inventory_load.c"
+    "src/game/inventory_bulk.c"
+    "src/game/inventory_insert.c"
+    "src/game/inventory_transfer.c"
+    "src/game/utility_ai.c"
+    "src/game/utility_ai.h"
+    "src/game/ammo_transfer.c"
+    "src/game/inventory_load.h"
     "src/game/journal_memory.c"
     "src/game/journal_memory.h"
     "src/game/journal_text.h"
     "src/game/jumppoint.c"
     "src/game/jumppoint.h"
     "src/game/level.c"
+    "src/game/level_progression.c"
+    "src/game/progression_rules.c"
+    "src/game/repetitive_sound.c"
     "src/game/level.h"
     "src/game/li.c"
     "src/game/li.h"
@@ -135,6 +164,8 @@ set(SRCS
     "src/game/logbook.c"
     "src/game/logbook.h"
     "src/game/magictech.c"
+    "src/game/magictech_runtime.c"
+    "src/game/magictech_runtime.h"
     "src/game/magictech.h"
     "src/game/map.c"
     "src/game/map.h"
@@ -194,6 +225,8 @@ set(SRCS
     "src/game/movement_route.h"
     "src/game/activity_time.c"
     "src/game/activity_time.h"
+    "src/game/floating_background.c"
+    "src/game/floating_background.h"
     "src/game/follower_navigation.c"
     "src/game/follower_navigation.h"
     "src/game/path.h"
@@ -221,6 +254,7 @@ set(SRCS
     "src/game/rumor.h"
     "src/game/sa.c"
     "src/game/sa.h"
+    "src/game/serialization_buffer.h"
     "src/game/schematic.h"
     "src/game/script_name.c"
     "src/game/script_name.h"
@@ -244,6 +278,8 @@ set(SRCS
     "src/game/sector_sound_list.h"
     "src/game/sector_tile_list.c"
     "src/game/sector_tile_list.h"
+    "src/game/sector_art_preview.c"
+    "src/game/sector_art_preview.h"
     "src/game/sector.c"
     "src/game/sector.h"
     "src/game/settings.c"
@@ -268,7 +304,9 @@ set(SRCS
     "src/game/teleport.c"
     "src/game/teleport.h"
     "src/game/terrain.c"
+    "src/game/terrain_storage.c"
     "src/game/terrain.h"
+    "src/game/terrain_storage.h"
     "src/game/text_filter.c"
     "src/game/text_filter.h"
     "src/game/tf.c"
@@ -365,6 +403,8 @@ set(SRCS
     "src/ui/search_cache.c"
     "src/ui/search_cache.h"
     "src/ui/search_bar.c"
+    "src/ui/movement_preview.c"
+    "src/ui/movement_preview.h"
     "src/ui/status_panel.c"
     "src/ui/status_panel.h"
     "src/ui/journal_index.c"
@@ -415,13 +455,40 @@ target_link_libraries(arcanum-ce PUBLIC
     ${TIG_LIBRARY}
 )
 
+
+
+if(WIN32)
+    enable_language(RC)
+    set(ARCANUM_WINDOWS_VERSION_COUNTER_FILE "${CMAKE_CURRENT_SOURCE_DIR}/.arcanum-build-number"
+        CACHE FILEPATH "Persistent counter shared by Windows builds")
+    set(ARCANUM_WINDOWS_VERSION_RESOURCE "${CMAKE_CURRENT_BINARY_DIR}/generated/arcanum_version.rc")
+    add_custom_target(arcanum_windows_version
+        COMMAND "${CMAKE_COMMAND}"
+            "-DCOUNTER_FILE:FILEPATH=${ARCANUM_WINDOWS_VERSION_COUNTER_FILE}"
+            "-DOUTPUT_FILE:FILEPATH=${ARCANUM_WINDOWS_VERSION_RESOURCE}"
+            "-DTEMPLATE_FILE:FILEPATH=${CMAKE_CURRENT_SOURCE_DIR}/windows/arcanum_version.rc.in"
+            "-DCONFIGURATION=$<CONFIG>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/tools/stamp_windows_version.cmake"
+        BYPRODUCTS "${ARCANUM_WINDOWS_VERSION_RESOURCE}"
+            "${CMAKE_CURRENT_BINARY_DIR}/generated/arcanum_version.txt"
+        VERBATIM
+    )
+    set_source_files_properties("${ARCANUM_WINDOWS_VERSION_RESOURCE}" PROPERTIES GENERATED TRUE)
+    target_sources(arcanum-ce PRIVATE "${ARCANUM_WINDOWS_VERSION_RESOURCE}")
+    add_dependencies(arcanum-ce arcanum_windows_version)
+endif()
+
+
 option(ARCANUM_BUILD_TESTS "Build headless community-feature regression tests" OFF)
 if(ARCANUM_BUILD_TESTS)
     enable_testing()
-    find_package(Python3 COMPONENTS Interpreter QUIET)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
     if(Python3_Interpreter_FOUND)
         add_test(NAME automaton_gunner COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/automaton_gunner_test.py")
         add_test(NAME benchmark_report COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/benchmark_report_test.py")
+        add_test(NAME message_catalog_handles COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_message_catalog_handles.py")
+        add_test(NAME runtime_profile COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_runtime_profile.py")
+        add_test(NAME prototype_bulk_tool COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_initialize_prototype_bulk.py")
     endif()
     add_executable(community_features_test
         tests/community_features_test.c
@@ -445,11 +512,92 @@ if(ARCANUM_BUILD_TESTS)
     target_include_directories(quality_of_life_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(quality_of_life_test PRIVATE ${TIG_LIBRARY})
     add_test(NAME quality_of_life COMMAND quality_of_life_test)
-    add_executable(pathfinding_test tests/pathfinding_test.c tests/path_reference.c src/game/path.c src/game/path_open_set.c src/game/movement_turn.c src/game/follower_navigation.c)
+    add_executable(pathfinding_test tests/pathfinding_test.c tests/path_reference.c tests/path_weighted_baseline.c src/game/path.c src/game/path_open_set.c src/game/movement_turn.c src/game/follower_navigation.c)
     target_compile_definitions(pathfinding_test PRIVATE ARCANUM_PATH_TEST)
     target_include_directories(pathfinding_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_sources(pathfinding_test PRIVATE experiments/path_jps.c)
+    target_include_directories(pathfinding_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/experiments")
     target_link_libraries(pathfinding_test PRIVATE ${TIG_LIBRARY})
     add_test(NAME pathfinding COMMAND pathfinding_test)
+
+    add_executable(ui_asset_warmup_test tests/ui_asset_warmup_test.c src/ui/asset_warmup.c)
+    add_executable(progression_rules_test tests/progression_rules_test.c src/game/progression_rules.c)
+    target_include_directories(progression_rules_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    add_test(NAME progression_rules COMMAND progression_rules_test)
+
+    add_executable(repetitive_sound_test tests/repetitive_sound_test.c src/game/repetitive_sound.c)
+    target_include_directories(repetitive_sound_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    add_test(NAME repetitive_sound COMMAND repetitive_sound_test)
+
+    add_executable(level_progression_test tests/level_progression_test.c src/game/level_progression.c)
+    target_include_directories(level_progression_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    add_test(NAME level_progression COMMAND level_progression_test "${CMAKE_CURRENT_SOURCE_DIR}/resources/rules/xp_level.mes")
+    add_executable(inventory_load_test tests/inventory_load_test.c src/game/inventory_load.c)
+    target_include_directories(inventory_load_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    add_test(NAME inventory_load COMMAND inventory_load_test)
+    add_executable(utility_ai_test tests/utility_ai_test.c src/game/utility_ai.c)
+    target_include_directories(utility_ai_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    add_test(NAME utility_ai COMMAND utility_ai_test)
+    add_executable(utility_ai_adapter_test tests/utility_ai_adapter_test.c src/game/utility_ai.c)
+    target_include_directories(utility_ai_adapter_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(utility_ai_adapter_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME utility_ai_adapter COMMAND utility_ai_adapter_test)
+    add_executable(utility_ai_resources_test tests/utility_ai_resources_test.c src/game/mt_ai.c src/game/utility_ai.c)
+    target_include_directories(utility_ai_resources_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(utility_ai_resources_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME utility_ai_resources COMMAND utility_ai_resources_test)
+    add_executable(art_picker_history_test tests/art_picker_history_test.c src/game/art_picker_history.c)
+    target_include_directories(art_picker_history_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(art_picker_history_test PRIVATE SDL3::SDL3)
+    add_test(NAME art_picker_history COMMAND art_picker_history_test)
+    add_executable(magictech_runtime_test tests/magictech_runtime_test.c)
+    target_include_directories(magictech_runtime_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(magictech_runtime_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME magictech_runtime COMMAND magictech_runtime_test)
+    add_executable(quest_validation_test tests/quest_validation_test.c)
+    target_include_directories(quest_validation_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(quest_validation_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME quest_validation COMMAND quest_validation_test)
+    add_executable(settings_atomic_test tests/settings_atomic_test.c)
+    target_include_directories(settings_atomic_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(settings_atomic_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME settings_atomic COMMAND settings_atomic_test)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/settings-atomic-runtime")
+    set_tests_properties(settings_atomic PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/settings-atomic-runtime")
+    add_executable(inventory_bulk_test tests/inventory_bulk_test.c src/game/inventory_bulk.c src/game/inventory_insert.c src/game/inventory_transfer.c src/game/ammo_transfer.c)
+    target_include_directories(inventory_bulk_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/first_party/tig/include")
+    target_link_libraries(inventory_bulk_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME inventory_bulk COMMAND inventory_bulk_test)
+    target_include_directories(ui_asset_warmup_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/first_party/tig/include")
+    target_link_libraries(ui_asset_warmup_test PRIVATE SDL3::SDL3)
+    add_test(NAME ui_asset_warmup COMMAND ui_asset_warmup_test)
+
+    add_executable(sector_art_preview_test tests/sector_art_preview_test.c src/game/sector_art_preview.c)
+    target_include_directories(sector_art_preview_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    add_test(NAME sector_art_preview COMMAND sector_art_preview_test)
+
+    add_executable(asset_prefetch_test tests/asset_prefetch_test.c)
+    target_link_libraries(asset_prefetch_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME asset_prefetch COMMAND asset_prefetch_test)
+
+    add_executable(async_asset_reader_test tests/async_asset_reader_test.c)
+    target_link_libraries(async_asset_reader_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME async_asset_reader COMMAND async_asset_reader_test)
+
+    add_executable(sector_prefetch_probe experiments/sector_prefetch_probe.c src/game/sector_art_preview.c)
+    target_include_directories(sector_prefetch_probe PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(sector_prefetch_probe PRIVATE ${TIG_LIBRARY})
+
+    add_executable(asset_prefetch_probe experiments/asset_prefetch_probe.c)
+    target_link_libraries(asset_prefetch_probe PRIVATE ${TIG_LIBRARY})
+
+    add_executable(asset_io_benchmark experiments/asset_io_benchmark.c)
+    target_link_libraries(asset_io_benchmark PRIVATE ${TIG_LIBRARY})
+
+    add_executable(path_jps_experiment_test tests/path_jps_experiment_test.c experiments/path_jps.c src/game/path_open_set.c)
+    target_include_directories(path_jps_experiment_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/experiments" "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(path_jps_experiment_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME path_jps_experiment COMMAND path_jps_experiment_test)
     add_executable(movement_route_test tests/movement_route_test.c src/game/movement_route.c)
     target_include_directories(movement_route_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     add_test(NAME movement_route COMMAND movement_route_test)
@@ -462,6 +610,16 @@ if(ARCANUM_BUILD_TESTS)
     add_executable(performance_test tests/performance_test.c)
     target_link_libraries(performance_test PRIVATE ${TIG_LIBRARY})
     add_test(NAME performance COMMAND performance_test)
+    add_executable(floating_background_test tests/floating_background_test.c src/game/floating_background.c)
+    target_include_directories(floating_background_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(floating_background_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME floating_background COMMAND floating_background_test)
+    set_tests_properties(floating_background PROPERTIES SKIP_RETURN_CODE 77)
+    add_executable(movement_preview_test tests/movement_preview_test.c src/ui/movement_preview.c)
+    target_include_directories(movement_preview_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(movement_preview_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME movement_preview COMMAND movement_preview_test)
+    set_tests_properties(movement_preview PROPERTIES SKIP_RETURN_CODE 77)
     add_executable(window_visibility_test tests/window_visibility_test.c src/ui/search_bar.c src/ui/status_panel.c)
     target_include_directories(window_visibility_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(window_visibility_test PRIVATE ${TIG_LIBRARY})
@@ -491,6 +649,16 @@ if(ARCANUM_BUILD_TESTS)
     add_executable(video_upload_test tests/video_upload_test.c)
     target_link_libraries(video_upload_test PRIVATE ${TIG_LIBRARY})
     add_test(NAME video_upload COMMAND video_upload_test)
+
+    add_executable(sprite_cache_gpu_test tests/sprite_cache_gpu_test.c)
+    target_link_libraries(sprite_cache_gpu_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME sprite_cache_gpu COMMAND sprite_cache_gpu_test)
+    set_tests_properties(sprite_cache_gpu PROPERTIES SKIP_RETURN_CODE 77)
+
+    add_executable(gpu_cursor_test tests/gpu_cursor_test.c)
+    target_link_libraries(gpu_cursor_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME gpu_cursor COMMAND gpu_cursor_test)
+    set_tests_properties(gpu_cursor PROPERTIES SKIP_RETURN_CODE 77)
     add_executable(scale_region_test tests/scale_region_test.c src/game/zoom_damage.c)
     target_include_directories(scale_region_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(scale_region_test PRIVATE ${TIG_LIBRARY})
@@ -561,6 +729,51 @@ if(ARCANUM_BUILD_TESTS)
     target_include_directories(item_compare_reference_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(item_compare_reference_test PRIVATE ${TIG_LIBRARY})
     add_test(NAME item_compare_reference COMMAND item_compare_reference_test)
+    add_executable(file_cache_test tests/file_cache_test.c)
+    target_link_libraries(file_cache_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME file_cache COMMAND file_cache_test)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/file-cache-runtime")
+    set_tests_properties(file_cache PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/file-cache-runtime")
+    add_executable(graphics_storage_test tests/graphics_storage_test.c)
+    target_link_libraries(graphics_storage_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME graphics_storage COMMAND graphics_storage_test)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/graphics-storage-runtime")
+    set_tests_properties(graphics_storage PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/graphics-storage-runtime")
+    add_executable(object_pool_test tests/object_pool_test.c src/game/obj_pool.c)
+    target_include_directories(object_pool_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(object_pool_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME object_pool COMMAND object_pool_test)
+    add_executable(asset_storage_test tests/asset_storage_test.c src/game/mes.c src/game/sector_tile_list.c src/game/tile_script_list.c src/game/walkmask.c)
+    target_include_directories(asset_storage_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(asset_storage_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME asset_storage COMMAND asset_storage_test)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/asset-storage-runtime")
+    set_tests_properties(asset_storage PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/asset-storage-runtime")
+    add_executable(numeric_storage_test tests/numeric_storage_test.c)
+    target_link_libraries(numeric_storage_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME numeric_storage COMMAND numeric_storage_test)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/numeric-storage-runtime")
+    set_tests_properties(numeric_storage PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/numeric-storage-runtime" TIMEOUT 120)
+    add_executable(object_storage_test tests/object_storage_test.c src/game/sa.c src/game/obj_private.c)
+    target_include_directories(object_storage_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(object_storage_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME object_storage COMMAND object_storage_test)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/object-storage-runtime")
+    set_tests_properties(object_storage PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/object-storage-runtime")
+    add_executable(terrain_storage_test tests/terrain_storage_test.c src/game/terrain_storage.c)
+    target_link_libraries(terrain_storage_test PRIVATE ${TIG_LIBRARY})
+    target_include_directories(terrain_storage_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    add_test(NAME terrain_storage COMMAND terrain_storage_test)
+    add_executable(database_storage_test tests/database_storage_test.c)
+    target_include_directories(database_storage_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(database_storage_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME database_storage COMMAND database_storage_test)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/database-storage-runtime")
+    set_tests_properties(database_storage PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/database-storage-runtime")
+    add_executable(art_cache_budget_test tests/art_cache_budget_test.c)
+    target_link_libraries(art_cache_budget_test PRIVATE ${TIG_LIBRARY})
+    add_test(NAME art_cache_budget COMMAND art_cache_budget_test)
+
     add_executable(art_decode_test tests/art_decode_test.c)
     target_link_libraries(art_decode_test PRIVATE ${TIG_LIBRARY})
     add_test(NAME art_decode COMMAND art_decode_test
@@ -637,4 +850,42 @@ if(APPLE)
     endif()
 
     include(CPack)
+endif()
+
+if(ARCANUM_NATIVE_MOVIES)
+    add_custom_target(arcanum_movie_runtime
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ARCANUM_MOVIE_RUNTIME_FILES} "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/licenses/ffmpeg"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ARCANUM_MOVIE_LICENSE}" "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/licenses/ffmpeg/LICENSE.txt"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ARCANUM_MOVIE_NOTICE}" "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/licenses/ffmpeg/NOTICE.txt"
+        VERBATIM)
+    if(ARCANUM_MOVIE_BUILD_CONFIG)
+        add_custom_command(TARGET arcanum_movie_runtime POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ARCANUM_MOVIE_BUILD_CONFIG}" "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/licenses/ffmpeg/BUILD-CONFIG.txt"
+            VERBATIM)
+    endif()
+    if(ARCANUM_BUILD_TESTS)
+        set(ARCANUM_TEST_MOVIE "" CACHE FILEPATH "SierraLogo.bik reference movie")
+        set(ARCANUM_TEST_MOVIE_ORACLES "" CACHE PATH "Optional first-frame.bgra and audio.f32 references")
+        add_executable(movie_decoder_test tests/movie_decoder_test.c)
+        target_link_libraries(movie_decoder_test PRIVATE movie_decoder)
+        set(movie_test_arguments)
+        if(ARCANUM_TEST_MOVIE)
+            list(APPEND movie_test_arguments "${ARCANUM_TEST_MOVIE}")
+            if(ARCANUM_TEST_MOVIE_ORACLES)
+                list(APPEND movie_test_arguments "${ARCANUM_TEST_MOVIE_ORACLES}/first-frame.bgra" "${ARCANUM_TEST_MOVIE_ORACLES}/audio.f32")
+            endif()
+        endif()
+        add_test(NAME movie_decoder COMMAND movie_decoder_test ${movie_test_arguments})
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/movie-decoder-runtime")
+        set_tests_properties(movie_decoder PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/movie-decoder-runtime")
+    endif()
+    get_property(arcanum_build_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(build_target IN LISTS arcanum_build_targets)
+        get_target_property(build_target_type ${build_target} TYPE)
+        if(build_target_type STREQUAL "EXECUTABLE")
+            add_dependencies(${build_target} arcanum_movie_runtime)
+        endif()
+    endforeach()
 endif()

@@ -23,17 +23,17 @@
 #define tig_net_on_message(a)
 #define tig_net_on_message_validation(a)
 #define tig_net_on_network_event(a)
-#define sub_5280F0() 1
+#define tig_net_shutdown_status_stub() 1
 #define tig_net_start_server()
-#define sub_52A940()
-#define sub_52A950()
-#define sub_52B210()
-#define sub_5286E0()
+#define tig_net_legacy_play_begin_stub()
+#define tig_net_legacy_play_end_stub()
+#define tig_net_legacy_session_ready_stub()
+#define tig_net_legacy_preferences_applied_stub()
 #define tig_net_xfer_count(a) 0
 #define tig_net_client_is_active(a) 0
 #define tig_net_client_is_waiting(a) 0
 #define tig_net_client_is_loading(a) 0
-#define sub_52A9E0(a)
+#define tig_net_legacy_timed_event_stub(a)
 #define tig_net_local_server_get_max_players() 8
 #define tig_net_xfer_send_as(a, b, c, d)
 #define tig_net_xfer_send(a, b, c)

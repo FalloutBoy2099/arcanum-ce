@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "game/a_name.h"
+#include "game/art_picker_history.h"
 #include "game/mes.h"
 
 static void name_missing_art_init(void);
@@ -12,7 +13,6 @@ static int name_critter_art_file_count(void);
 static void fix_missing_art(int num, int cnt, unsigned int* missing, int* anim_ptr, int* weapon_ptr);
 static tig_art_id_t name_first_art_id_get(int type, int* extra);
 static tig_art_id_t name_next_art_id_get(tig_art_id_t art_id);
-static int name_previous_art_id_stub(int a1);
 static bool name_art_picker_message_filter(TigMessage* msg);
 static void name_art_picker_draw(void);
 
@@ -224,13 +224,14 @@ static tig_window_handle_t name_art_picker_window;
 static int name_art_picker_result;
 
 // 0x739E50
-static int* dword_739E50;
+static int* name_art_picker_extra_parameters;
 
 // 0x739E54
 static int name_art_picker_selected_art_id;
 
 // 0x739E58
 static int name_art_picker_type;
+static ArtPickerHistory name_art_picker_history;
 
 // 0x41CA40
 bool name_init(GameInitInfo* init_info)
@@ -544,7 +545,7 @@ bool name_missing_art_load(void)
         return false;
     }
 
-    if (tig_file_fread(missing_unique_npc_art, sizeof(*missing_unique_npc_art), num_unique_npc_art, stream) < (size_t)num_monster_art) {
+    if (tig_file_fread(missing_unique_npc_art, sizeof(*missing_unique_npc_art), num_unique_npc_art, stream) < (size_t)num_unique_npc_art) {
         tig_file_fclose(stream);
         return false;
     }
@@ -731,8 +732,8 @@ tig_art_id_t name_normalize_aid(tig_art_id_t aid)
     case TIG_ART_TYPE_LIGHT:
         aid = tig_art_id_frame_set(aid, 0);
         if (tig_art_light_id_has_extended_rotation(aid)) {
-            int v1 = tig_art_light_id_rotation_get(aid);
-            aid = tig_art_light_id_rotation_set(aid, v1 - v1 % 8);
+            int rotation = tig_art_light_id_rotation_get(aid);
+            aid = tig_art_light_id_rotation_set(aid, rotation - rotation % 8);
         } else {
             aid = tig_art_id_rotation_set(aid, 0);
         }
@@ -1089,35 +1090,35 @@ tig_art_id_t name_first_art_id_get(int type, int* extra)
         tig_art_portal_id_create(0, 0, 0, 0, 0, 0, &aid);
         break;
     case TIG_ART_TYPE_SCENERY: {
-        int v1;
+        int category;
 
         if (extra != NULL) {
-            v1 = extra[0];
+            category = extra[0];
         } else {
-            v1 = 0;
+            category = 0;
         }
 
-        tig_art_scenery_id_create(0, v1, 0, 0, 0, &aid);
+        tig_art_scenery_id_create(0, category, 0, 0, 0, &aid);
         break;
     }
     case TIG_ART_TYPE_INTERFACE:
         tig_art_interface_id_create(0, 0, 0, 0, &aid);
         break;
     case TIG_ART_TYPE_ITEM: {
-        int v1;
+        int category;
         int armor_coverage;
         int destroyed;
         int disposition;
         int subtype;
 
         if (extra != NULL) {
-            v1 = extra[0];
+            category = extra[0];
             armor_coverage = extra[1];
             destroyed = extra[2];
             disposition = extra[3];
             subtype = extra[4];
         } else {
-            v1 = 0;
+            category = 0;
             armor_coverage = 0;
             destroyed = 0;
             disposition = 1;
@@ -1129,22 +1130,22 @@ tig_art_id_t name_first_art_id_get(int type, int* extra)
             0,
             destroyed,
             subtype,
-            v1,
+            category,
             armor_coverage,
             0,
             &aid);
         break;
     }
     case TIG_ART_TYPE_CONTAINER: {
-        int v1;
+        int category;
 
         if (extra != NULL) {
-            v1 = extra[0];
+            category = extra[0];
         } else {
-            v1 = 0;
+            category = 0;
         }
 
-        tig_art_container_id_create(0, v1, 0, 0, 0, &aid);
+        tig_art_container_id_create(0, category, 0, 0, 0, &aid);
         break;
     }
     case TIG_ART_TYPE_LIGHT:
@@ -1446,19 +1447,14 @@ tig_art_id_t name_next_art_id_get(tig_art_id_t art_id)
     }
 }
 
-// 0x41E960
-int name_previous_art_id_stub(int a1)
-{
-    // TODO: Incomplete.
-}
-
 // 0x41F090
-bool name_art_picker_open(int a1, int* a2, int* a3)
+bool name_art_picker_open(int art_type, int* extra_parameters, int* selected_art_id_ptr)
 {
     TigWindowData window_data;
 
-    name_art_picker_type = a1;
-    dword_739E50 = a2;
+    art_picker_history_clear(&name_art_picker_history);
+    name_art_picker_type = art_type;
+    name_art_picker_extra_parameters = extra_parameters;
     name_art_picker_selected_art_id = -1;
 
     window_data.rect.x = 40;
@@ -1482,12 +1478,13 @@ bool name_art_picker_open(int a1, int* a2, int* a3)
     }
 
     tig_window_destroy(name_art_picker_window);
+    art_picker_history_clear(&name_art_picker_history);
 
     if (name_art_picker_result != 1) {
         return false;
     }
 
-    *a3 = name_art_picker_selected_art_id;
+    *selected_art_id_ptr = name_art_picker_selected_art_id;
 
     return true;
 }
@@ -1495,25 +1492,27 @@ bool name_art_picker_open(int a1, int* a2, int* a3)
 // 0x41F190
 bool name_art_picker_message_filter(TigMessage* msg)
 {
-    int v1;
+    int next_art_id;
 
     if (msg->type == TIG_MESSAGE_KEYBOARD
         && msg->data.keyboard.pressed) {
         switch (msg->data.keyboard.key) {
-        case SDLK_A:
-            if (name_art_picker_selected_art_id != -1) {
-                name_art_picker_selected_art_id = name_previous_art_id_stub(name_art_picker_selected_art_id);
+        case SDLK_A: {
+            uint32_t previous;
+            if (art_picker_history_pop(&name_art_picker_history, &previous)) {
+                name_art_picker_selected_art_id = (int)previous;
                 name_art_picker_draw();
             }
             break;
+        }
         case SDLK_Z:
             if (name_art_picker_selected_art_id == -1) {
-                name_art_picker_selected_art_id = name_first_art_id_get(name_art_picker_type, dword_739E50);
+                name_art_picker_selected_art_id = name_first_art_id_get(name_art_picker_type, name_art_picker_extra_parameters);
                 name_art_picker_draw();
             } else {
-                v1 = name_next_art_id_get(name_art_picker_selected_art_id);
-                if (v1 != -1) {
-                    name_art_picker_selected_art_id = v1;
+                next_art_id = name_next_art_id_get(name_art_picker_selected_art_id);
+                if (next_art_id != -1 && art_picker_history_push(&name_art_picker_history, (uint32_t)name_art_picker_selected_art_id)) {
+                    name_art_picker_selected_art_id = next_art_id;
                 }
                 name_art_picker_draw();
             }
